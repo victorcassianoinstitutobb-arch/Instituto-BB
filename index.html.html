@@ -1,0 +1,2299 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Instituto Bruna Braga · Sistema de Gestão</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --black:#0E0D0C; --ink:#ECE7DD; --gold:#D4AF5A; --gold-l:#E8D29A; --gold-d:#B8923F;
+  --ivory:#13110F; --ivory2:#1C1A16; --cream:#1A1714; --paper:#191614;
+  --grey:#9A9182; --grey-l:#2A2620; --line:#2E2A23;
+  --sage:#8FA08C; --sage-bg:#1B201A;
+  --green:#6FB287; --green-bg:#16251C; --red:#D08A80; --red-bg:#2A1A17;
+  --amber:#D6AB5E; --amber-bg:#2A2114;
+  --shadow:0 1px 3px rgba(0,0,0,.3), 0 8px 28px rgba(0,0,0,.35);
+  --shadow-sm:0 1px 2px rgba(0,0,0,.25);
+  --radius:18px; --radius-sm:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--ivory);color:var(--ink);
+  -webkit-font-smoothing:antialiased;line-height:1.55}
+.serif{font-family:'Cormorant Garamond',Georgia,serif}
+
+/* ---------- App shell ---------- */
+.app{display:flex;min-height:100vh}
+.sidebar{width:248px;background:var(--black);color:var(--ivory);flex-shrink:0;
+  display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow:hidden}
+.brand{padding:28px 24px 20px;border-bottom:1px solid rgba(201,162,75,.22);flex-shrink:0}
+.brand .mark{font-family:'Cormorant Garamond',serif;font-size:25px;font-weight:700;
+  color:var(--gold);line-height:1.05;letter-spacing:.3px}
+.brand .sub{font-size:10px;letter-spacing:2.4px;color:var(--gold-l);margin-top:6px;text-transform:uppercase}
+.nav{padding:16px 14px;display:flex;flex-direction:column;gap:3px;flex:1;overflow-y:auto;overflow-x:hidden;min-height:0}
+.nav::-webkit-scrollbar{width:6px}
+.nav::-webkit-scrollbar-thumb{background:rgba(201,162,75,.3);border-radius:3px}
+.nav::-webkit-scrollbar-track{background:transparent}
+.nav button{display:flex;align-items:center;gap:13px;width:100%;padding:11px 14px;
+  background:none;border:none;color:#CFC6B6;font-family:inherit;font-size:14px;
+  border-radius:11px;cursor:pointer;transition:.18s;text-align:left}
+.nav button svg{width:18px;height:18px;stroke-width:1.7;flex-shrink:0}
+.nav button:hover{background:rgba(212,175,90,.12);color:var(--ink)}
+.nav button.active{background:var(--gold);color:var(--black);font-weight:600}
+.nav .nav-label{font-size:10px;letter-spacing:1.8px;color:#6E6657;text-transform:uppercase;
+  padding:14px 14px 6px}
+.side-foot{padding:18px 22px;border-top:1px solid rgba(201,162,75,.18);font-size:11px;color:#7A7164;flex-shrink:0}
+.side-foot b{color:var(--gold-l);font-weight:500}
+
+/* ---------- Main ---------- */
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.topbar{display:flex;align-items:center;justify-content:space-between;
+  padding:20px 36px;background:var(--paper);border-bottom:1px solid var(--line);
+  position:sticky;top:0;z-index:20}
+.topbar .title{font-family:'Cormorant Garamond',serif;font-size:27px;font-weight:600;color:var(--ink)}
+.topbar .crumb{font-size:11px;letter-spacing:1.5px;color:var(--grey);text-transform:uppercase;margin-bottom:1px}
+.period{display:flex;align-items:center;gap:10px}
+.period select{font-family:inherit;font-size:13px;padding:9px 16px;border:1px solid var(--line);
+  background:var(--cream);border-radius:10px;color:var(--ink);cursor:pointer;font-weight:500}
+.content{padding:30px 36px 48px;max-width:1280px;width:100%}
+.page{display:none;animation:fade .4s ease}
+.page.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+/* ---------- KPI cards ---------- */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:26px}
+.kpi{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);
+  padding:20px 22px;position:relative;overflow:hidden;box-shadow:var(--shadow);
+  opacity:0;animation:rise .5s ease forwards}
+.kpi::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--gold)}
+.kpi.green::before{background:var(--green)} .kpi.ink::before{background:var(--ink)}
+.kpi .label{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--grey);font-weight:500}
+.kpi .val{font-family:'Cormorant Garamond',serif;font-size:38px;font-weight:600;line-height:1.1;margin:8px 0 4px}
+.kpi.green .val{color:var(--green)} .kpi.neg .val{color:var(--red)}
+.kpi .meta{font-size:12px;color:var(--grey);display:flex;align-items:center;gap:6px}
+.kpi .meta .tag{font-weight:600}
+.kpi .meta .tag.up{color:var(--green)} .kpi .meta .tag.down{color:var(--red)}
+.kpi .meta .tag.gold{color:var(--gold-d)}
+
+/* ---------- Panels ---------- */
+.row{display:grid;gap:18px;margin-bottom:18px}
+.row.two{grid-template-columns:1.15fr .85fr}
+.row.two-eq{grid-template-columns:1fr 1fr}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);
+  padding:22px 24px;box-shadow:var(--shadow)}
+.panel h3{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;margin-bottom:2px}
+.panel .ph-sub{font-size:12px;color:var(--grey);margin-bottom:18px}
+.panel-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px}
+.panel-head .ph-sub{margin-bottom:0}
+
+/* ---------- Metas (progress) ---------- */
+.meta-row{margin-bottom:16px}
+.meta-row:last-child{margin-bottom:0}
+.meta-row .mr-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px}
+.meta-row .mr-name{font-size:13px;font-weight:500;color:var(--ink)}
+.meta-row .mr-vals{font-size:12px;color:var(--grey)}
+.meta-row .mr-vals b{color:var(--ink);font-weight:600}
+.bar{height:9px;background:var(--grey-l);border-radius:6px;overflow:hidden;position:relative}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:6px;background:var(--gold);
+  width:0;transition:width 1s cubic-bezier(.22,1,.36,1)}
+.bar i.hit{background:var(--green)} .bar i.low{background:var(--red)}
+.mr-pct{font-size:12px;font-weight:600;margin-left:8px}
+
+/* ---------- DRE ---------- */
+.dre-line{display:flex;justify-content:space-between;align-items:center;padding:11px 0;
+  border-bottom:1px solid var(--grey-l);font-size:14px}
+.dre-line:last-child{border-bottom:none}
+.dre-line.total{border-top:2px solid var(--gold);margin-top:4px;font-weight:600;font-size:15px}
+.dre-line .amt{font-variant-numeric:tabular-nums;font-weight:600}
+.dre-line .amt.neg{color:var(--red)} .dre-line .amt.pos{color:var(--green)}
+
+/* ---------- Charts ---------- */
+.chart-wrap{position:relative;width:100%;height:260px}
+.legend{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:14px;font-size:12px;color:var(--grey)}
+.legend span{display:flex;align-items:center;gap:6px}
+.legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+
+/* ---------- Tables ---------- */
+table.data{width:100%;border-collapse:collapse;font-size:13px}
+table.data th{text-align:left;font-size:10.5px;letter-spacing:1px;text-transform:uppercase;
+  color:var(--grey);font-weight:600;padding:10px 12px;border-bottom:1px solid var(--line)}
+table.data th.num,table.data td.num{text-align:right;font-variant-numeric:tabular-nums}
+table.data th.ctr,table.data td.ctr{text-align:center}
+table.data td{padding:11px 12px;border-bottom:1px solid var(--grey-l)}
+table.data tr:last-child td{border-bottom:none}
+table.data tbody tr{transition:.12s}
+table.data tbody tr:hover{background:var(--cream)}
+.pill{display:inline-block;padding:3px 11px;border-radius:20px;font-size:11px;font-weight:600}
+.pill.ok{background:var(--green-bg);color:var(--green)}
+.pill.warn{background:var(--amber-bg);color:var(--amber)}
+.pill.pend{background:var(--red-bg);color:var(--red)}
+.minibar{height:6px;border-radius:4px;background:var(--gold);display:inline-block;vertical-align:middle}
+
+/* ---------- Add row form ---------- */
+.toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px;flex-wrap:wrap}
+.btn{font-family:inherit;font-size:13px;font-weight:500;padding:10px 18px;border-radius:10px;
+  border:1px solid var(--gold-d);background:var(--gold);color:var(--black);cursor:pointer;
+  display:inline-flex;align-items:center;gap:7px;transition:.16s}
+.btn:hover{background:var(--gold-d);color:var(--ivory)}
+.btn.ghost{background:none;color:var(--ink);border-color:var(--line)}
+.btn.ghost:hover{background:var(--cream);color:var(--ink)}
+.btn svg{width:15px;height:15px;stroke-width:2}
+.form-row{display:none;background:var(--cream);border:1px solid var(--line);border-radius:var(--radius-sm);
+  padding:16px;margin-bottom:16px;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.form-row.open{display:flex;animation:fade .25s}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:10.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--grey);font-weight:600}
+.field input,.field select{font-family:inherit;font-size:13px;padding:8px 11px;border:1px solid var(--line);
+  border-radius:8px;background:var(--paper);color:var(--ink);min-width:120px}
+.field input:focus,.field select:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,162,75,.15)}
+
+.health{display:flex;align-items:center;gap:14px;background:var(--cream);border-radius:var(--radius-sm);
+  padding:16px 20px;margin-bottom:18px;border:1px solid var(--line)}
+.health .big{font-family:'Cormorant Garamond',serif;font-size:34px;font-weight:600;color:var(--green)}
+.health .txt{font-size:13px;color:var(--grey)}
+.health .txt b{color:var(--ink);font-weight:600}
+
+@media(max-width:1080px){.kpi-grid{grid-template-columns:repeat(2,1fr)}.row.two,.row.two-eq{grid-template-columns:1fr}}
+@media(max-width:760px){
+  .app{flex-direction:column}.sidebar{width:100%;height:auto;position:static;flex-direction:row;
+    overflow-x:auto;align-items:center}.brand{border-bottom:none;border-right:1px solid rgba(201,162,75,.2);white-space:nowrap}
+  .nav{flex-direction:row;padding:10px;flex:none}.nav .nav-label,.side-foot{display:none}
+  .nav button span.t{display:none}.nav button{padding:11px}
+  .content{padding:20px 16px}.topbar{padding:16px 18px}.kpi-grid{grid-template-columns:1fr 1fr;gap:12px}
+}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+/* ---------- CRM trend cards ---------- */
+.trend-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:22px}
+.tcard{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);
+  padding:20px 22px 16px;box-shadow:var(--shadow);opacity:0;animation:rise .5s ease forwards;position:relative;overflow:hidden}
+.tcard .tc-head{display:flex;align-items:center;gap:10px;color:var(--grey);font-size:13px;font-weight:500;margin-bottom:10px}
+.tcard .tc-ic{width:34px;height:34px;border-radius:9px;background:var(--cream);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.tcard .tc-ic svg{width:17px;height:17px;stroke:var(--gold-d);stroke-width:1.8;fill:none}
+.tcard .tc-val{font-family:'Cormorant Garamond',serif;font-size:34px;font-weight:600;line-height:1;margin-bottom:4px}
+.tcard .tc-sub{font-size:12px;color:var(--grey);margin-bottom:10px}
+.tcard .tc-spark{height:48px;margin:6px -4px 10px;position:relative}
+.tcard .tag-cmp{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;
+  padding:4px 11px;border-radius:20px}
+.tag-cmp.up{background:var(--green-bg);color:var(--green)}
+.tag-cmp.down{background:var(--red-bg);color:var(--red)}
+.tag-cmp svg{width:12px;height:12px;stroke-width:2.5}
+
+/* ---------- internal tabs ---------- */
+.itabs{display:flex;gap:6px;border-bottom:1px solid var(--line);margin-bottom:20px}
+.itabs button{font-family:inherit;font-size:14px;font-weight:500;color:var(--grey);background:none;
+  border:none;padding:11px 16px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:.16s}
+.itabs button:hover{color:var(--ink)}
+.itabs button.active{color:var(--gold-d);border-bottom-color:var(--gold)}
+.itab-pane{display:none}.itab-pane.active{display:block;animation:fade .3s}
+
+/* ---------- ranking ---------- */
+.rank-list{display:flex;flex-direction:column;gap:2px}
+.rank-row{display:flex;align-items:center;gap:13px;padding:10px 8px;border-radius:10px;transition:.12s}
+.rank-row:hover{background:var(--cream)}
+.rank-pos{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;background:var(--grey-l);color:var(--grey)}
+.rank-row:nth-child(1) .rank-pos{background:var(--gold);color:var(--black)}
+.rank-row:nth-child(2) .rank-pos{background:var(--gold-l);color:var(--gold-d)}
+.rank-row:nth-child(3) .rank-pos{background:var(--ivory2);color:var(--gold-d)}
+.rank-name{flex:1;font-size:13.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rank-val{font-size:13px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+.rank-sub{font-size:11px;color:var(--grey)}
+
+/* ---------- sidebar groups (collapsible) ---------- */
+.nav-group>.ng-head{display:flex;align-items:center;gap:13px;width:100%;padding:11px 14px;background:none;
+  border:none;color:#CFC6B6;font-family:inherit;font-size:14px;border-radius:11px;cursor:pointer;text-align:left;transition:.18s}
+.nav-group>.ng-head:hover{background:rgba(212,175,90,.12);color:var(--ink)}
+.nav-group>.ng-head svg.ic{width:18px;height:18px;stroke-width:1.7;flex-shrink:0}
+.nav-group>.ng-head .chev{margin-left:auto;width:14px;height:14px;transition:.2s;stroke-width:2}
+.nav-group.open>.ng-head .chev{transform:rotate(90deg)}
+.ng-items{max-height:0;overflow:hidden;transition:max-height .25s ease}
+.nav-group.open .ng-items{max-height:300px}
+.ng-items button{display:block;width:100%;padding:9px 14px 9px 45px;background:none;border:none;
+  color:#A89E8E;font-family:inherit;font-size:13px;border-radius:9px;cursor:pointer;text-align:left;transition:.14s}
+.ng-items button:hover{background:rgba(212,175,90,.10);color:var(--ink)}
+.ng-items button.active{background:var(--gold);color:var(--black);font-weight:600}
+.new-btn{margin:6px 14px 10px;padding:10px;background:var(--gold);color:#0E0D0C;border:none;border-radius:11px;
+  font-family:inherit;font-weight:600;font-size:13.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;transition:.16s}
+.new-btn:hover{background:var(--gold-l)}
+.new-btn svg{width:16px;height:16px;stroke-width:2.5}
+</style>
+</head>
+<body>
+<div id="loginScreen" style="display:none;position:fixed;inset:0;z-index:1000;background:var(--ivory);align-items:center;justify-content:center">
+  <div style="width:380px;max-width:90vw;background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:38px 34px;box-shadow:var(--shadow)">
+    <div style="text-align:center;margin-bottom:26px">
+      <div class="serif" style="font-size:26px;font-weight:700;color:var(--gold);line-height:1.1">Instituto<br>Bruna Braga</div>
+      <div style="font-size:10px;letter-spacing:2.4px;color:var(--gold-l);margin-top:8px;text-transform:uppercase">Sistema de Gestão</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--grey);font-weight:600;display:block;margin-bottom:6px">E-mail</label>
+        <input id="loginEmail" type="email" placeholder="seu@email.com" style="width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-size:14px;background:var(--paper);color:var(--ink)">
+      </div>
+      <div>
+        <label style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--grey);font-weight:600;display:block;margin-bottom:6px">Senha</label>
+        <input id="loginSenha" type="password" placeholder="••••••••" style="width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-size:14px;background:var(--paper);color:var(--ink)" onkeydown="if(event.key==='Enter')fazerLogin()">
+      </div>
+      <div id="loginErro" style="display:none;font-size:13px;color:var(--red);background:var(--red-bg);padding:9px 12px;border-radius:8px"></div>
+      <button onclick="fazerLogin()" id="loginBtn" style="width:100%;padding:12px;background:var(--gold);color:#0E0D0C;border:none;border-radius:10px;font-family:inherit;font-weight:600;font-size:14px;cursor:pointer;margin-top:4px">Entrar</button>
+      <div style="font-size:11.5px;color:var(--grey);text-align:center;line-height:1.5;margin-top:4px">Acesso restrito à equipe do Instituto Bruna Braga.</div>
+    </div>
+  </div>
+</div>
+<div class="app" id="appRoot" style="display:none">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="mark">Instituto<br>Bruna Braga</div>
+      <div class="sub">Harmonização Facial</div>
+    </div>
+    <nav class="nav" id="nav">
+      <button class="new-btn" onclick="go('atendimentos')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo</button>
+      <button class="active" data-page="painel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12l9-9 9 9"/><path d="M5 10v10h14V10"/></svg><span class="t">Principal</span></button>
+      <div class="nav-group" data-group="financeiro">
+        <button class="ng-head"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4"/></svg><span class="t">Financeiro</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="9 6 15 12 9 18"/></svg></button>
+        <div class="ng-items">
+          <button data-page="custos">Custos & Despesas</button>
+          <button data-page="caixa">Livro-Caixa</button>
+          <button data-page="comissoes">Metas & Bonificações</button>
+        </div>
+      </div>
+      <div class="nav-group" data-group="cadastros">
+        <button class="ng-head"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span class="t">Cadastros</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="9 6 15 12 9 18"/></svg></button>
+        <div class="ng-items">
+          <button data-page="funcionarios">Funcionários</button>
+          <button data-page="pacientes">Pacientes</button>
+          <button data-page="atendimentos">Atendimentos</button>
+        </div>
+      </div>
+      <div class="nav-group" data-group="marketing">
+        <button class="ng-head"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 11l18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg><span class="t">Marketing</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="9 6 15 12 9 18"/></svg></button>
+        <div class="ng-items">
+          <button data-page="leads">Captação de Leads</button>
+        </div>
+      </div>
+      <div class="nav-group" data-group="analise">
+        <button class="ng-head"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3v18h18"/><path d="M7 14l3-4 4 3 5-7"/></svg><span class="t">Relatórios</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="9 6 15 12 9 18"/></svg></button>
+        <div class="ng-items">
+          <button data-page="analise">Análise Avançada</button>
+          <button data-page="relatorio">Relatório PDF</button>
+        </div>
+      </div>
+      <div class="nav-group" data-group="controle">
+        <button class="ng-head"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg><span class="t">Controle</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="9 6 15 12 9 18"/></svg></button>
+        <div class="ng-items">
+          <button data-page="conformidade">Conformidade</button>
+          <button data-page="documentos">Documentos</button>
+          <button data-page="config">Configurações</button>
+        </div>
+      </div>
+    </nav>
+    <div class="side-foot">Sistema de Gestão<br><b>versão 1.0</b><br><span id="userEmail" style="font-size:10px;color:var(--grey)"></span><br><button onclick="fazerLogout()" style="margin-top:8px;background:none;border:1px solid var(--line);color:var(--grey);font-family:inherit;font-size:11px;padding:5px 12px;border-radius:8px;cursor:pointer">Sair</button></div>
+  </aside>
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <div class="crumb" id="crumb">Gestão</div>
+        <div class="title" id="pageTitle">Painel Gerencial</div>
+      </div>
+      <div class="period">
+        <select id="periodSel">
+          <option>Junho 2026</option><option>Maio 2026</option><option>Abril 2026</option>
+          <option>Acumulado 2026</option>
+        </select>
+        <button class="btn ghost" onclick="go(currentPage)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:14px;height:14px;stroke-width:2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Atualizar</button>
+      </div>
+    </div>
+    <div class="content" id="content"></div>
+  </main>
+</div>
+<script>
+/* ============================================================
+   Instituto Bruna Braga — Sistema de Gestão (protótipo web)
+   Dados de exemplo. Estrutura pronta para conectar ao Supabase:
+   troque os arrays DATA.* por consultas e mantenha calc()/render*.
+   ============================================================ */
+
+const BRL = n => 'R$ ' + Math.round(n).toLocaleString('pt-BR');
+const BRL2 = n => n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const PCT = n => (n*100).toFixed(1).replace('.',',') + '%';
+const PCT0 = n => Math.round(n*100) + '%';
+
+const META = {
+  faturamento:60000, ticket:800, comparecimento:0.90, ocupacao:0.75,
+  conversao:0.30, imposto:0.06, horasMes:176, duracaoMedia:1.0,
+  comissaoPercent:0.30, comissaoBase:'bruto', profissionalPadrao:'Dra. Bruna Braga'
+};
+
+// Documentos arquivados (no app real -> Supabase Storage; aqui = registro/organização)
+const DOCS = [
+  {nome:'Contrato de prestação — Mariana Alves',cat:'Contratos',data:'2026-06-01',validade:'',status:'Arquivado',ref:'CT-0612'},
+  {nome:'TCLE — Mariana Alves (Toxina)',cat:'TCLE',data:'2026-06-01',validade:'',status:'Arquivado',ref:'TC-0612'},
+  {nome:'Alvará de Funcionamento 2026',cat:'Licenças',data:'2026-01-15',validade:'2026-12-31',status:'Vigente',ref:'ALV-2026'},
+  {nome:'Licença Sanitária — Vigilância',cat:'Licenças',data:'2026-02-10',validade:'2027-02-10',status:'Vigente',ref:'LS-2026'},
+  {nome:'Registro CRO/PE — Dra. Bruna Braga',cat:'Profissional',data:'2025-08-01',validade:'2026-08-01',status:'A vencer',ref:'CRO-PE'},
+  {nome:'Plano PGRSS atualizado',cat:'Sanitário',data:'2026-03-01',validade:'2027-03-01',status:'Pendente',ref:'PGRSS-26'},
+  {nome:'Contrato de coleta de resíduos',cat:'Contratos',data:'2026-01-20',validade:'2027-01-20',status:'Vigente',ref:'RES-26'},
+  {nome:'Apólice de seguro RC profissional',cat:'Seguros',data:'',validade:'',status:'Pendente',ref:'—'},
+  {nome:'TCLE — Patrícia Rocha (Bioestimulador)',cat:'TCLE',data:'2026-06-06',validade:'',status:'Arquivado',ref:'TC-0606'},
+  {nome:'Nota fiscal — Reposição de insumos',cat:'Notas Fiscais',data:'2026-06-04',validade:'',status:'Arquivado',ref:'NF-3201'},
+];
+const DOC_CATS = ['Contratos','TCLE','Licenças','Profissional','Sanitário','Seguros','Notas Fiscais'];
+
+/* ============================================================
+   FUNCIONÁRIOS
+   funcao: livre (quem atende, apoio, parceiro)
+   atende: true se realiza procedimentos (entra no cálculo de meta de faturamento/agendamento individual)
+   ============================================================ */
+let FUNCIONARIOS = [
+  {id:1, nome:'Dra. Bruna Braga', funcao:'Cirurgiã-Dentista (RT)', tipo:'Profissional', atende:true,
+   registro:'CRO-PE 0000', contato:'(87) 90000-0000', admissao:'2024-01-10', ativo:true},
+  {id:2, nome:'Camila Recepção', funcao:'Recepcionista', tipo:'Apoio', atende:false,
+   registro:'', contato:'(87) 90000-0001', admissao:'2024-03-01', ativo:true},
+  {id:3, nome:'Dr. Parceiro Convidado', funcao:'Biomédico Esteta', tipo:'Parceiro', atende:true,
+   registro:'CRBM 0000', contato:'(87) 90000-0002', admissao:'2025-06-01', ativo:true},
+];
+let FUNC_SEQ = 4;
+let FUNC_TIPOS = ['Profissional','Apoio','Parceiro','Administrativo'];
+
+/* ============================================================
+   METAS & BONIFICAÇÕES — vinculadas a um funcionário
+   escopo: 'individual' (mede só o que o funcionário realizou)
+           'geral'      (mede o total da clínica)
+   funcId: id do funcionário dono da meta
+   ============================================================ */
+let METAS = [
+  {
+    id:1, funcId:1, escopo:'individual', tipo:'faturamento', periodo:'mensal',
+    faixas:[
+      {nome:'Mínima', alvo:30000, bonus:{tipo:'fixo', valor:500}},
+      {nome:'Média',  alvo:45000, bonus:{tipo:'fixo', valor:1200}},
+      {nome:'Máxima', alvo:60000, bonus:{tipo:'fixo', valor:2500}},
+    ]
+  },
+  {
+    id:2, funcId:1, escopo:'individual', tipo:'agendamentos', periodo:'mensal',
+    faixas:[
+      {nome:'Mínima', alvo:8,  bonus:{tipo:'fixo', valor:200}},
+      {nome:'Média',  alvo:12, bonus:{tipo:'fixo', valor:500}},
+      {nome:'Máxima', alvo:18, bonus:{tipo:'fixo', valor:900}},
+    ]
+  },
+  {
+    id:3, funcId:2, escopo:'geral', tipo:'leads', periodo:'mensal',
+    faixas:[
+      {nome:'Mínima', alvo:10, bonus:{tipo:'fixo', valor:150}},
+      {nome:'Média',  alvo:15, bonus:{tipo:'fixo', valor:350}},
+      {nome:'Máxima', alvo:25, bonus:{tipo:'fixo', valor:600}},
+    ]
+  },
+];
+let METAS_SEQ = 4;
+const TIPO_META = {
+  faturamento:{label:'Faturamento', unidade:'R$', fmt:v=>BRL(v)},
+  leads:{label:'Leads', unidade:'un', fmt:v=>v+' leads'},
+  agendamentos:{label:'Agendamentos', unidade:'un', fmt:v=>v+' atend.'},
+};
+const funcNome = id => (FUNCIONARIOS.find(f=>f.id===id)||{}).nome || '—';
+
+/* ============================================================
+   LIVRO-CAIXA — carteiras + lançamentos
+   tipos:
+     'receita'      → entra na carteira E conta como faturamento (procedimento)
+     'aporte'       → entra na carteira, NÃO é receita (reforço de caixa)
+     'despesa'      → sai da carteira (gasto da clínica)
+     'retirada'     → sai da carteira, NÃO é despesa (retirada de lucro/pró-labore)
+     'transferencia'→ move saldo de uma carteira para outra (neutro no total)
+   ============================================================ */
+let CARTEIRAS = [
+  {id:1, nome:'Conta Stone', saldoInicial:11000},
+  {id:2, nome:'Dinheiro (espécie)', saldoInicial:2000},
+];
+let CART_SEQ = 3;
+
+let CAT_RECEITA = ['Procedimento','Pacote','Produto','Outros'];
+let CAT_DESPESA = ['Aluguel','Produtos/Insumos','Salários/Pró-labore','Marketing','Equipamentos','Impostos','Contabilidade','Utilidades','Descarte PGRSS','Manutenção','Outros'];
+
+let CAIXA = [
+  {id:1, data:'2026-06-01', tipo:'receita', categoria:'Procedimento', desc:'Toxina — Mariana Alves', valor:1200, carteira:1, carteiraDest:null},
+  {id:2, data:'2026-06-01', tipo:'despesa', categoria:'Aluguel', desc:'Aluguel do espaço', valor:4500, carteira:1, carteiraDest:null},
+  {id:3, data:'2026-06-03', tipo:'receita', categoria:'Procedimento', desc:'Preenchimento — Carla Souza', valor:1500, carteira:1, carteiraDest:null},
+  {id:4, data:'2026-06-04', tipo:'despesa', categoria:'Produtos/Insumos', desc:'Reposição de toxina', valor:3200, carteira:1, carteiraDest:null},
+  {id:5, data:'2026-06-06', tipo:'receita', categoria:'Procedimento', desc:'Bioestimulador — Patrícia Rocha', valor:1100, carteira:1, carteiraDest:null},
+  {id:6, data:'2026-06-08', tipo:'despesa', categoria:'Marketing', desc:'Tráfego pago Meta/Google', valor:1800, carteira:1, carteiraDest:null},
+  {id:7, data:'2026-06-10', tipo:'receita', categoria:'Procedimento', desc:'Toxina — Juliana Melo', valor:1100, carteira:2, carteiraDest:null},
+  {id:8, data:'2026-06-12', tipo:'despesa', categoria:'Salários/Pró-labore', desc:'Pró-labore + equipe', valor:6500, carteira:1, carteiraDest:null},
+  {id:9, data:'2026-06-13', tipo:'aporte',  categoria:'Reforço de caixa', desc:'Aporte de capital próprio', valor:5000, carteira:1, carteiraDest:null},
+];
+let CAIXA_SEQ = 10;
+const TIPOS_LANC = {
+  receita:{label:'Receita',sinal:1,cor:'var(--green)',ehReceita:true,ehDespesa:false},
+  aporte:{label:'Aporte',sinal:1,cor:'var(--sage)',ehReceita:false,ehDespesa:false},
+  despesa:{label:'Despesa',sinal:-1,cor:'var(--red)',ehReceita:false,ehDespesa:true},
+  retirada:{label:'Retirada',sinal:-1,cor:'var(--amber)',ehReceita:false,ehDespesa:false},
+  transferencia:{label:'Transferência',sinal:0,cor:'var(--grey)',ehReceita:false,ehDespesa:false},
+};
+const cartNome = id => (CARTEIRAS.find(c=>c.id===id)||{}).nome || '—';
+
+
+// valor realizado de uma meta, respeitando escopo (geral x individual) e funcionário
+function realizadoMeta(meta){
+  const k = window.__lastCalc || calc();
+  const tipo = meta.tipo;
+  if(meta.escopo==='geral'){
+    if(tipo==='faturamento') return k.faturamento;
+    if(tipo==='leads') return k.nLeads;
+    if(tipo==='agendamentos') return k.nAtend;
+    return 0;
+  }
+  // individual: filtra pelo funcionário que realizou
+  const nome = funcNome(meta.funcId);
+  const at = DATA.atendimentos.filter(a=>a.func===nome && a.agenda==='Compareceu');
+  if(tipo==='faturamento') return at.reduce((s,a)=>s+a.valor,0);
+  if(tipo==='agendamentos') return at.length;
+  if(tipo==='leads'){
+    // leads atribuídos ao funcionário (se houver campo func em leads); senão, 0 individual
+    return DATA.leads.filter(l=>l.func===nome).length;
+  }
+  return 0;
+}
+
+// dada uma meta, retorna a faixa mais alta atingida (ou null) e o bônus em R$
+function avaliarMeta(meta){
+  const real = realizadoMeta(meta);
+  // faixas em ordem crescente de alvo; pega a mais alta cujo alvo foi atingido
+  const ordenadas = [...meta.faixas].sort((a,b)=>a.alvo-b.alvo);
+  let atingida = null;
+  ordenadas.forEach(f=>{ if(real>=f.alvo) atingida=f; });
+  let bonus = 0;
+  if(atingida){
+    bonus = atingida.bonus.tipo==='fixo'
+      ? atingida.bonus.valor
+      : real * (atingida.bonus.valor/100);
+  }
+  // próxima faixa (para mostrar "falta X para...")
+  const proxima = ordenadas.find(f=>real<f.alvo) || null;
+  return {real, atingida, bonus, proxima, ordenadas};
+}
+function bonusLabel(b){
+  return b.tipo==='fixo' ? BRL(b.valor) : b.valor+'% do atingido';
+}
+
+const DATA = {
+  atendimentos:[
+    {data:'2026-06-01',paciente:'Mariana Alves',proc:'Toxina Botulínica',canal:'WhatsApp',valor:1200,custo:320,pag:'Pago',agenda:'Compareceu',func:'Dra. Bruna Braga'},
+    {data:'2026-06-03',paciente:'Carla Souza',proc:'Preenchimento Labial',canal:'Tráfego Pago',valor:1500,custo:480,pag:'Pago',agenda:'Compareceu',func:'Dra. Bruna Braga'},
+    {data:'2026-06-04',paciente:'Beatriz Lima',proc:'Avaliação',canal:'Instagram Orgânico',valor:0,custo:0,pag:'Pago',agenda:'Compareceu',func:'Dra. Bruna Braga'},
+    {data:'2026-06-06',paciente:'Patrícia Rocha',proc:'Bioestimulador',canal:'Indicação',valor:2200,custo:700,pag:'Parcial',agenda:'Compareceu',func:'Dra. Bruna Braga'},
+    {data:'2026-06-08',paciente:'Fernanda Dias',proc:'Preenchimento Facial',canal:'Tráfego Pago',valor:1800,custo:560,pag:'Pago',agenda:'Compareceu',func:'Dr. Parceiro Convidado'},
+    {data:'2026-06-10',paciente:'Juliana Melo',proc:'Toxina Botulínica',canal:'Retorno/Recompra',valor:1100,custo:320,pag:'Pago',agenda:'Compareceu',func:'Dra. Bruna Braga'},
+    {data:'2026-06-11',paciente:'Renata Pinto',proc:'Skinbooster',canal:'WhatsApp',valor:900,custo:300,pag:'Pago',agenda:'No-show',func:'Dra. Bruna Braga'},
+    {data:'2026-06-13',paciente:'Aline Castro',proc:'Fios de PDO',canal:'Tráfego Pago',valor:2500,custo:800,pag:'Pendente',agenda:'Reagendado',func:'Dr. Parceiro Convidado'},
+    {data:'2026-06-15',paciente:'Camila Nunes',proc:'Preenchimento Labial',canal:'Indicação',valor:1500,custo:480,pag:'Pago',agenda:'Compareceu',func:'Dra. Bruna Braga'},
+    {data:'2026-06-17',paciente:'Letícia Ramos',proc:'Peeling',canal:'Instagram Orgânico',valor:600,custo:150,pag:'Pago',agenda:'Compareceu',func:'Dra. Bruna Braga'},
+    {data:'2026-06-19',paciente:'Tânia Freitas',proc:'Bioestimulador',canal:'Tráfego Pago',valor:2200,custo:700,pag:'Pago',agenda:'Compareceu',func:'Dr. Parceiro Convidado'},
+    {data:'2026-06-20',paciente:'Vanessa Cruz',proc:'Toxina Botulínica',canal:'WhatsApp',valor:1200,custo:320,pag:'Pago',agenda:'Compareceu',func:'Dra. Bruna Braga'},
+  ],
+  leads:[
+    {data:'2026-06-01',nome:'Lead 01',canal:'WhatsApp',custo:0,agendou:1,compareceu:1,fechou:1,valor:1200},
+    {data:'2026-06-02',nome:'Lead 02',canal:'Tráfego Pago',custo:35,agendou:1,compareceu:1,fechou:1,valor:1500},
+    {data:'2026-06-03',nome:'Lead 03',canal:'Tráfego Pago',custo:35,agendou:1,compareceu:0,fechou:0,valor:0},
+    {data:'2026-06-04',nome:'Lead 04',canal:'Instagram Orgânico',custo:0,agendou:1,compareceu:1,fechou:0,valor:0},
+    {data:'2026-06-05',nome:'Lead 05',canal:'Tráfego Pago',custo:35,agendou:0,compareceu:0,fechou:0,valor:0},
+    {data:'2026-06-06',nome:'Lead 06',canal:'Indicação',custo:0,agendou:1,compareceu:1,fechou:1,valor:2200},
+    {data:'2026-06-07',nome:'Lead 07',canal:'Tráfego Pago',custo:35,agendou:1,compareceu:1,fechou:1,valor:1800},
+    {data:'2026-06-08',nome:'Lead 08',canal:'WhatsApp',custo:0,agendou:1,compareceu:0,fechou:0,valor:0},
+    {data:'2026-06-09',nome:'Lead 09',canal:'Tráfego Pago',custo:35,agendou:1,compareceu:1,fechou:0,valor:0},
+    {data:'2026-06-10',nome:'Lead 10',canal:'Indicação',custo:0,agendou:1,compareceu:1,fechou:1,valor:1500},
+    {data:'2026-06-11',nome:'Lead 11',canal:'Tráfego Pago',custo:35,agendou:0,compareceu:0,fechou:0,valor:0},
+    {data:'2026-06-12',nome:'Lead 12',canal:'WhatsApp',custo:0,agendou:1,compareceu:1,fechou:1,valor:900},
+    {data:'2026-06-13',nome:'Lead 13',canal:'Tráfego Pago',custo:35,agendou:1,compareceu:1,fechou:1,valor:2200},
+    {data:'2026-06-14',nome:'Lead 14',canal:'Indicação',custo:0,agendou:1,compareceu:1,fechou:1,valor:1200},
+  ],
+  custos:[
+    {data:'2026-06-01',cat:'Aluguel',desc:'Aluguel do espaço clínico',valor:4500,pago:1},
+    {data:'2026-06-02',cat:'Salários/Pró-labore',desc:'Pró-labore + equipe',valor:6500,pago:1},
+    {data:'2026-06-03',cat:'Marketing',desc:'Tráfego pago (Meta/Google)',valor:1800,pago:1},
+    {data:'2026-06-04',cat:'Produtos/Insumos',desc:'Reposição toxina e preenchedores',valor:3200,pago:1},
+    {data:'2026-06-05',cat:'Contabilidade',desc:'Honorários contábeis',valor:600,pago:1},
+    {data:'2026-06-06',cat:'Utilidades',desc:'Luz, água e internet',valor:850,pago:1},
+    {data:'2026-06-07',cat:'Descarte PGRSS',desc:'Coleta de resíduos',valor:350,pago:0},
+    {data:'2026-06-08',cat:'Equipamentos',desc:'Manutenção de equipamentos',valor:400,pago:1},
+  ],
+  periodoAnterior:{faturamento:10800, nAtend:9, leads:12, comandas:8},
+  conformidade:[
+    {item:'Alvará de funcionamento',resp:'Administrativo',status:'OK'},
+    {item:'Licença sanitária (Vigilância)',resp:'Administrativo',status:'OK'},
+    {item:'Responsável Técnico CD ativo no CRO/PE',resp:'Dra. Bruna',status:'OK'},
+    {item:'PGRSS — Plano de resíduos atualizado',resp:'Administrativo',status:'Pendente'},
+    {item:'Contrato de coleta de resíduos',resp:'Administrativo',status:'OK'},
+    {item:'TCLE assinado em todos procedimentos',resp:'Recepção',status:'OK'},
+    {item:'Contrato de prestação de serviço',resp:'Recepção',status:'OK'},
+    {item:'Rastreabilidade de lote/validade injetáveis',resp:'Dra. Bruna',status:'Atenção'},
+    {item:'Controle de temperatura de armazenamento',resp:'Dra. Bruna',status:'OK'},
+    {item:'Descarte de perfurocortantes adequado',resp:'Equipe',status:'OK'},
+    {item:'Seguro de responsabilidade civil',resp:'Administrativo',status:'Pendente'},
+    {item:'Treinamento de biossegurança da equipe',resp:'Dra. Bruna',status:'Atenção'},
+    {item:'Termo de responsabilidade da equipe',resp:'Administrativo',status:'OK'},
+    {item:'Certificado de limpeza/esterilização',resp:'Equipe',status:'OK'},
+  ]
+};
+
+let CANAIS = ['WhatsApp','Tráfego Pago','Instagram Orgânico','Indicação','Retorno/Recompra','Não informou'];
+// custo mensal por canal (investimento) — usado para CAC/ROI por canal
+let CANAL_CUSTO = {'WhatsApp':0,'Tráfego Pago':245,'Instagram Orgânico':0,'Indicação':0,'Retorno/Recompra':0,'Não informou':0};
+
+/* ============================================================
+   CAPTAÇÃO — lançamento estilo relatório da comercial
+   Cada registro = uma data + uma plataforma + métricas do dia.
+   Campos opcionais: você preenche só o que tiver.
+   ============================================================ */
+let PLATAFORMAS = ['Instagram (Orgânico)','Tráfego Pago','WhatsApp','Indicação','Outro'];
+let CAPTACAO = [
+  {id:1, data:'2026-06-09', plataforma:'Instagram (Orgânico)', seguidores:67, leads:9, agendadas:3, investido:0, gasto:0, campanhas:0},
+  {id:2, data:'2026-06-09', plataforma:'Tráfego Pago', seguidores:0, leads:1, agendadas:1, investido:300, gasto:35, campanhas:2},
+  {id:3, data:'2026-06-09', plataforma:'WhatsApp', seguidores:0, leads:1, agendadas:1, investido:0, gasto:0, campanhas:0},
+  {id:4, data:'2026-06-02', plataforma:'Instagram (Orgânico)', seguidores:42, leads:6, agendadas:2, investido:0, gasto:0, campanhas:0},
+  {id:5, data:'2026-06-02', plataforma:'Tráfego Pago', seguidores:0, leads:4, agendadas:2, investido:300, gasto:120, campanhas:2},
+];
+let CAPT_SEQ = 6;
+let PROCS = ['Toxina Botulínica','Preenchimento Labial','Preenchimento Facial','Bioestimulador','Fios de PDO','Skinbooster','Peeling','Microagulhamento'];
+
+/* ---------- calc engine ---------- */
+function calc(){
+  const at = DATA.atendimentos, ld = DATA.leads, cs = DATA.custos;
+  const compareceu = at.filter(a=>a.agenda==='Compareceu');
+  const faturamento = compareceu.reduce((s,a)=>s+a.valor,0);
+  const pagantes = compareceu.filter(a=>a.valor>0).length;
+  const ticket = pagantes ? faturamento/pagantes : 0;
+  const custoInsumo = compareceu.reduce((s,a)=>s+a.custo,0);
+  const custoTotal = cs.reduce((s,c)=>s+c.valor,0);
+  const imposto = faturamento*META.imposto;
+  const lucro = faturamento - imposto - custoTotal;
+  const margem = faturamento ? lucro/faturamento : 0;
+  const nAtend = compareceu.length;
+  const totAgenda = at.length;
+  const txComp = totAgenda ? nAtend/totAgenda : 0;
+  const noShows = at.filter(a=>a.agenda==='No-show').length;
+  const leadsAg = ld.filter(l=>l.agendou).length;
+  const leadsFec = ld.filter(l=>l.fechou).length;
+  const txConv = leadsAg ? leadsFec/leadsAg : 0;
+  const investMkt = ld.reduce((s,l)=>s+l.custo,0);
+  const cac = leadsFec ? investMkt/leadsFec : 0;
+  const horasUsadas = nAtend*META.duracaoMedia;
+  const txOcup = META.horasMes ? horasUsadas/META.horasMes : 0;
+  const porCanal = CANAIS.map(c=>({
+    canal:c,
+    leads:ld.filter(l=>l.canal===c).length,
+    fechados:ld.filter(l=>l.canal===c&&l.fechou).length,
+    receita:at.filter(a=>a.canal===c&&a.agenda==='Compareceu').reduce((s,a)=>s+a.valor,0),
+  })).map(x=>({...x,conv:x.leads?x.fechados/x.leads:0}));
+  const porProc = PROCS.map(p=>({
+    proc:p,
+    qtd:compareceu.filter(a=>a.proc===p).length,
+    receita:compareceu.filter(a=>a.proc===p).reduce((s,a)=>s+a.valor,0),
+  })).map(x=>({...x,share:faturamento?x.receita/faturamento:0})).filter(x=>x.qtd>0);
+  const cats = [...new Set(cs.map(c=>c.cat))];
+  const porCat = cats.map(ca=>({cat:ca,valor:cs.filter(c=>c.cat===ca).reduce((s,c)=>s+c.valor,0)}))
+    .sort((a,b)=>b.valor-a.valor);
+  const confOK = DATA.conformidade.filter(c=>c.status==='OK').length;
+
+  // ---- série diária (gráfico de tendência) ----
+  const dias = [...new Set(at.map(a=>a.data))].sort();
+  const serieReceita = dias.map(d=>({
+    dia:d,
+    valor:compareceu.filter(a=>a.data===d).reduce((s,a)=>s+a.valor,0),
+    atend:compareceu.filter(a=>a.data===d).length
+  }));
+  // ---- comparação vs período anterior (simulado a partir de PREV) ----
+  const prev = DATA.periodoAnterior || {faturamento:faturamento*0.8,nAtend:Math.round(nAtend*0.85),leads:ld.length*0.9,comandas:Math.round(nAtend*0.8)};
+  const vs = (atual,ant)=> ant? (atual-ant)/ant : 0;
+  const comp = {
+    faturamento: vs(faturamento,prev.faturamento),
+    atend: vs(nAtend,prev.nAtend),
+    leads: vs(ld.length,prev.leads),
+    comandas: vs(compareceu.filter(a=>a.valor>0).length,prev.comandas),
+  };
+  const comandas = compareceu.filter(a=>a.valor>0).length;
+  // ---- ranking de procedimentos por nº de atendimentos ----
+  const ranking = PROCS.map(p=>({
+    nome:p,
+    qtd:compareceu.filter(a=>a.proc===p).length,
+    receita:compareceu.filter(a=>a.proc===p).reduce((s,a)=>s+a.valor,0)
+  })).filter(x=>x.qtd>0).sort((a,b)=>b.qtd-a.qtd);
+  // ranking de pacientes por valor
+  const rankPac = [...new Set(compareceu.map(a=>a.paciente))].map(nome=>({
+    nome, valor:compareceu.filter(a=>a.paciente===nome).reduce((s,a)=>s+a.valor,0),
+    visitas:compareceu.filter(a=>a.paciente===nome).length
+  })).sort((a,b)=>b.valor-a.valor);
+
+  // ---- comissões (sobre valor bruto dos procedimentos realizados) ----
+  const comissaoBaseTotal = compareceu.reduce((s,a)=>s+a.valor,0);
+  const comissaoTotal = comissaoBaseTotal * META.comissaoPercent;
+  const comissaoPorProc = PROCS.map(p=>{
+    const itens=compareceu.filter(a=>a.proc===p);
+    const base=itens.reduce((s,a)=>s+a.valor,0);
+    return {proc:p, qtd:itens.length, base, comissao:base*META.comissaoPercent};
+  }).filter(x=>x.qtd>0).sort((a,b)=>b.comissao-a.comissao);
+
+  // ---- base de pacientes (consolida atendimentos por pessoa) ----
+  const nomes=[...new Set(at.map(a=>a.paciente))];
+  const pacientes = nomes.map(nome=>{
+    const hist=at.filter(a=>a.paciente===nome);
+    const realizados=hist.filter(a=>a.agenda==='Compareceu');
+    const valorTotal=realizados.reduce((s,a)=>s+a.valor,0);
+    const datas=realizados.map(a=>a.data).sort();
+    const ultima=datas[datas.length-1]||'';
+    const canal=hist[0]?hist[0].canal:'';
+    return {nome, visitas:realizados.length, valorTotal, ultima, canal,
+      procedimentos:[...new Set(realizados.map(a=>a.proc))],
+      recorrente:realizados.length>1};
+  }).sort((a,b)=>b.valorTotal-a.valorTotal);
+  const totalPacientes=pacientes.length;
+  const pacRecorrentes=pacientes.filter(p=>p.recorrente).length;
+  const txRecompra= totalPacientes? pacRecorrentes/totalPacientes : 0;
+  const ltv = totalPacientes? pacientes.reduce((s,p)=>s+p.valorTotal,0)/totalPacientes : 0;
+
+  // ---- documentos ----
+  const docPend = DOCS.filter(d=>d.status==='Pendente').length;
+  const docVencer = DOCS.filter(d=>d.status==='A vencer').length;
+  const docOk = DOCS.filter(d=>d.status==='Arquivado'||d.status==='Vigente').length;
+
+  // ---- evolução mensal (período atual + anteriores simulados) ----
+  const evolucao = [
+    {mes:'Mar', fat: 9800, lucro: -2100},
+    {mes:'Abr', fat: 10800, lucro: -1200},
+    {mes:'Mai', fat: 11900, lucro: 400},
+    {mes:'Jun', fat: faturamento, lucro: lucro},
+  ];
+
+  const out = {faturamento,ticket,custoInsumo,custoTotal,imposto,lucro,margem,nAtend,txComp,noShows,
+    txConv,investMkt,cac,txOcup,porCanal,porProc,porCat,confOK,confTotal:DATA.conformidade.length,
+    serieReceita,comp,comandas,ranking,rankPac,nLeads:ld.length,
+    comissaoTotal,comissaoBaseTotal,comissaoPorProc,comissaoPercent:META.comissaoPercent,
+    pacientes,totalPacientes,pacRecorrentes,txRecompra,ltv,
+    docPend,docVencer,docOk,docTotal:DOCS.length,evolucao};
+  window.__lastCalc = out;
+  return out;
+}
+
+const GOLD='#C9A24B', GOLDS=['#C9A24B','#9A7B2E','#E4CE92','#B98F38','#7E6526','#D9BC6E','#A88A40','#C2A658'];
+const charts = {};
+function destroyCharts(){Object.values(charts).forEach(c=>c&&c.destroy());}
+
+/* ============================================================
+   SUPABASE — configuração e camada de dados
+   Preencha SUPABASE_URL e SUPABASE_ANON_KEY com os dados do
+   seu projeto (Supabase > Project Settings > API).
+   ============================================================ */
+const SUPABASE_URL = 'https://fvudioovtpjnzegtqqqy.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2dWRpb292dHBqbnplZ3RxcXF5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMTQ4ODMsImV4cCI6MjA5NjY5MDg4M30.GPGd2gwf1YBLfkJ_XA2KF6xHgeK4v7zMgjLqEYhNOYg';
+
+let sb = null;
+let MODO_NUVEM = false;
+try {
+  if (SUPABASE_URL.startsWith('http') && window.supabase) {
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    MODO_NUVEM = true;
+  }
+} catch(e){ console.warn('Supabase não configurado, rodando em modo local (dados de exemplo).'); }
+
+window.addEventListener('DOMContentLoaded', async ()=>{
+  initNav();
+  if (MODO_NUVEM) {
+    const { data:{ session } } = await sb.auth.getSession();
+    if (session) { await iniciarApp(); }
+    else { mostrarLogin(); }
+  } else {
+    // modo local: mostra direto com dados de exemplo
+    document.getElementById('appRoot').style.display='flex';
+    go('painel');
+  }
+});
+
+function mostrarLogin(){
+  document.getElementById('loginScreen').style.display='flex';
+  document.getElementById('appRoot').style.display='none';
+}
+async function fazerLogin(){
+  const email=document.getElementById('loginEmail').value.trim();
+  const senha=document.getElementById('loginSenha').value;
+  const erro=document.getElementById('loginErro');
+  const btn=document.getElementById('loginBtn');
+  erro.style.display='none'; btn.textContent='Entrando...'; btn.disabled=true;
+  const { error } = await sb.auth.signInWithPassword({ email, password:senha });
+  btn.textContent='Entrar'; btn.disabled=false;
+  if (error){ erro.textContent='E-mail ou senha incorretos.'; erro.style.display='block'; return; }
+  await iniciarApp();
+}
+async function fazerLogout(){
+  if (sb) await sb.auth.signOut();
+  location.reload();
+}
+async function iniciarApp(){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('appRoot').style.display='flex';
+  const { data:{ user } } = await sb.auth.getUser();
+  if (user) document.getElementById('userEmail').textContent = user.email;
+  await carregarTudo();
+  go('painel');
+}
+
+/* ---- carga inicial: lê todas as tabelas para os globais ---- */
+async function carregarTudo(){
+  try {
+    const [func, cart, cat, lanc, atend, capt, met, conf, docs] = await Promise.all([
+      sb.from('funcionarios').select('*').order('criado_em'),
+      sb.from('carteiras').select('*').order('criado_em'),
+      sb.from('categorias').select('*').order('criado_em'),
+      sb.from('lancamentos').select('*').order('data'),
+      sb.from('atendimentos').select('*').order('data'),
+      sb.from('captacao').select('*').order('data'),
+      sb.from('metas').select('*').order('criado_em'),
+      sb.from('conformidade').select('*').order('criado_em'),
+      sb.from('documentos').select('*').order('criado_em'),
+    ]);
+    if (func.data && func.data.length) FUNCIONARIOS = func.data.map(f=>({id:f.id,nome:f.nome,funcao:f.funcao,tipo:f.tipo,atende:f.atende,registro:f.registro,contato:f.contato,admissao:f.admissao,ativo:f.ativo}));
+    if (cart.data && cart.data.length) CARTEIRAS = cart.data.map(c=>({id:c.id,nome:c.nome,saldoInicial:+c.saldo_inicial}));
+    if (cat.data && cat.data.length){
+      CAT_RECEITA = cat.data.filter(c=>c.tipo==='receita').map(c=>c.nome);
+      CAT_DESPESA = cat.data.filter(c=>c.tipo==='despesa').map(c=>c.nome);
+    }
+    if (lanc.data) CAIXA = lanc.data.map(l=>({id:l.id,data:l.data,tipo:l.tipo,categoria:l.categoria,desc:l.descricao,valor:+l.valor,carteira:l.carteira_id,carteiraDest:l.carteira_dest}));
+    if (atend.data) DATA.atendimentos = atend.data.map(a=>({id:a.id,data:a.data,paciente:a.paciente,proc:a.procedimento,func:a.funcionario,canal:a.canal,valor:+a.valor,custo:+a.custo,pag:a.pagamento,agenda:a.agenda}));
+    if (capt.data) CAPTACAO = capt.data.map(c=>({id:c.id,data:c.data,plataforma:c.plataforma,seguidores:c.seguidores,leads:c.leads,agendadas:c.agendadas,investido:+c.investido,gasto:+c.gasto,campanhas:c.campanhas}));
+    if (met.data) METAS = met.data.map(m=>({id:m.id,funcId:m.func_id,escopo:m.escopo,tipo:m.tipo,periodo:m.periodo,faixas:m.faixas}));
+    if (conf.data && conf.data.length) DATA.conformidade = conf.data.map(c=>({id:c.id,item:c.item,resp:c.responsavel,status:c.status}));
+    if (docs.data && docs.data.length) { while(DOCS.length)DOCS.pop(); docs.data.forEach(d=>DOCS.push({id:d.id,nome:d.nome,cat:d.categoria,data:d.data,validade:d.validade,status:d.status,ref:d.referencia})); }
+    // configurações (listas customizáveis)
+    const cfg = await sb.from('configuracoes').select('*');
+    if (cfg.data) cfg.data.forEach(row=>{
+      if(CONFIG_LISTAS[row.chave] && Array.isArray(row.valores)) CONFIG_LISTAS[row.chave].set(row.valores);
+    });
+    window.__lastCalc=null;
+  } catch(e){ console.error('Erro ao carregar dados:', e); }
+}
+
+/* ---- helpers de persistência (chamados pelas funções de salvar) ---- */
+async function sbInsert(tabela, registro){
+  if(!MODO_NUVEM) return null;
+  const { data:{ user } } = await sb.auth.getUser();
+  const { data, error } = await sb.from(tabela).insert({...registro, user_id:user.id}).select().single();
+  if(error){ console.error('insert '+tabela, error); alert('Erro ao salvar: '+error.message); return null; }
+  return data;
+}
+async function sbUpdate(tabela, id, registro){
+  if(!MODO_NUVEM) return null;
+  const { error } = await sb.from(tabela).update(registro).eq('id', id);
+  if(error){ console.error('update '+tabela, error); alert('Erro ao atualizar: '+error.message); }
+}
+async function sbDelete(tabela, id){
+  if(!MODO_NUVEM) return;
+  const { error } = await sb.from(tabela).delete().eq('id', id);
+  if(error){ console.error('delete '+tabela, error); alert('Erro ao excluir: '+error.message); }
+}
+
+function initNav(){
+  // top-level direct buttons (Principal, Novo)
+  document.querySelectorAll('#nav > button[data-page]').forEach(b=>{
+    b.addEventListener('click',()=>go(b.dataset.page));
+  });
+  // group headers toggle open/close
+  document.querySelectorAll('.nav-group .ng-head').forEach(h=>{
+    h.addEventListener('click',()=>h.parentElement.classList.toggle('open'));
+  });
+  // sub-items navigate
+  document.querySelectorAll('.ng-items button[data-page]').forEach(b=>{
+    b.addEventListener('click',()=>go(b.dataset.page));
+  });
+  document.getElementById('periodSel').addEventListener('change',()=>go(currentPage));
+}
+
+let currentPage='painel';
+const TITLES={painel:['Painel','Visão Geral da Clínica'],atendimentos:['Cadastros','Registro de Atendimentos'],
+  leads:['Marketing','Captação de Leads'],custos:['Financeiro','Custos & Despesas'],
+  conformidade:['Controle','Conformidade & Regularização'],
+  comissoes:['Financeiro','Metas & Bonificações'],pacientes:['Cadastros','Base de Pacientes'],
+  documentos:['Controle','Documentos & Arquivo'],analise:['Relatórios','Análise Avançada de Dados'],
+  funcionarios:['Cadastros','Funcionários'],caixa:['Financeiro','Livro-Caixa'],
+  relatorio:['Relatórios','Gerador de Relatório PDF'],config:['Controle','Configurações']};
+
+function go(page){
+  currentPage=page;
+  document.querySelectorAll('#nav button[data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===page));
+  document.querySelectorAll('.nav-group').forEach(g=>{
+    if(g.querySelector(`button[data-page="${page}"]`)) g.classList.add('open');
+  });
+  document.getElementById('crumb').textContent=TITLES[page][0];
+  document.getElementById('pageTitle').textContent=TITLES[page][1];
+  destroyCharts();
+  const C=document.getElementById('content');
+  C.innerHTML='<div class="page active" id="pg"></div>';
+  const pg=document.getElementById('pg');
+  ({painel:renderPainel,atendimentos:renderAtend,leads:renderLeads,custos:renderCustos,
+    conformidade:renderConf,comissoes:renderComissoes,pacientes:renderPacientes,
+    documentos:renderDocumentos,analise:renderAnalise,
+    funcionarios:renderFuncionarios,caixa:renderCaixa,relatorio:renderRelatorio,config:renderConfig}[page])(pg);
+}
+
+/* ============================ PAINEL ============================ */
+function renderPainel(pg){
+  const k=calc();
+  const cmpTag=(v)=>{
+    const up=v>=0; const arrow=up?'<polyline points="18 15 12 9 6 15"/>':'<polyline points="6 9 12 15 18 9"/>';
+    return `<span class="tag-cmp ${up?'up':'down'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor">${arrow}</svg>${PCT0(Math.abs(v))} vs período anterior</span>`;
+  };
+  pg.innerHTML=`
+    <div class="trend-grid">
+      <div class="tcard" style="animation-delay:0ms">
+        <div class="tc-head"><span class="tc-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4"/></svg></span> Faturamento total</div>
+        <div class="tc-val">${BRL(k.faturamento)}</div>
+        <div class="tc-sub">Meta do mês: ${BRL(META.faturamento)}</div>
+        <div class="tc-spark"><canvas id="spk1"></canvas></div>
+        ${cmpTag(k.comp.faturamento)}
+      </div>
+      <div class="tcard" style="animation-delay:80ms">
+        <div class="tc-head"><span class="tc-ic"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg></span> Atendimentos</div>
+        <div class="tc-val">${k.nAtend}</div>
+        <div class="tc-sub">${k.noShows} falta(s) no período</div>
+        <div class="tc-spark"><canvas id="spk2"></canvas></div>
+        ${cmpTag(k.comp.atend)}
+      </div>
+      <div class="tcard" style="animation-delay:160ms">
+        <div class="tc-head"><span class="tc-ic"><svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span> Comandas (pagas)</div>
+        <div class="tc-val">${k.comandas}</div>
+        <div class="tc-sub">Ticket médio: ${BRL(k.ticket)}</div>
+        <div class="tc-spark"><canvas id="spk3"></canvas></div>
+        ${cmpTag(k.comp.comandas)}
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:18px">
+      <div class="itabs" id="painelTabs">
+        <button class="active" data-itab="tend">Tendência de Visitas</button>
+        <button data-itab="canal">Receita por Canal</button>
+        <button data-itab="proc">Procedimentos</button>
+      </div>
+      <div class="row two" style="margin-bottom:0">
+        <div>
+          <div class="itab-pane active" id="pane-tend"><div class="chart-wrap"><canvas id="chTend"></canvas></div></div>
+          <div class="itab-pane" id="pane-canal"><div class="chart-wrap"><canvas id="chCanal2"></canvas></div></div>
+          <div class="itab-pane" id="pane-proc"><div class="chart-wrap"><canvas id="chProc2"></canvas></div></div>
+        </div>
+        <div>
+          <h3 style="font-size:17px">Ranking de procedimentos</h3>
+          <div class="ph-sub">Mais realizados no período</div>
+          <div class="rank-list">${k.ranking.map((r,i)=>`
+            <div class="rank-row"><span class="rank-pos">${i+1}</span>
+              <span class="rank-name">${r.nome}</span>
+              <span style="text-align:right"><div class="rank-val">${r.qtd}</div><div class="rank-sub">${BRL(r.receita)}</div></span>
+            </div>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row two">
+      <div class="panel">
+        <div class="panel-head"><div><h3>Metas do mês</h3><div class="ph-sub">Realizado x objetivo</div></div></div>
+        ${metasBlock(k)}
+      </div>
+      <div class="panel">
+        <h3>Ranking de pacientes</h3><div class="ph-sub">Maior valor no período</div>
+        <div class="rank-list">${k.rankPac.slice(0,7).map((r,i)=>`
+          <div class="rank-row"><span class="rank-pos">${i+1}</span>
+            <span class="rank-name">${r.nome}</span>
+            <span style="text-align:right"><div class="rank-val">${BRL(r.valor)}</div><div class="rank-sub">${r.visitas} visita(s)</div></span>
+          </div>`).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="row two-eq">
+      <div class="panel"><h3>Receita por procedimento</h3><div class="ph-sub">Distribuição do faturamento</div>
+        <div id="leg1" class="legend"></div>
+        <div class="chart-wrap"><canvas id="chProc"></canvas></div>
+      </div>
+      <div class="panel"><h3>Despesas por categoria</h3><div class="ph-sub">Para onde vai o dinheiro</div>
+        <div class="chart-wrap"><canvas id="chCusto"></canvas></div>
+      </div>
+    </div>`;
+
+  // internal tabs
+  pg.querySelectorAll('#painelTabs button').forEach(b=>b.addEventListener('click',()=>{
+    pg.querySelectorAll('#painelTabs button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    pg.querySelectorAll('.itab-pane').forEach(p=>p.classList.remove('active'));
+    pg.querySelector('#pane-'+b.dataset.itab).classList.add('active');
+  }));
+  requestAnimationFrame(()=>setTimeout(()=>pg.querySelectorAll('.bar i').forEach(b=>b.style.width=b.dataset.w+'%'),120));
+  drawCRMCharts(k);
+}
+
+function metasBlock(k){
+  const metas=[
+    {n:'Faturamento',r:k.faturamento,m:META.faturamento,f:BRL},
+    {n:'Ticket médio',r:k.ticket,m:META.ticket,f:BRL},
+    {n:'Comparecimento',r:k.txComp,m:META.comparecimento,f:PCT},
+    {n:'Conversão de leads',r:k.txConv,m:META.conversao,f:PCT},
+    {n:'Ocupação',r:k.txOcup,m:META.ocupacao,f:PCT},
+  ];
+  return metas.map(x=>{
+    const p=x.m?x.r/x.m:0, w=Math.min(p,1.15)/1.15*100;
+    const cls=p>=1?'hit':(p<0.7?'low':'');
+    const col=p>=1?'var(--green)':p<0.7?'var(--red)':'var(--gold-d)';
+    return `<div class="meta-row"><div class="mr-top"><span class="mr-name">${x.n}</span>
+      <span class="mr-vals"><b>${x.f(x.r)}</b> / ${x.f(x.m)}<span class="mr-pct" style="color:${col}">${PCT0(p)}</span></span></div>
+      <div class="bar"><i class="${cls}" data-w="${w}"></i></div></div>`;
+  }).join('');
+}
+
+
+function drawCRMCharts(k){
+  if(typeof Chart==='undefined'){
+    document.querySelectorAll('.chart-wrap,.tc-spark').forEach(w=>{w.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--grey);font-size:12px;text-align:center">Gráfico aparece no navegador com internet.</div>';});
+    return;
+  }
+  const grid='#EEE8DC', tick='#8A8175';
+  const days=k.serieReceita.map(s=>s.dia.slice(8)+'/'+s.dia.slice(5,7));
+  // sparklines (faturamento, atendimentos, comandas-proxy)
+  const spark=(id,data,color)=>{
+    const el=document.getElementById(id); if(!el)return;
+    charts[id]=new Chart(el,{type:'line',data:{labels:data.map((_,i)=>i),
+      datasets:[{data,borderColor:color,borderWidth:2,fill:true,tension:.4,pointRadius:0,
+        backgroundColor:(ctx)=>{const c=ctx.chart.ctx.createLinearGradient(0,0,0,48);c.addColorStop(0,color+'33');c.addColorStop(1,color+'00');return c;}}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},
+        scales:{x:{display:false},y:{display:false}}}});
+  };
+  spark('spk1',k.serieReceita.map(s=>s.valor),'#C9A24B');
+  spark('spk2',k.serieReceita.map(s=>s.atend),'#9A7B2E');
+  spark('spk3',k.serieReceita.map(s=>s.valor>0?1:0).map((_,i)=>k.serieReceita[i].atend),'#B98F38');
+
+  // tendência de visitas (barras)
+  charts.tend=new Chart(document.getElementById('chTend'),{type:'bar',
+    data:{labels:days,datasets:[{label:'Atendimentos',data:k.serieReceita.map(s=>s.atend),
+      backgroundColor:'#C9A24B',borderRadius:5,maxBarThickness:30}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:c=>` ${c.parsed.y} atendimento(s)`}}},
+      scales:{y:{grid:{color:grid},ticks:{color:tick,stepSize:1}},x:{grid:{display:false},ticks:{color:tick,font:{size:10}}}}}});
+
+  // receita por canal (tab)
+  charts.canal2=new Chart(document.getElementById('chCanal2'),{type:'bar',
+    data:{labels:k.porCanal.map(c=>c.canal),datasets:[{data:k.porCanal.map(c=>c.receita),
+      backgroundColor:'#9A7B2E',borderRadius:5,maxBarThickness:40}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:c=>' '+BRL(c.parsed.y)}}},
+      scales:{y:{grid:{color:grid},ticks:{color:tick,callback:v=>'R$'+(v/1000)+'k'}},x:{grid:{display:false},ticks:{color:tick,font:{size:10}}}}}});
+
+  // procedimentos (tab) - barras horizontais por qtd
+  charts.proc2=new Chart(document.getElementById('chProc2'),{type:'bar',
+    data:{labels:k.ranking.map(r=>r.nome),datasets:[{data:k.ranking.map(r=>r.qtd),
+      backgroundColor:'#C9A24B',borderRadius:5,maxBarThickness:22}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:c=>` ${c.parsed.x} atendimento(s)`}}},
+      scales:{x:{grid:{color:grid},ticks:{color:tick,stepSize:1}},y:{grid:{display:false},ticks:{color:tick,font:{size:11}}}}}});
+
+  // doughnut proc + custo (reuse)
+  drawCharts(k);
+}
+
+function drawCharts(k){
+  if(typeof Chart==='undefined'){
+    document.querySelectorAll('.chart-wrap').forEach(w=>{w.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--grey);font-size:13px;text-align:center;padding:0 20px">Os gráficos aparecem ao abrir o arquivo no navegador com internet.</div>';});
+    return;
+  }
+  const grid='#EEE8DC', tick='#8A8175';
+  // doughnut proc
+  const proc=k.porProc;
+  if(document.getElementById('chProc'))charts.proc=new Chart(document.getElementById('chProc'),{type:'doughnut',
+    data:{labels:proc.map(p=>p.proc),datasets:[{data:proc.map(p=>p.receita),backgroundColor:GOLDS,borderColor:'#fff',borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'58%',plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:c=>` ${c.label}: ${BRL(c.parsed)} (${PCT0(c.parsed/k.faturamento)})`}}}}});
+  if(document.getElementById('leg1'))document.getElementById('leg1').innerHTML=proc.map((p,i)=>
+    `<span><i style="background:${GOLDS[i%GOLDS.length]}"></i>${p.proc} ${PCT0(p.share)}</span>`).join('');
+  // bar canal
+  const can=k.porCanal;
+  if(document.getElementById('chCanal')){charts.canal=new Chart(document.getElementById('chCanal'),{type:'bar',
+    data:{labels:can.map(c=>c.canal),datasets:[{data:can.map(c=>c.receita),backgroundColor:GOLD,borderRadius:6,maxBarThickness:46}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:c=>' '+BRL(c.parsed.y)}}},
+      scales:{y:{grid:{color:grid},ticks:{color:tick,callback:v=>'R$ '+(v/1000)+'k'}},x:{grid:{display:false},ticks:{color:tick,font:{size:10}}}}}});}
+  // bar horizontal custo
+  const cat=k.porCat;
+  if(document.getElementById('chCusto'))charts.custo=new Chart(document.getElementById('chCusto'),{type:'bar',
+    data:{labels:cat.map(c=>c.cat),datasets:[{data:cat.map(c=>c.valor),backgroundColor:'#9A7B2E',borderRadius:6,maxBarThickness:24}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:c=>' '+BRL(c.parsed.x)}}},
+      scales:{x:{grid:{color:grid},ticks:{color:tick,callback:v=>'R$ '+(v/1000)+'k'}},y:{grid:{display:false},ticks:{color:tick,font:{size:11}}}}}});
+}
+
+/* ============================ ATENDIMENTOS ============================ */
+function renderAtend(pg){
+  const rows=DATA.atendimentos;
+  const body=rows.map(a=>`<tr>
+    <td>${fmtDate(a.data)}</td><td>${a.paciente}</td><td>${a.proc}</td>
+    <td style="font-size:12.5px">${a.func||'—'}</td>
+    <td>${a.canal}</td><td class="num">${BRL(a.valor)}</td>
+    <td class="ctr">${pagPill(a.pag)}</td><td class="ctr">${agPill(a.agenda)}</td>
+  </tr>`).join('');
+  const hoje=new Date().toISOString().slice(0,10);
+  const funcOpts=FUNCIONARIOS.filter(f=>f.atende&&f.ativo).map(f=>`<option>${f.nome}</option>`).join('');
+  pg.innerHTML=`
+    <div class="panel">
+      <div class="toolbar">
+        <div><h3>Atendimentos do período</h3><div class="ph-sub">${rows.length} registros · receita ${BRL(rows.filter(a=>a.agenda==='Compareceu').reduce((s,a)=>s+a.valor,0))}</div></div>
+        <button class="btn" onclick="toggleForm('formAt')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo atendimento</button>
+      </div>
+      <div class="form-row" id="formAt">
+        <div class="field"><label>Data do atendimento</label><input id="naData" type="date" value="${hoje}"></div>
+        <div class="field"><label>Paciente</label><input id="naPac" placeholder="Nome"></div>
+        <div class="field"><label>Realizado por</label><select id="naFunc">${funcOpts}</select></div>
+        <div class="field"><label>Procedimento</label><select id="naProc">${PROCS.concat('Avaliação').map(p=>`<option>${p}</option>`).join('')}</select></div>
+        <div class="field"><label>Canal</label><select id="naCanal">${CANAIS.map(c=>`<option>${c}</option>`).join('')}</select></div>
+        <div class="field"><label>Valor (R$)</label><input id="naValor" type="number" value="1200" style="min-width:100px"></div>
+        <div class="field"><label>Status</label><select id="naAg"><option>Compareceu</option><option>Agendado</option><option>No-show</option><option>Reagendado</option></select></div>
+        <button class="btn" onclick="addAtend()">Salvar</button>
+        <button class="btn ghost" onclick="toggleForm('formAt')">Cancelar</button>
+      </div>
+      <div style="font-size:12px;color:var(--grey);font-style:italic;margin-bottom:14px">
+        Dica: registre cada atendimento com a <b>data real</b> em que aconteceu, mesmo que você lance vários de uma vez no fim da semana. Assim os relatórios diário, semanal e mensal ficam todos corretos.
+      </div>
+      <table class="data">
+        <thead><tr><th>Data</th><th>Paciente</th><th>Procedimento</th><th>Realizado por</th><th>Canal</th><th class="num">Valor</th><th class="ctr">Pagamento</th><th class="ctr">Agenda</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>`;
+}
+async function addAtend(){
+  const v=id=>document.getElementById(id).value;
+  const reg={data:v('naData')||new Date().toISOString().slice(0,10),
+    paciente:v('naPac')||'Novo paciente',func:v('naFunc')||META.profissionalPadrao,
+    proc:v('naProc'),canal:v('naCanal'),valor:+v('naValor')||0,custo:Math.round((+v('naValor')||0)*0.3),
+    pag:'Pago',agenda:v('naAg')};
+  if(MODO_NUVEM){
+    await sbInsert('atendimentos',{data:reg.data,paciente:reg.paciente,procedimento:reg.proc,funcionario:reg.func,canal:reg.canal,valor:reg.valor,custo:reg.custo,pagamento:reg.pag,agenda:reg.agenda});
+    await carregarTudo(); go('atendimentos'); return;
+  }
+  DATA.atendimentos.unshift(reg);
+  go('atendimentos');
+}
+
+/* ============================ LEADS ============================ */
+function renderLeads(pg){
+  const grao=window.__captGrao||'dia';
+  // agrega captação por plataforma no período todo
+  const porPlat={};
+  CAPTACAO.forEach(c=>{
+    if(!porPlat[c.plataforma]) porPlat[c.plataforma]={plataforma:c.plataforma,seguidores:0,leads:0,agendadas:0,investido:0,gasto:0,campanhas:0};
+    const p=porPlat[c.plataforma];
+    p.seguidores+=c.seguidores||0; p.leads+=c.leads||0; p.agendadas+=c.agendadas||0;
+    p.investido=Math.max(p.investido,c.investido||0); p.gasto+=c.gasto||0; p.campanhas=Math.max(p.campanhas,c.campanhas||0);
+  });
+  const plats=Object.values(porPlat);
+  const totLeads=plats.reduce((s,p)=>s+p.leads,0);
+  const totAgend=plats.reduce((s,p)=>s+p.agendadas,0);
+  const totSeg=plats.reduce((s,p)=>s+p.seguidores,0);
+  const totGasto=plats.reduce((s,p)=>s+p.gasto,0);
+  const convGeral=totLeads?totAgend/totLeads:0;
+  const cpl=totLeads&&totGasto?totGasto/totLeads:0;
+
+  // tabela de lançamentos (linha a linha, editável)
+  const linhas=[...CAPTACAO].sort((a,b)=>b.data.localeCompare(a.data)).map(c=>{
+    const conv=c.leads?(c.agendadas/c.leads):0;
+    return `<tr>
+      <td>${fmtDate(c.data)}</td>
+      <td>${c.plataforma}</td>
+      <td class="ctr">${c.seguidores||'—'}</td>
+      <td class="ctr">${c.leads||'—'}</td>
+      <td class="ctr">${c.agendadas||'—'}</td>
+      <td class="ctr" style="font-weight:600;color:${conv>=0.3?'var(--green)':conv>0?'var(--ink)':'var(--grey)'}">${c.leads?PCT0(conv):'—'}</td>
+      <td class="num">${c.investido?BRL(c.investido):'—'}</td>
+      <td class="num">${c.gasto?BRL(c.gasto):'—'}</td>
+      <td class="ctr">${c.campanhas||'—'}</td>
+      <td class="ctr"><button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="editarCapt('${c.id}')">editar</button> <button class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="delCapt('${c.id}')">×</button></td>
+    </tr>`;
+  }).join('');
+
+  pg.innerHTML=`
+    <div class="trend-grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="tcard" style="animation-delay:0ms"><div class="tc-head">Leads captados</div><div class="tc-val">${totLeads}</div><div class="tc-sub">${totAgend} agendaram</div></div>
+      <div class="tcard" style="animation-delay:70ms"><div class="tc-head">Conversão</div><div class="tc-val" style="color:var(--green)">${PCT0(convGeral)}</div><div class="tc-sub">leads que agendaram</div></div>
+      <div class="tcard" style="animation-delay:140ms"><div class="tc-head">Seguidores novos</div><div class="tc-val">${totSeg}</div><div class="tc-sub">no período</div></div>
+      <div class="tcard" style="animation-delay:210ms"><div class="tc-head">Custo por lead</div><div class="tc-val">${cpl?BRL(cpl):'—'}</div><div class="tc-sub">gasto ${BRL(totGasto)}</div></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:18px">
+      <div class="toolbar"><div><h3>Lançar captação</h3><div class="ph-sub">Registre os números que a comercial te envia — por dia e plataforma. Preencha só o que tiver.</div></div>
+        <button class="btn" onclick="abrirCaptForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo lançamento</button>
+      </div>
+      <div id="captFormBox"></div>
+      <table class="data">
+        <thead><tr><th>Data</th><th>Plataforma</th><th class="ctr">Seguidores</th><th class="ctr">Leads</th><th class="ctr">Agendadas</th><th class="ctr">Conversão</th><th class="num">Investido</th><th class="num">Gasto</th><th class="ctr">Campanhas</th><th class="ctr">Ações</th></tr></thead>
+        <tbody>${linhas||'<tr><td colspan="10" style="text-align:center;color:var(--grey);padding:24px">Nenhum lançamento ainda.</td></tr>'}</tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <div class="toolbar"><div><h3>Resumo por plataforma</h3><div class="ph-sub">Consolidado do período</div></div>
+        <button class="btn" onclick="analisarCaptacao()">Analisar captação</button></div>
+      <table class="data">
+        <thead><tr><th>Plataforma</th><th class="ctr">Seguidores</th><th class="ctr">Leads</th><th class="ctr">Agendadas</th><th class="ctr">Conversão</th><th class="num">Gasto</th><th class="num">Custo/lead</th><th class="ctr">Campanhas</th></tr></thead>
+        <tbody>${plats.map(p=>{const conv=p.leads?p.agendadas/p.leads:0;const c=p.leads&&p.gasto?p.gasto/p.leads:0;
+          return `<tr><td style="font-weight:500">${p.plataforma}</td><td class="ctr">${p.seguidores||'—'}</td><td class="ctr">${p.leads}</td><td class="ctr">${p.agendadas}</td>
+          <td class="ctr" style="font-weight:600;color:${conv>=0.3?'var(--green)':conv<0.15&&p.leads?'var(--red)':'var(--ink)'}">${p.leads?PCT0(conv):'—'}</td>
+          <td class="num">${p.gasto?BRL(p.gasto):'—'}</td><td class="num">${c?BRL(c):'—'}</td><td class="ctr">${p.campanhas||'—'}</td></tr>`;}).join('')}</tbody>
+      </table>
+      <div id="analiseBox"></div>
+    </div>`;
+}
+
+function abrirCaptForm(){ editarCapt(0); }
+function editarCapt(id){
+  const c = (id && id!=='0')? CAPTACAO.find(x=>x.id==id) : {id:0,data:'2026-06-10',plataforma:PLATAFORMAS[0],seguidores:'',leads:'',agendadas:'',investido:'',gasto:'',campanhas:''};
+  const fs='padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;width:100%';
+  const platOpts=PLATAFORMAS.map(p=>`<option ${p===c.plataforma?'selected':''}>${p}</option>`).join('');
+  document.getElementById('captFormBox').innerHTML=`
+    <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px">
+        <div class="field"><label>Data</label><input type="date" id="cp_data" value="${c.data}" style="${fs}"></div>
+        <div class="field"><label>Plataforma</label><select id="cp_plat" style="${fs}">${platOpts}</select></div>
+        <div class="field"><label>Seguidores novos</label><input type="number" id="cp_seg" value="${c.seguidores}" placeholder="opcional" style="${fs}"></div>
+        <div class="field"><label>Leads iniciados</label><input type="number" id="cp_leads" value="${c.leads}" placeholder="opcional" style="${fs}"></div>
+        <div class="field"><label>Consultas agendadas</label><input type="number" id="cp_agend" value="${c.agendadas}" placeholder="opcional" style="${fs}"></div>
+        <div class="field"><label>Investimento (R$)</label><input type="number" id="cp_inv" value="${c.investido}" placeholder="opcional" style="${fs}"></div>
+        <div class="field"><label>Valor gasto (R$)</label><input type="number" id="cp_gasto" value="${c.gasto}" placeholder="opcional" style="${fs}"></div>
+        <div class="field"><label>Nº de campanhas</label><input type="number" id="cp_camp" value="${c.campanhas}" placeholder="opcional" style="${fs}"></div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn" onclick="salvarCapt('${c.id}')">Salvar lançamento</button>
+        <button class="btn ghost" onclick="document.getElementById('captFormBox').innerHTML=''">Cancelar</button>
+      </div>
+      <div style="margin-top:10px;font-size:12px;color:var(--grey);font-style:italic">A conversão é calculada sozinha (agendadas ÷ leads). Deixe em branco o que não tiver.</div>
+    </div>`;
+}
+async function salvarCapt(id){
+  const num=i=>{const v=document.getElementById(i).value;return v===''?0:+v;};
+  const dados={data:document.getElementById('cp_data').value,plataforma:document.getElementById('cp_plat').value,
+    seguidores:num('cp_seg'),leads:num('cp_leads'),agendadas:num('cp_agend'),
+    investido:num('cp_inv'),gasto:num('cp_gasto'),campanhas:num('cp_camp')};
+  if(MODO_NUVEM){
+    if(id && id!=='0') await sbUpdate('captacao',id,dados); else await sbInsert('captacao',dados);
+    await carregarTudo(); go('leads'); return;
+  }
+  if(id && id!=='0'){const c=CAPTACAO.find(x=>x.id==id);Object.assign(c,dados);}
+  else{CAPTACAO.push({id:CAPT_SEQ++,...dados});}
+  go('leads');
+}
+async function delCapt(id){ if(MODO_NUVEM){await sbDelete('captacao',id);await carregarTudo();} else {CAPTACAO=CAPTACAO.filter(c=>c.id!=id);} go('leads');}
+function analisarCaptacao(){
+  const porPlat={};
+  CAPTACAO.forEach(c=>{if(!porPlat[c.plataforma])porPlat[c.plataforma]={plataforma:c.plataforma,leads:0,agendadas:0,gasto:0};
+    porPlat[c.plataforma].leads+=c.leads||0;porPlat[c.plataforma].agendadas+=c.agendadas||0;porPlat[c.plataforma].gasto+=c.gasto||0;});
+  const plats=Object.values(porPlat).filter(p=>p.leads>0);
+  if(!plats.length){document.getElementById('analiseBox').innerHTML='<div style="padding:16px;color:var(--grey)">Sem dados suficientes.</div>';return;}
+  const melhorConv=[...plats].sort((a,b)=>(b.agendadas/b.leads)-(a.agendadas/a.leads))[0];
+  const maisLeads=[...plats].sort((a,b)=>b.leads-a.leads)[0];
+  const ins=[];
+  ins.push(`<b>${maisLeads.plataforma}</b> trouxe mais leads (${maisLeads.leads}).`);
+  ins.push(`<b>${melhorConv.plataforma}</b> tem a melhor conversão: ${PCT0(melhorConv.agendadas/melhorConv.leads)} dos leads agendaram.`);
+  plats.forEach(p=>{if(p.gasto>0){const cpl=p.gasto/p.leads;ins.push(`${p.plataforma}: custo de ${BRL(cpl)} por lead (gasto ${BRL(p.gasto)}).`);}});
+  const orgClose=plats.find(p=>p.gasto===0&&p.leads>0);
+  if(orgClose)ins.push(`<b style="color:var(--green)">${orgClose.plataforma}</b> gera leads sem custo de mídia — vale potencializar conteúdo orgânico e indicação.`);
+  document.getElementById('analiseBox').innerHTML=`
+    <div style="margin-top:18px;background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px">
+      <div style="font-weight:500;font-family:'Cormorant Garamond',serif;font-size:18px;margin-bottom:10px">Análise da captação</div>
+      ${ins.map(i=>`<div style="display:flex;gap:9px;margin-bottom:8px;font-size:13.5px"><span style="color:var(--gold-d)">•</span><span>${i}</span></div>`).join('')}
+    </div>`;
+}
+function renderCustos(pg){
+  const k=calc(), rows=DATA.custos;
+  const total=rows.reduce((s,c)=>s+c.valor,0);
+  const body=k.porCat.map(c=>{
+    const share=c.valor/total;
+    return `<tr><td>${c.cat}</td><td class="num">${BRL(c.valor)}</td>
+      <td style="width:140px"><span class="minibar" style="width:${share*100}%"></span></td>
+      <td class="num" style="color:var(--grey)">${PCT0(share)}</td></tr>`;
+  }).join('');
+  pg.innerHTML=`
+    <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="kpi" style="animation-delay:0ms"><div class="label">Custo total</div><div class="val">${BRL(total)}</div><div class="meta">no período</div></div>
+      <div class="kpi green" style="animation-delay:70ms"><div class="label">Faturamento</div><div class="val" style="color:var(--ink)">${BRL(k.faturamento)}</div><div class="meta">receita realizada</div></div>
+      <div class="kpi ${k.lucro>=0?'green':'green neg'}" style="animation-delay:140ms"><div class="label">Resultado</div><div class="val">${BRL(k.lucro)}</div><div class="meta">margem <span class="tag ${k.lucro>=0?'up':'down'}">${PCT(k.margem)}</span></div></div>
+    </div>
+    <div class="row two-eq">
+      <div class="panel"><h3>Despesas por categoria</h3><div class="ph-sub">Distribuição do mês</div>
+        <table class="data"><thead><tr><th>Categoria</th><th class="num">Valor</th><th></th><th class="num">%</th></tr></thead><tbody>${body}</tbody></table>
+      </div>
+      <div class="panel"><h3>Composição</h3><div class="ph-sub">Visual</div>
+        <div class="legend" id="leg2"></div>
+        <div class="chart-wrap"><canvas id="chCat" role="img" aria-label="Despesas por categoria"></canvas></div>
+      </div>
+    </div>`;
+  if(typeof Chart==='undefined'){document.getElementById('chCat').parentElement.innerHTML='<div style=\"display:flex;align-items:center;justify-content:center;height:100%;color:var(--grey);font-size:13px\">Gráfico disponível no navegador.</div>';}else{
+  charts.cat=new Chart(document.getElementById('chCat'),{type:'doughnut',
+    data:{labels:k.porCat.map(c=>c.cat),datasets:[{data:k.porCat.map(c=>c.valor),backgroundColor:GOLDS,borderColor:'#fff',borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'56%',plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:c=>` ${c.label}: ${BRL(c.parsed)}`}}}}});
+  document.getElementById('leg2').innerHTML=k.porCat.map((c,i)=>`<span><i style="background:${GOLDS[i%GOLDS.length]}"></i>${c.cat}</span>`).join('');}
+}
+
+/* ============================ CONFORMIDADE ============================ */
+function renderConf(pg){
+  const k=calc(), rows=DATA.conformidade;
+  const body=rows.map(c=>`<tr><td>${c.item}</td><td>${c.resp}</td><td class="ctr">${confPill(c.status)}</td></tr>`).join('');
+  const pend=rows.filter(c=>c.status!=='OK').length;
+  pg.innerHTML=`
+    <div class="health">
+      <div class="big">${k.confOK}/${k.confTotal}</div>
+      <div class="txt">itens em <b>conformidade</b>.<br>${pend?`<b>${pend}</b> item(ns) precisam de atenção ou estão pendentes.`:'Tudo regularizado.'}</div>
+    </div>
+    <div class="panel">
+      <div class="toolbar"><div><h3>Checklist sanitário, legal e clínico</h3><div class="ph-sub">Padrão ANVISA · CRO/PE · PGRSS</div></div>
+        <button class="btn" onclick="planoConformidade()">Plano de ação</button></div>
+      <table class="data"><thead><tr><th>Item</th><th>Responsável</th><th class="ctr">Status</th></tr></thead><tbody>${body}</tbody></table>
+      <div id="confPlanoBox"></div>
+    </div>`;
+}
+function planoConformidade(){
+  const pend=DATA.conformidade.filter(c=>c.status==='Pendente');
+  const aten=DATA.conformidade.filter(c=>c.status==='Atenção');
+  if(!pend.length&&!aten.length){document.getElementById('confPlanoBox').innerHTML='<div style="margin-top:16px;padding:16px;background:var(--green-bg);border-radius:12px;color:var(--green);font-weight:600">Tudo em conformidade. Nenhuma ação pendente.</div>';return;}
+  const item=(c,prio)=>`<div style="display:flex;gap:10px;margin-bottom:9px;font-size:13.5px"><span style="color:${prio==='alta'?'var(--red)':'var(--amber)'};font-weight:700">${prio==='alta'?'1':'2'}</span><span><b>${c.item}</b> — responsável: ${c.resp}. ${prio==='alta'?'Prioridade alta: pendência que pode gerar multa ou interdição.':'Revisar e atualizar para evitar virar pendência.'}</span></div>`;
+  document.getElementById('confPlanoBox').innerHTML=`
+    <div style="margin-top:18px;background:var(--cream);border:1px solid var(--gold-l);border-radius:12px;padding:18px">
+      <div style="font-weight:600;font-family:'Cormorant Garamond',serif;font-size:18px;margin-bottom:12px">Plano de ação prioritário</div>
+      ${pend.map(c=>item(c,'alta')).join('')}
+      ${aten.map(c=>item(c,'media')).join('')}
+      <div style="margin-top:10px;font-size:12px;color:var(--grey);font-style:italic">Resolva primeiro os itens vermelhos (pendentes), depois os amarelos (atenção).</div>
+    </div>`;
+}
+
+/* ---------- helpers ---------- */
+function fmtDate(s){const[y,m,d]=s.split('-');return `${d}/${m}`;}
+function pagPill(s){return s==='Pago'?'<span class="pill ok">Pago</span>':s==='Parcial'?'<span class="pill warn">Parcial</span>':'<span class="pill pend">Pendente</span>';}
+function agPill(s){return s==='Compareceu'?'<span class="pill ok">Compareceu</span>':s==='No-show'?'<span class="pill pend">No-show</span>':`<span class="pill warn">${s}</span>`;}
+function confPill(s){return s==='OK'?'<span class="pill ok">OK</span>':s==='Atenção'?'<span class="pill warn">Atenção</span>':'<span class="pill pend">Pendente</span>';}
+function toggleForm(id){document.getElementById(id).classList.toggle('open');}
+
+/* ============================================================
+   ASSISTENTE — IA gratuita baseada em regras e cálculos.
+   Sem API externa, sem custo. Analisa calc() e responde.
+   ============================================================ */
+
+function gerarInsights(){
+  const k=calc(); const ins=[];
+  // Resultado financeiro
+  if(k.lucro<0){
+    ins.push({tipo:'alerta',icone:'alert',titulo:'Resultado negativo no período',
+      texto:`As despesas (${BRL(k.custoTotal)}) e impostos superaram o faturamento (${BRL(k.faturamento)}), gerando prejuízo de ${BRL(Math.abs(k.lucro))}. Para o resultado ficar positivo, o faturamento precisaria passar de ${BRL((k.custoTotal)/(1-META.imposto))}.`});
+  } else {
+    ins.push({tipo:'bom',icone:'check',titulo:'Operação no azul',
+      texto:`Lucro líquido de ${BRL(k.lucro)}, com margem de ${PCT(k.margem)}. Resultado saudável para o período.`});
+  }
+  // Meta de faturamento
+  const pf=k.faturamento/META.faturamento;
+  if(pf<0.7){
+    ins.push({tipo:'alerta',icone:'target',titulo:'Faturamento abaixo da meta',
+      texto:`Você atingiu ${PCT0(pf)} da meta de ${BRL(META.faturamento)}. Faltam ${BRL(META.faturamento-k.faturamento)} para o objetivo do mês.`});
+  } else if(pf>=1){
+    ins.push({tipo:'bom',icone:'target',titulo:'Meta de faturamento batida',
+      texto:`Faturamento ${PCT0(pf)} da meta. Excelente desempenho comercial.`});
+  }
+  // Melhor e pior canal
+  const canaisComLeads=k.porCanal.filter(c=>c.leads>0);
+  if(canaisComLeads.length){
+    const melhor=[...canaisComLeads].sort((a,b)=>b.conv-a.conv)[0];
+    const maisReceita=[...k.porCanal].sort((a,b)=>b.receita-a.receita)[0];
+    ins.push({tipo:'info',icone:'trophy',titulo:`Melhor canal: ${melhor.canal}`,
+      texto:`${melhor.canal} converteu ${PCT0(melhor.conv)} dos leads. Em receita, o destaque é ${maisReceita.canal} com ${BRL(maisReceita.receita)}.`});
+    // canal ineficiente: muito investimento, pouca conversão
+    const pago=k.porCanal.find(c=>c.canal==='Tráfego Pago');
+    if(pago && pago.conv<0.4 && k.investMkt>0){
+      ins.push({tipo:'alerta',icone:'cash',titulo:'Atenção ao Tráfego Pago',
+        texto:`O Tráfego Pago converteu apenas ${PCT0(pago.conv)} e concentra o investimento de marketing (${BRL(k.investMkt)}, CAC de ${BRL(k.cac)}). Vale revisar segmentação dos anúncios ou redirecionar verba para canais que convertem melhor, como indicação.`});
+    }
+  }
+  // No-shows
+  if(k.noShows>0){
+    const taxaNoShow=k.noShows/(k.nAtend+k.noShows);
+    ins.push({tipo: taxaNoShow>0.1?'alerta':'info',icone:'calendar',titulo:`${k.noShows} falta(s) na agenda`,
+      texto:`No-shows representam ${PCT0(taxaNoShow)} dos agendamentos. ${taxaNoShow>0.1?'Acima do ideal — ':''}Confirmação por WhatsApp 24h e 2h antes, e sinal para procedimentos caros, reduzem faltas.`});
+  }
+  // Procedimento campeão
+  if(k.porProc.length){
+    const top=[...k.porProc].sort((a,b)=>b.receita-a.receita)[0];
+    ins.push({tipo:'info',icone:'star',titulo:`Carro-chefe: ${top.proc}`,
+      texto:`${top.proc} respondeu por ${PCT0(top.share)} do faturamento (${BRL(top.receita)}, ${top.qtd} atendimento(s)). Considere pacotes e divulgação focada nesse procedimento.`});
+  }
+  // Maior despesa
+  if(k.porCat.length){
+    const maior=k.porCat[0];
+    ins.push({tipo:'info',icone:'wallet',titulo:`Maior despesa: ${maior.cat}`,
+      texto:`${maior.cat} é ${PCT0(maior.valor/k.custoTotal)} dos custos (${BRL(maior.valor)}). É o primeiro lugar para olhar se precisar enxugar gastos.`});
+  }
+  // Ocupação da agenda
+  if(k.txOcup<META.ocupacao){
+    ins.push({tipo:'info',icone:'clock',titulo:'Agenda com espaço ocioso',
+      texto:`Ocupação em ${PCT(k.txOcup)} contra meta de ${PCT0(META.ocupacao)}. Há horários livres que poderiam virar faturamento — ações de reativação de pacientes antigos ajudam a preencher.`});
+  }
+  // Conformidade
+  const pend=k.confTotal-k.confOK;
+  if(pend>0){
+    ins.push({tipo:'alerta',icone:'shield',titulo:`${pend} pendência(s) de conformidade`,
+      texto:`${k.confOK} de ${k.confTotal} itens regularizados. Pendências sanitárias/legais expõem a clínica a multa e interdição — priorize a regularização.`});
+  }
+  return ins;
+}
+
+/* Responde perguntas livres por correspondência de palavras-chave */
+function responder(pergunta){
+  const k=calc(); const q=pergunta.toLowerCase();
+  const has=(...t)=>t.some(x=>q.includes(x));
+  if(has('lucro','resultado','sobrou','ganh')){
+    return k.lucro>=0
+      ? `O lucro líquido do período é <b>${BRL(k.lucro)}</b>, com margem de <b>${PCT(k.margem)}</b>. Faturamento de ${BRL(k.faturamento)} menos ${BRL(k.imposto)} de impostos e ${BRL(k.custoTotal)} de despesas.`
+      : `No período há <b>prejuízo de ${BRL(Math.abs(k.lucro))}</b>. O faturamento (${BRL(k.faturamento)}) não cobriu impostos (${BRL(k.imposto)}) e despesas (${BRL(k.custoTotal)}). Para empatar, seria preciso faturar cerca de ${BRL(k.custoTotal/(1-META.imposto))}.`;
+  }
+  if(has('faturamento','faturou','receita','vendeu')){
+    return `O faturamento do período é <b>${BRL(k.faturamento)}</b>, que equivale a ${PCT0(k.faturamento/META.faturamento)} da meta de ${BRL(META.faturamento)}. Ticket médio de ${BRL(k.ticket)}.`;
+  }
+  if(has('melhor canal','canal melhor','canal converte','onde investir','melhor origem')){
+    const m=[...k.porCanal.filter(c=>c.leads>0)].sort((a,b)=>b.conv-a.conv)[0];
+    const r=[...k.porCanal].sort((a,b)=>b.receita-a.receita)[0];
+    return m?`O canal que <b>mais converte</b> é <b>${m.canal}</b> (${PCT0(m.conv)} dos leads). Em <b>receita</b>, o líder é ${r.canal} com ${BRL(r.receita)}. Vale concentrar esforço nesses canais.`:`Ainda não há leads suficientes para comparar canais.`;
+  }
+  if(has('pior canal','cortar','desperdíci','desperdici','gastando à toa','tráfego','trafego')){
+    const pago=k.porCanal.find(c=>c.canal==='Tráfego Pago');
+    return pago?`O <b>Tráfego Pago</b> converteu ${PCT0(pago.conv)} e tem CAC de ${BRL(k.cac)} (investimento total ${BRL(k.investMkt)}). ${pago.conv<0.4?'Está abaixo do ideal — avalie melhorar os anúncios ou migrar parte da verba para indicação, que costuma ter custo zero e alta conversão.':'Está com desempenho razoável.'}`:`Sem dados de canal pago no período.`;
+  }
+  if(has('ticket','valor médio','médio por')){
+    return `O ticket médio é <b>${BRL(k.ticket)}</b> (meta ${BRL(META.ticket)}). Para subir o ticket: pacotes combinados, protocolos de manutenção e oferta de procedimentos complementares na mesma sessão.`;
+  }
+  if(has('no-show','no show','falta','furo','faltou')){
+    return `Houve <b>${k.noShows} falta(s)</b> no período. Confirmação ativa por WhatsApp (24h e 2h antes) e cobrança de sinal em procedimentos caros são as medidas mais eficazes para reduzir.`;
+  }
+  if(has('conversão','converte','funil','fecha')){
+    return `A taxa de conversão de leads é <b>${PCT(k.txConv)}</b> (meta ${PCT0(META.conversao)}). De cada 10 pessoas que agendam, cerca de ${Math.round(k.txConv*10)} fecham.`;
+  }
+  if(has('custo','despesa','gasto','gastando')){
+    const m=k.porCat[0];
+    return `As despesas somam <b>${BRL(k.custoTotal)}</b>. A maior é <b>${m.cat}</b> (${BRL(m.valor)}, ${PCT0(m.valor/k.custoTotal)} do total). É o primeiro lugar para revisar se precisar reduzir gastos.`;
+  }
+  if(has('conformidade','regulariz','anvisa','pgrss','licença','licenca','vigilância','vigilancia')){
+    const pend=k.confTotal-k.confOK;
+    return pend?`Há <b>${pend} pendência(s)</b> de conformidade (${k.confOK}/${k.confTotal} em dia). Pendências sanitárias e legais devem ser prioridade, pois expõem a clínica a multa e interdição.`:`Conformidade <b>100% em dia</b> (${k.confOK}/${k.confTotal}). Mantenha o acompanhamento mensal.`;
+  }
+  if(has('procedimento','carro-chefe','carro chefe','mais vende','popular')){
+    const t=[...k.porProc].sort((a,b)=>b.receita-a.receita)[0];
+    return t?`O procedimento que mais fatura é <b>${t.proc}</b>: ${BRL(t.receita)} (${PCT0(t.share)} do total, ${t.qtd} atendimento(s)).`:`Sem procedimentos registrados no período.`;
+  }
+  if(has('ocupação','ocupacao','agenda','horário livre','horario livre','ociosa')){
+    return `A ocupação da agenda está em <b>${PCT(k.txOcup)}</b> (meta ${PCT0(META.ocupacao)}). ${k.txOcup<META.ocupacao?'Há espaço ocioso — reativar pacientes antigos ajuda a preencher.':'Boa ocupação.'}`;
+  }
+  if(has('cac','custo por lead','aquisição','aquisicao')){
+    return `O custo de aquisição por cliente (CAC) é <b>${BRL(k.cac)}</b>, com ${BRL(k.investMkt)} investidos em marketing no período.`;
+  }
+  if(has('resumo','como est','panorama','geral','vai a clínica','vai a clinica','situação','situacao')){
+    return `<b>Resumo do período:</b> faturamento ${BRL(k.faturamento)} (${PCT0(k.faturamento/META.faturamento)} da meta), ${k.nAtend} atendimentos, ticket médio ${BRL(k.ticket)}, conversão ${PCT(k.txConv)}. Resultado: <b>${k.lucro>=0?'lucro':'prejuízo'} de ${BRL(Math.abs(k.lucro))}</b>. ${k.confTotal-k.confOK>0?`Atenção: ${k.confTotal-k.confOK} pendência(s) de conformidade.`:'Conformidade em dia.'}`;
+  }
+  if(has('oi','olá','ola','bom dia','boa tarde','boa noite','ajuda','o que você')){
+    return `Olá! Sou o assistente do sistema. Posso responder sobre faturamento, lucro, canais, conversão, custos, agenda e conformidade — tudo com base nos dados lançados. Experimente: "Como está a clínica?" ou "Qual o melhor canal?"`;
+  }
+  return `Não tenho um cálculo específico para isso ainda. Posso ajudar com: <b>faturamento, lucro, melhor canal, ticket médio, no-shows, conversão, custos, conformidade, ocupação da agenda e CAC</b>. Reformule a pergunta usando um desses temas.`;
+}
+
+/* ============================ COMISSÕES ============================ */
+function renderComissoes(pg){
+  const k=calc();
+  // avalia todas as metas
+  const avaliadas = METAS.map(m=>({meta:m, av:avaliarMeta(m)}));
+  const totalBonus = avaliadas.reduce((s,x)=>s+x.av.bonus,0);
+  const pessoas = [...new Set(METAS.map(m=>funcNome(m.funcId)))];
+
+  // cards resumo
+  const atingidas = avaliadas.filter(x=>x.av.atingida).length;
+  pg.innerHTML=`
+    <div class="trend-grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="tcard" style="animation-delay:0ms">
+        <div class="tc-head"><span class="tc-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4"/></svg></span> Bonificação a pagar</div>
+        <div class="tc-val" style="color:var(--gold-d)">${BRL(totalBonus)}</div>
+        <div class="tc-sub">Soma dos bônus por meta atingida</div>
+      </div>
+      <div class="tcard" style="animation-delay:80ms">
+        <div class="tc-head"><span class="tc-ic"><svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span> Metas atingidas</div>
+        <div class="tc-val">${atingidas} / ${METAS.length}</div>
+        <div class="tc-sub">No período corrente</div>
+      </div>
+      <div class="tcard" style="animation-delay:160ms">
+        <div class="tc-head"><span class="tc-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg></span> Profissionais</div>
+        <div class="tc-val">${pessoas.length}</div>
+        <div class="tc-sub">${pessoas.join(', ')}</div>
+      </div>
+    </div>
+
+    <div class="toolbar" style="margin-bottom:18px">
+      <div><h3 style="font-family:'Cormorant Garamond',serif;font-size:21px">Metas & Bonificações</h3>
+      <div class="ph-sub">Bônus por faixa atingida — vale a faixa mais alta, sem somar</div></div>
+      <button class="btn" onclick="novaMeta()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Nova meta</button>
+    </div>
+
+    <div id="metasList">${avaliadas.map(x=>metaCard(x.meta,x.av)).join('')}</div>
+    <div id="metaEditor"></div>`;
+}
+
+function metaCard(m, av){
+  const T=TIPO_META[m.tipo];
+  const real=av.real;
+  // barra de progresso até a faixa máxima
+  const maxAlvo=Math.max(...m.faixas.map(f=>f.alvo));
+  const prog=Math.min(real/maxAlvo,1)*100;
+  // faixas com marcador de atingida
+  const faixasHTML=av.ordenadas.map(f=>{
+    const hit=real>=f.alvo;
+    const isCurrent=av.atingida&&f.nome===av.atingida.nome;
+    return `<div style="flex:1;text-align:center;padding:10px 6px;border-radius:10px;background:${isCurrent?'var(--green-bg)':hit?'var(--cream)':'var(--paper)'};border:1px solid ${isCurrent?'var(--green)':'var(--line)'}">
+      <div style="font-size:10.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--grey);font-weight:600">${f.nome}</div>
+      <div style="font-size:15px;font-weight:600;margin:3px 0;color:var(--ink)">${T.fmt(f.alvo)}</div>
+      <div style="font-size:12px;color:${isCurrent?'var(--green)':'var(--gold-d)'};font-weight:600">${bonusLabel(f.bonus)}</div>
+      ${hit?'<div style="font-size:10px;color:var(--green);margin-top:3px">✓ atingida</div>':'<div style="font-size:10px;color:var(--grey);margin-top:3px">—</div>'}
+    </div>`;
+  }).join('');
+  const faltaTxt = av.proxima
+    ? `Faltam <b>${T.fmt(av.proxima.alvo-real)}</b> para a faixa ${av.proxima.nome} (${bonusLabel(av.proxima.bonus)})`
+    : `<b style="color:var(--green)">Faixa máxima atingida!</b>`;
+  return `<div class="panel" style="margin-bottom:16px">
+    <div class="panel-head">
+      <div>
+        <h3 style="font-size:18px">${T.label} · ${m.periodo}</h3>
+        <div class="ph-sub">${funcNome(m.funcId)} · <span style="text-transform:uppercase;font-size:10px;letter-spacing:.5px;background:${m.escopo==='geral'?'var(--ivory2)':'var(--cream)'};padding:2px 8px;border-radius:10px;color:var(--gold-d)">${m.escopo==='geral'?'Meta geral':'Individual'}</span> · realizado: <b style="color:var(--ink)">${T.fmt(real)}</b></div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.6px">Bônus atual</div>
+        <div style="font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:600;color:${av.bonus>0?'var(--gold-d)':'var(--grey)'}">${BRL(av.bonus)}</div>
+        <button class="btn ghost" style="padding:4px 12px;font-size:12px;margin-top:4px" onclick="editarMeta('${m.id}')">Editar</button>
+      </div>
+    </div>
+    <div class="bar" style="margin-bottom:16px"><i class="${av.proxima?'':'hit'}" data-w="${prog}" style="width:${prog}%"></i></div>
+    <div style="display:flex;gap:10px">${faixasHTML}</div>
+    <div style="margin-top:14px;font-size:13px;color:var(--grey)">${faltaTxt}</div>
+  </div>`;
+}
+
+function editarMeta(id){
+  const m=METAS.find(x=>x.id==id); if(!m)return;
+  const box=document.getElementById('metaEditor');
+  box.innerHTML=metaForm(m);
+  box.scrollIntoView({behavior:'smooth',block:'center'});
+}
+function novaMeta(){
+  const box=document.getElementById('metaEditor');
+  box.innerHTML=metaForm(null);
+  box.scrollIntoView({behavior:'smooth',block:'center'});
+}
+function metaForm(m){
+  const isNew=!m;
+  m = m || {id:0,funcId:(FUNCIONARIOS[0]||{}).id,escopo:'individual',tipo:'faturamento',periodo:'mensal',
+    faixas:[{nome:'Mínima',alvo:0,bonus:{tipo:'fixo',valor:0}},
+            {nome:'Média',alvo:0,bonus:{tipo:'fixo',valor:0}},
+            {nome:'Máxima',alvo:0,bonus:{tipo:'fixo',valor:0}}]};
+  const opt=(v,sel)=>`<option ${v===sel?'selected':''}>${v}</option>`;
+  const funcOpts=FUNCIONARIOS.filter(f=>f.ativo).map(f=>`<option value="${f.id}" ${f.id==m.funcId?'selected':''}>${f.nome}</option>`).join('');
+  const faixaRows=m.faixas.map((f,i)=>`
+    <tr>
+      <td style="font-weight:600">${f.nome}</td>
+      <td><input type="number" id="fa_alvo_${i}" value="${f.alvo}" style="width:120px;padding:7px 9px;border:1px solid var(--line);border-radius:7px;font-family:inherit"></td>
+      <td>
+        <select id="fa_btipo_${i}" style="padding:7px 9px;border:1px solid var(--line);border-radius:7px;font-family:inherit">
+          <option value="fixo" ${f.bonus.tipo==='fixo'?'selected':''}>Valor fixo (R$)</option>
+          <option value="percent" ${f.bonus.tipo==='percent'?'selected':''}>% do atingido</option>
+        </select>
+      </td>
+      <td><input type="number" step="0.01" id="fa_bval_${i}" value="${f.bonus.valor}" style="width:110px;padding:7px 9px;border:1px solid var(--line);border-radius:7px;font-family:inherit"></td>
+    </tr>`).join('');
+  const fieldStyle='padding:8px 11px;border:1px solid var(--line);border-radius:8px;font-family:inherit';
+  return `<div class="panel" style="border:1px solid var(--gold-l)">
+    <div class="panel-head"><div><h3>${isNew?'Nova meta':'Editar meta'}</h3><div class="ph-sub">Vincule a um funcionário, escolha o escopo e defina as 3 faixas</div></div>
+      <button class="btn ghost" onclick="document.getElementById('metaEditor').innerHTML=''">Fechar</button></div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px">
+      <div class="field"><label>Funcionário</label><select id="m_func" style="${fieldStyle}">${funcOpts}</select></div>
+      <div class="field"><label>Escopo da meta</label><select id="m_escopo" style="${fieldStyle}">
+        <option value="individual" ${m.escopo==='individual'?'selected':''}>Individual (só este funcionário)</option>
+        <option value="geral" ${m.escopo==='geral'?'selected':''}>Geral (total da clínica)</option>
+      </select></div>
+      <div class="field"><label>Tipo de meta</label><select id="m_tipo" style="${fieldStyle}">${opt('faturamento',m.tipo)}${opt('leads',m.tipo)}${opt('agendamentos',m.tipo)}</select></div>
+      <div class="field"><label>Período</label><select id="m_periodo" style="${fieldStyle}">${opt('mensal',m.periodo)}${opt('semanal',m.periodo)}</select></div>
+    </div>
+    <table class="data">
+      <thead><tr><th>Faixa</th><th>Meta (alvo)</th><th>Tipo de bônus</th><th>Valor do bônus</th></tr></thead>
+      <tbody>${faixaRows}</tbody>
+    </table>
+    <div style="margin-top:8px;font-size:12px;color:var(--grey);font-style:italic">Escopo <b>individual</b>: mede só o que o funcionário realizou. <b>Geral</b>: mede o total da clínica. No faturamento, use R$; em leads/agendamentos, a quantidade.</div>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="btn" onclick="salvarMeta('${m.id}')">Salvar meta</button>
+      ${isNew?'':`<button class="btn ghost" onclick="excluirMeta('${m.id}')" style="color:var(--red);border-color:var(--red)">Excluir</button>`}
+    </div>
+  </div>`;
+}
+function lerFaixas(){
+  const nomes=['Mínima','Média','Máxima'];
+  return nomes.map((nome,i)=>({
+    nome,
+    alvo:+document.getElementById('fa_alvo_'+i).value||0,
+    bonus:{tipo:document.getElementById('fa_btipo_'+i).value,
+           valor:+document.getElementById('fa_bval_'+i).value||0}
+  }));
+}
+async function salvarMeta(id){
+  const funcVal=document.getElementById('m_func').value;
+  const dados={funcId: MODO_NUVEM?funcVal:+funcVal,
+    escopo:document.getElementById('m_escopo').value,
+    tipo:document.getElementById('m_tipo').value,
+    periodo:document.getElementById('m_periodo').value,
+    faixas:lerFaixas()};
+  if(MODO_NUVEM){
+    const reg={func_id:funcVal,escopo:dados.escopo,tipo:dados.tipo,periodo:dados.periodo,faixas:dados.faixas};
+    if(id && id!=='0') await sbUpdate('metas',id,reg); else await sbInsert('metas',reg);
+    await carregarTudo(); go('comissoes'); return;
+  }
+  if(id && id!=='0'){ const m=METAS.find(x=>x.id==id); Object.assign(m,dados); }
+  else { METAS.push({id:METAS_SEQ++,...dados}); }
+  go('comissoes');
+}
+async function excluirMeta(id){
+  if(MODO_NUVEM){await sbDelete('metas',id);await carregarTudo();go('comissoes');return;}
+  METAS=METAS.filter(m=>m.id!=id);
+  go('comissoes');
+}
+/* ============================ PACIENTES ============================ */
+function renderPacientes(pg){
+  const k=calc();
+  const body=k.pacientes.map(p=>`<tr onclick="fichaPaciente('${p.nome.replace(/'/g,"")}')" style="cursor:pointer">
+    <td style="font-weight:500">${p.nome}</td>
+    <td>${p.canal}</td>
+    <td class="ctr">${p.visitas}</td>
+    <td class="num">${BRL(p.valorTotal)}</td>
+    <td class="ctr">${p.recorrente?'<span class="pill ok">Recorrente</span>':'<span class="pill warn">Novo</span>'}</td>
+    <td class="ctr">${fmtDate(p.ultima)}</td>
+  </tr>`).join('');
+  pg.innerHTML=`
+    <div class="trend-grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="tcard" style="animation-delay:0ms"><div class="tc-head">Total de pacientes</div><div class="tc-val">${k.totalPacientes}</div><div class="tc-sub">na base</div></div>
+      <div class="tcard" style="animation-delay:70ms"><div class="tc-head">Recorrentes</div><div class="tc-val" style="color:var(--green)">${k.pacRecorrentes}</div><div class="tc-sub">${PCT0(k.txRecompra)} de recompra</div></div>
+      <div class="tcard" style="animation-delay:140ms"><div class="tc-head">Valor médio (LTV)</div><div class="tc-val">${BRL(k.ltv)}</div><div class="tc-sub">por paciente</div></div>
+      <div class="tcard" style="animation-delay:210ms"><div class="tc-head">Ticket médio</div><div class="tc-val">${BRL(k.ticket)}</div><div class="tc-sub">por atendimento</div></div>
+    </div>
+    <div class="panel">
+      <div class="toolbar"><div><h3>Base de pacientes</h3><div class="ph-sub">Clique em um paciente para ver a ficha · ${k.totalPacientes} cadastrados</div></div>
+        <button class="btn" onclick="go('atendimentos')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo atendimento</button>
+      </div>
+      <table class="data">
+        <thead><tr><th>Paciente</th><th>Origem</th><th class="ctr">Visitas</th><th class="num">Valor acumulado</th><th class="ctr">Status</th><th class="ctr">Última visita</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>
+    <div id="fichaBox"></div>`;
+}
+function fichaPaciente(nome){
+  const k=calc(); const p=k.pacientes.find(x=>x.nome===nome); if(!p)return;
+  const hist=DATA.atendimentos.filter(a=>a.paciente===nome);
+  const linhas=hist.map(a=>`<tr><td>${fmtDate(a.data)}</td><td>${a.proc}</td><td class="num">${BRL(a.valor)}</td><td class="ctr">${agPill(a.agenda)}</td></tr>`).join('');
+  const box=document.getElementById('fichaBox');
+  box.innerHTML=`<div class="panel" style="border:1px solid var(--gold-l)">
+    <div class="panel-head"><div><h3>Ficha · ${p.nome}</h3><div class="ph-sub">${p.canal} · ${p.visitas} visita(s) · ${BRL(p.valorTotal)} acumulado</div></div>
+      <button class="btn ghost" onclick="document.getElementById('fichaBox').innerHTML=''">Fechar</button></div>
+    <table class="data"><thead><tr><th>Data</th><th>Procedimento</th><th class="num">Valor</th><th class="ctr">Status</th></tr></thead><tbody>${linhas}</tbody></table>
+  </div>`;
+  box.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+/* ============================ DOCUMENTOS ============================ */
+function renderDocumentos(pg){
+  const k=calc();
+  const statusPill=s=> s==='Arquivado'||s==='Vigente'?`<span class="pill ok">${s}</span>`
+    : s==='A vencer'?`<span class="pill warn">${s}</span>`:`<span class="pill pend">${s}</span>`;
+  const body=DOCS.map((d,i)=>`<tr>
+    <td><div style="display:flex;align-items:center;gap:10px"><span style="width:30px;height:30px;border-radius:8px;background:var(--cream);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg viewBox="0 0 24 24" fill="none" stroke="var(--gold-d)" stroke-width="1.8" style="width:15px;height:15px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span><span style="font-weight:500">${d.nome}</span></div></td>
+    <td>${d.cat}</td><td class="ctr">${d.data?fmtDate(d.data):'—'}</td>
+    <td class="ctr">${d.validade?fmtDateFull(d.validade):'—'}</td>
+    <td class="ctr">${statusPill(d.status)}</td>
+    <td class="ctr"><button class="btn ghost" style="padding:5px 12px;font-size:12px" onclick="anexarDoc(${i})">Anexar</button></td>
+  </tr>`).join('');
+  const catChips=DOC_CATS.map(c=>{
+    const n=DOCS.filter(d=>d.cat===c).length;
+    return `<span style="display:inline-flex;gap:7px;align-items:center;background:var(--cream);border:1px solid var(--line);border-radius:20px;padding:6px 14px;font-size:12.5px"><b>${n}</b> ${c}</span>`;
+  }).join('');
+  pg.innerHTML=`
+    <div class="trend-grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="tcard" style="animation-delay:0ms"><div class="tc-head">Documentos arquivados</div><div class="tc-val" style="color:var(--green)">${k.docOk}</div><div class="tc-sub">de ${k.docTotal} no total</div></div>
+      <div class="tcard" style="animation-delay:70ms"><div class="tc-head">A vencer</div><div class="tc-val" style="color:var(--amber)">${k.docVencer}</div><div class="tc-sub">requerem renovação</div></div>
+      <div class="tcard" style="animation-delay:140ms"><div class="tc-head">Pendentes</div><div class="tc-val" style="color:var(--red)">${k.docPend}</div><div class="tc-sub">faltam providenciar</div></div>
+    </div>
+    <div class="panel">
+      <div class="toolbar"><div><h3>Arquivo de documentos</h3><div class="ph-sub">Contratos, TCLE, licenças, notas e registros</div></div>
+        <button class="btn" onclick="document.getElementById('upInfo').style.display='block'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Enviar documento</button>
+      </div>
+      <div id="upInfo" style="display:none;background:var(--cream);border:1px dashed var(--gold-l);border-radius:12px;padding:18px;margin-bottom:16px;font-size:13px;color:var(--grey)">
+        Neste protótipo os documentos são organizados por registro. Quando o sistema for conectado ao <b>Supabase Storage</b>, este botão abrirá o envio real de arquivos (PDF, imagem) com armazenamento seguro na nuvem. <button class="btn ghost" style="margin-left:8px;padding:4px 10px;font-size:12px" onclick="this.parentElement.style.display='none'">Ok</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">${catChips}</div>
+      <table class="data">
+        <thead><tr><th>Documento</th><th>Categoria</th><th class="ctr">Data</th><th class="ctr">Validade</th><th class="ctr">Status</th><th class="ctr">Arquivo</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>`;
+}
+function anexarDoc(i){
+  document.getElementById('upInfo').style.display='block';
+  document.getElementById('upInfo').scrollIntoView({behavior:'smooth',block:'center'});
+}
+
+/* ============================ ANÁLISE AVANÇADA ============================ */
+let GRAO_ANALISE='dia'; // 'dia' | 'semana' | 'mes'
+function setGrao(g){GRAO_ANALISE=g; go('analise');}
+
+// agrupa a série diária de atendimentos em dia / semana / mês
+function agruparSerie(grao){
+  const at=DATA.atendimentos.filter(a=>a.agenda==='Compareceu');
+  const buckets={};
+  at.forEach(a=>{
+    const d=new Date(a.data+'T00:00:00');
+    let chave, ordem;
+    if(grao==='dia'){
+      chave=a.data.slice(8)+'/'+a.data.slice(5,7); ordem=a.data;
+    } else if(grao==='semana'){
+      // semana do mês (1-5)
+      const sem=Math.ceil(d.getDate()/7);
+      chave='Sem '+sem+'/'+a.data.slice(5,7); ordem=a.data.slice(0,7)+'-S'+sem;
+    } else {
+      const meses=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+      chave=meses[d.getMonth()]+'/'+d.getFullYear(); ordem=a.data.slice(0,7);
+    }
+    if(!buckets[chave]) buckets[chave]={chave,ordem,valor:0,atend:0};
+    buckets[chave].valor+=a.valor; buckets[chave].atend+=1;
+  });
+  return Object.values(buckets).sort((x,y)=>x.ordem.localeCompare(y.ordem));
+}
+
+function renderAnalise(pg){
+  const k=calc();
+  const serie=agruparSerie(GRAO_ANALISE);
+  const graoBtn=(g,label)=>`<button class="${GRAO_ANALISE===g?'active':''}" data-itab="${g}" onclick="setGrao('${g}')">${label}</button>`;
+  pg.innerHTML=`
+    <div class="trend-grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="tcard" style="animation-delay:0ms"><div class="tc-head">Recompra</div><div class="tc-val" style="color:var(--green)">${PCT0(k.txRecompra)}</div><div class="tc-sub">pacientes que retornam</div></div>
+      <div class="tcard" style="animation-delay:70ms"><div class="tc-head">LTV médio</div><div class="tc-val">${BRL(k.ltv)}</div><div class="tc-sub">valor por paciente</div></div>
+      <div class="tcard" style="animation-delay:140ms"><div class="tc-head">CAC</div><div class="tc-val">${BRL(k.cac)}</div><div class="tc-sub">custo de aquisição</div></div>
+      <div class="tcard" style="animation-delay:210ms"><div class="tc-head">LTV / CAC</div><div class="tc-val" style="color:${k.cac&&k.ltv/k.cac>=3?'var(--green)':'var(--ink)'}">${k.cac?(k.ltv/k.cac).toFixed(1).replace('.',',')+'x':'—'}</div><div class="tc-sub">retorno sobre aquisição</div></div>
+    </div>
+    <div class="panel" style="margin-bottom:18px">
+      <div class="panel-head"><div><h3>Receita por período</h3><div class="ph-sub">Mesmos dados, três níveis de detalhe — escolha a lente</div></div></div>
+      <div class="itabs" style="margin-bottom:18px">${graoBtn('dia','Diário')}${graoBtn('semana','Semanal')}${graoBtn('mes','Mensal')}</div>
+      <div class="chart-wrap" style="height:280px"><canvas id="chSerie"></canvas></div>
+    </div>
+    <div class="row two">
+      <div class="panel"><h3>Evolução de faturamento e lucro</h3><div class="ph-sub">Últimos 4 meses</div>
+        <div class="chart-wrap" style="height:260px"><canvas id="chEvol"></canvas></div>
+      </div>
+      <div class="panel"><h3>Projeção</h3><div class="ph-sub">Tendência simples</div>
+        ${projecaoBlock(k)}
+      </div>
+    </div>
+    <div class="row two-eq">
+      <div class="panel"><h3>Receita por canal vs investimento</h3><div class="ph-sub">Onde o dinheiro rende mais</div>
+        <div class="chart-wrap"><canvas id="chRoi"></canvas></div>
+      </div>
+      <div class="panel"><h3>Concentração de receita</h3><div class="ph-sub">Procedimentos que sustentam o faturamento</div>
+        <div id="legA" class="legend"></div>
+        <div class="chart-wrap"><canvas id="chConc"></canvas></div>
+      </div>
+    </div>`;
+  drawAnaliseCharts(k, serie);
+}
+function projecaoBlock(k){
+  const ev=k.evolucao;
+  const ultimos=ev.slice(-3).map(e=>e.fat);
+  const media=ultimos.reduce((a,b)=>a+b,0)/ultimos.length;
+  const tend=(ev[ev.length-1].fat-ev[0].fat)/ev.length;
+  const proj=Math.max(0,Math.round((media+tend)/100)*100);
+  return `
+    <div class="dre-line"><span>Média 3 meses</span><span class="amt">${BRL(media)}</span></div>
+    <div class="dre-line"><span>Tendência mensal</span><span class="amt ${tend>=0?'pos':'neg'}">${tend>=0?'+':''}${BRL(tend)}</span></div>
+    <div class="dre-line total"><span>Projeção próximo mês</span><span class="amt pos">${BRL(proj)}</span></div>
+    <div style="margin-top:14px;font-size:12px;color:var(--grey);font-style:italic">Estimativa baseada na média móvel e tendência. Quanto mais meses lançados, mais precisa fica.</div>`;
+}
+function drawAnaliseCharts(k, serie){
+  if(typeof Chart==='undefined'){document.querySelectorAll('.chart-wrap').forEach(w=>w.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--grey);font-size:12px">Gráfico no navegador.</div>');return;}
+  const grid='#EEE8DC',tick='#8A8175';
+  // série por grão (dia/semana/mês)
+  if(serie){
+    charts.serie=new Chart(document.getElementById('chSerie'),{type:'bar',
+      data:{labels:serie.map(s=>s.chave),datasets:[
+        {type:'bar',label:'Receita',data:serie.map(s=>s.valor),backgroundColor:'#C9A24B',borderRadius:5,order:2,yAxisID:'y'},
+        {type:'line',label:'Atendimentos',data:serie.map(s=>s.atend),borderColor:'#9A7B2E',backgroundColor:'#9A7B2E',borderWidth:2,tension:.3,order:1,pointRadius:3,yAxisID:'y1'}
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:tick,font:{size:11}}},
+        tooltip:{callbacks:{label:c=>c.dataset.label==='Receita'?` Receita: ${BRL(c.parsed.y)}`:` ${c.parsed.y} atend.`}}},
+        scales:{y:{position:'left',grid:{color:grid},ticks:{color:tick,callback:v=>'R$'+(v/1000)+'k'}},
+          y1:{position:'right',grid:{display:false},ticks:{color:tick,stepSize:1}},
+          x:{grid:{display:false},ticks:{color:tick,font:{size:10}}}}}});
+  }
+  charts.evol=new Chart(document.getElementById('chEvol'),{type:'bar',
+    data:{labels:k.evolucao.map(e=>e.mes),datasets:[
+      {type:'bar',label:'Faturamento',data:k.evolucao.map(e=>e.fat),backgroundColor:'#C9A24B',borderRadius:5,order:2},
+      {type:'line',label:'Lucro',data:k.evolucao.map(e=>e.lucro),borderColor:'#2E7D4F',backgroundColor:'#2E7D4F',borderWidth:2,tension:.3,order:1,pointRadius:4}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:tick,font:{size:11}}},
+      tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${BRL(c.parsed.y)}`}}},
+      scales:{y:{grid:{color:grid},ticks:{color:tick,callback:v=>'R$'+(v/1000)+'k'}},x:{grid:{display:false},ticks:{color:tick}}}}});
+  charts.roi=new Chart(document.getElementById('chRoi'),{type:'bar',
+    data:{labels:k.porCanal.map(c=>c.canal),datasets:[
+      {label:'Receita',data:k.porCanal.map(c=>c.receita),backgroundColor:'#C9A24B',borderRadius:5},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+BRL(c.parsed.y)}}},
+      scales:{y:{grid:{color:grid},ticks:{color:tick,callback:v=>'R$'+(v/1000)+'k'}},x:{grid:{display:false},ticks:{color:tick,font:{size:10}}}}}});
+  const proc=k.porProc;
+  charts.conc=new Chart(document.getElementById('chConc'),{type:'doughnut',
+    data:{labels:proc.map(p=>p.proc),datasets:[{data:proc.map(p=>p.receita),backgroundColor:GOLDS,borderColor:'#fff',borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'58%',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.label}: ${BRL(c.parsed)}`}}}}});
+  document.getElementById('legA').innerHTML=proc.map((p,i)=>`<span><i style="background:${GOLDS[i%GOLDS.length]}"></i>${p.proc} ${PCT0(p.share)}</span>`).join('');
+}
+function fmtDateFull(s){if(!s)return '—';const[y,m,d]=s.split('-');return `${d}/${m}/${y}`;}
+
+/* ============================ FUNCIONÁRIOS ============================ */
+function renderFuncionarios(pg){
+  const ativos=FUNCIONARIOS.filter(f=>f.ativo);
+  const atendentes=FUNCIONARIOS.filter(f=>f.atende&&f.ativo).length;
+  const body=FUNCIONARIOS.map(f=>{
+    const metasDele=METAS.filter(m=>m.funcId==f.id);
+    const bonusDele=metasDele.reduce((s,m)=>s+avaliarMeta(m).bonus,0);
+    return `<tr>
+      <td><div style="font-weight:600">${f.nome}</div><div style="font-size:11px;color:var(--grey)">${f.contato||'—'}</div></td>
+      <td>${f.funcao}</td>
+      <td class="ctr"><span class="pill ${f.tipo==='Profissional'?'ok':f.tipo==='Parceiro'?'warn':'pend'}" style="${f.tipo==='Apoio'||f.tipo==='Administrativo'?'background:var(--ivory2);color:var(--gold-d)':''}">${f.tipo}</span></td>
+      <td class="ctr">${f.atende?'Sim':'Não'}</td>
+      <td class="ctr">${metasDele.length}</td>
+      <td class="num" style="font-weight:600;color:var(--gold-d)">${BRL(bonusDele)}</td>
+      <td class="ctr"><button class="btn ghost" style="padding:4px 12px;font-size:12px" onclick="editarFunc('${f.id}')">Editar</button></td>
+    </tr>`;
+  }).join('');
+  pg.innerHTML=`
+    <div class="trend-grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="tcard" style="animation-delay:0ms"><div class="tc-head">Funcionários ativos</div><div class="tc-val">${ativos.length}</div><div class="tc-sub">na equipe</div></div>
+      <div class="tcard" style="animation-delay:70ms"><div class="tc-head">Realizam procedimentos</div><div class="tc-val" style="color:var(--green)">${atendentes}</div><div class="tc-sub">entram em metas de produção</div></div>
+      <div class="tcard" style="animation-delay:140ms"><div class="tc-head">Bonificação total</div><div class="tc-val" style="color:var(--gold-d)">${BRL(METAS.reduce((s,m)=>s+avaliarMeta(m).bonus,0))}</div><div class="tc-sub">somando todas as metas</div></div>
+    </div>
+    <div class="panel">
+      <div class="toolbar"><div><h3>Equipe</h3><div class="ph-sub">Cadastro de profissionais, apoio e parceiros</div></div>
+        <button class="btn" onclick="novoFunc()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo funcionário</button>
+      </div>
+      <table class="data">
+        <thead><tr><th>Nome / Contato</th><th>Função</th><th class="ctr">Tipo</th><th class="ctr">Atende?</th><th class="ctr">Metas</th><th class="num">Bônus atual</th><th class="ctr">Ação</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>
+    <div id="funcEditor"></div>`;
+}
+function editarFunc(id){const f=FUNCIONARIOS.find(x=>x.id==id);const b=document.getElementById('funcEditor');b.innerHTML=funcForm(f);b.scrollIntoView({behavior:'smooth',block:'center'});}
+function novoFunc(){const b=document.getElementById('funcEditor');b.innerHTML=funcForm(null);b.scrollIntoView({behavior:'smooth',block:'center'});}
+function funcForm(f){
+  const isNew=!f;
+  f=f||{id:0,nome:'',funcao:'',tipo:'Profissional',atende:true,registro:'',contato:'',admissao:'',ativo:true};
+  const fs='padding:8px 11px;border:1px solid var(--line);border-radius:8px;font-family:inherit;min-width:170px';
+  const tipoOpts=FUNC_TIPOS.map(t=>`<option ${t===f.tipo?'selected':''}>${t}</option>`).join('');
+  return `<div class="panel" style="border:1px solid var(--gold-l)">
+    <div class="panel-head"><div><h3>${isNew?'Novo funcionário':'Editar funcionário'}</h3><div class="ph-sub">Dados do colaborador</div></div>
+      <button class="btn ghost" onclick="document.getElementById('funcEditor').innerHTML=''">Fechar</button></div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap">
+      <div class="field"><label>Nome completo</label><input id="f_nome" value="${f.nome}" style="${fs}"></div>
+      <div class="field"><label>Função / Cargo</label><input id="f_funcao" value="${f.funcao}" placeholder="Ex: Biomédica Esteta" style="${fs}"></div>
+      <div class="field"><label>Tipo</label><select id="f_tipo" style="${fs}">${tipoOpts}</select></div>
+      <div class="field"><label>Realiza procedimentos?</label><select id="f_atende" style="${fs}"><option value="sim" ${f.atende?'selected':''}>Sim</option><option value="nao" ${!f.atende?'selected':''}>Não</option></select></div>
+      <div class="field"><label>Registro (CRO/CRBM/etc)</label><input id="f_registro" value="${f.registro||''}" style="${fs}"></div>
+      <div class="field"><label>Contato</label><input id="f_contato" value="${f.contato||''}" style="${fs}"></div>
+      <div class="field"><label>Admissão</label><input id="f_admissao" type="date" value="${f.admissao||''}" style="${fs}"></div>
+      <div class="field"><label>Ativo?</label><select id="f_ativo" style="${fs}"><option value="sim" ${f.ativo?'selected':''}>Sim</option><option value="nao" ${!f.ativo?'selected':''}>Não</option></select></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button class="btn" onclick="salvarFunc('${f.id}')">Salvar</button>
+      ${isNew?'':`<button class="btn ghost" onclick="excluirFunc('${f.id}')" style="color:var(--red);border-color:var(--red)">Excluir</button>`}
+    </div>
+  </div>`;
+}
+async function salvarFunc(id){
+  const v=i=>document.getElementById(i).value;
+  const dados={nome:v('f_nome')||'Sem nome',funcao:v('f_funcao')||'—',tipo:v('f_tipo'),
+    atende:v('f_atende')==='sim',registro:v('f_registro'),contato:v('f_contato'),
+    admissao:v('f_admissao')||null,ativo:v('f_ativo')==='sim'};
+  if(MODO_NUVEM){
+    if(id && id!=='0') await sbUpdate('funcionarios',id,dados); else await sbInsert('funcionarios',dados);
+    await carregarTudo(); go('funcionarios'); return;
+  }
+  if(id && id!=='0'){const f=FUNCIONARIOS.find(x=>x.id==id);Object.assign(f,dados);}
+  else{FUNCIONARIOS.push({id:FUNC_SEQ++,...dados});}
+  go('funcionarios');
+}
+async function excluirFunc(id){
+  if(METAS.some(m=>m.funcId==id)){alert('Este funcionário tem metas vinculadas. Remova as metas antes de excluir.');return;}
+  if(MODO_NUVEM){await sbDelete('funcionarios',id);await carregarTudo();} else {FUNCIONARIOS=FUNCIONARIOS.filter(f=>f.id!=id);}
+  go('funcionarios');
+}
+
+/* ============================ LIVRO-CAIXA ============================ */
+function calcCaixa(){
+  // saldo por carteira + resultado da clínica
+  const saldos={};
+  CARTEIRAS.forEach(c=>saldos[c.id]=c.saldoInicial);
+  let receita=0, despesa=0, aporte=0, retirada=0, gastoMateriais=0;
+  const porCatDespesa={}, porCatReceita={};
+  CAIXA.forEach(m=>{
+    const t=TIPOS_LANC[m.tipo];
+    if(m.tipo==='transferencia'){
+      if(saldos[m.carteira]!=null) saldos[m.carteira]-=m.valor;
+      if(saldos[m.carteiraDest]!=null) saldos[m.carteiraDest]+=m.valor;
+    } else {
+      if(saldos[m.carteira]!=null) saldos[m.carteira]+=t.sinal*m.valor;
+    }
+    if(t.ehReceita){ receita+=m.valor; porCatReceita[m.categoria]=(porCatReceita[m.categoria]||0)+m.valor; }
+    if(t.ehDespesa){ despesa+=m.valor; porCatDespesa[m.categoria]=(porCatDespesa[m.categoria]||0)+m.valor; }
+    if(m.tipo==='aporte') aporte+=m.valor;
+    if(m.tipo==='retirada') retirada+=m.valor;
+    if(m.tipo==='despesa' && (m.categoria==='Produtos/Insumos')) gastoMateriais+=m.valor;
+  });
+  const saldoTotal=Object.values(saldos).reduce((s,v)=>s+v,0);
+  const resultado=receita-despesa; // resultado da clínica (não conta aporte/retirada)
+  const catDespesaArr=Object.entries(porCatDespesa).map(([cat,v])=>({cat,valor:v})).sort((a,b)=>b.valor-a.valor);
+  const catReceitaArr=Object.entries(porCatReceita).map(([cat,v])=>({cat,valor:v})).sort((a,b)=>b.valor-a.valor);
+  return {saldos,saldoTotal,receita,despesa,aporte,retirada,gastoMateriais,resultado,catDespesaArr,catReceitaArr};
+}
+
+function renderCaixa(pg){
+  const c=calcCaixa();
+  const mov=[...CAIXA].sort((a,b)=>a.data.localeCompare(b.data));
+  // saldo corrente acumulado (geral)
+  let acc=CARTEIRAS.reduce((s,w)=>s+w.saldoInicial,0);
+  const body=mov.map(m=>{
+    const t=TIPOS_LANC[m.tipo];
+    if(m.tipo==='transferencia'){/* neutro no total */}
+    else acc+=t.sinal*m.valor;
+    const valTxt = m.tipo==='transferencia'
+      ? `<span style="color:var(--grey)">${BRL(m.valor)} →</span>`
+      : `<span style="color:${t.cor};font-weight:600">${t.sinal>0?'+':'−'}${BRL(m.valor)}</span>`;
+    const cartTxt = m.tipo==='transferencia'
+      ? `${cartNome(m.carteira)} → ${cartNome(m.carteiraDest)}`
+      : cartNome(m.carteira);
+    return `<tr>
+      <td>${fmtDate(m.data)}</td>
+      <td class="ctr"><span class="pill" style="background:${tipoBg(m.tipo)};color:${t.cor}">${t.label}</span></td>
+      <td>${m.categoria}</td>
+      <td>${m.desc}</td>
+      <td style="font-size:12px;color:var(--grey)">${cartTxt}</td>
+      <td class="num">${valTxt}</td>
+      <td class="num" style="font-weight:600;color:${acc>=0?'var(--ink)':'var(--red)'}">${BRL(acc)}</td>
+      <td class="ctr"><button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="editarLanc('${m.id}')">editar</button> <button class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="excluirCaixa('${m.id}')">×</button></td>
+    </tr>`;
+  }).join('');
+
+  // cards de saldo por carteira
+  const cartCards=CARTEIRAS.map((w,i)=>`
+    <div class="tcard" style="animation-delay:${i*60}ms">
+      <div class="tc-head">${w.nome}</div>
+      <div class="tc-val" style="color:${c.saldos[w.id]>=0?'var(--gold)':'var(--red)'}">${BRL(c.saldos[w.id])}</div>
+      <div class="tc-sub">saldo atual · iniciou com ${BRL(w.saldoInicial)}</div>
+    </div>`).join('');
+
+  pg.innerHTML=`
+    <div class="trend-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+      ${cartCards}
+      <div class="tcard" style="animation-delay:200ms">
+        <div class="tc-head">Saldo total em caixa</div>
+        <div class="tc-val" style="color:${c.saldoTotal>=0?'var(--green)':'var(--red)'}">${BRL(c.saldoTotal)}</div>
+        <div class="tc-sub">soma de todas as carteiras</div>
+      </div>
+    </div>
+
+    <div class="row two" style="margin-bottom:18px">
+      <div class="panel">
+        <h3>Resultado da clínica</h3><div class="ph-sub">Desempenho do negócio (não inclui aportes/retiradas)</div>
+        <div class="dre-line"><span>Receita (procedimentos)</span><span class="amt pos">${BRL(c.receita)}</span></div>
+        <div class="dre-line"><span>(–) Despesas</span><span class="amt neg">−${BRL(c.despesa)}</span></div>
+        <div class="dre-line" style="padding-left:14px"><span style="color:var(--grey);font-size:13px">dos quais materiais/insumos</span><span class="amt" style="color:var(--grey)">${BRL(c.gastoMateriais)}</span></div>
+        <div class="dre-line total"><span>Resultado da clínica</span><span class="amt ${c.resultado>=0?'pos':'neg'}">${BRL(c.resultado)}</span></div>
+      </div>
+      <div class="panel">
+        <h3>Movimento de caixa</h3><div class="ph-sub">O que afetou o saldo da carteira</div>
+        <div class="dre-line"><span>Receitas recebidas</span><span class="amt pos">+${BRL(c.receita)}</span></div>
+        <div class="dre-line"><span>Aportes (não-receita)</span><span class="amt" style="color:var(--sage)">+${BRL(c.aporte)}</span></div>
+        <div class="dre-line"><span>(–) Despesas pagas</span><span class="amt neg">−${BRL(c.despesa)}</span></div>
+        <div class="dre-line"><span>(–) Retiradas</span><span class="amt" style="color:var(--amber)">−${BRL(c.retirada)}</span></div>
+        <div class="dre-line total"><span>Saldo total em caixa</span><span class="amt ${c.saldoTotal>=0?'pos':'neg'}">${BRL(c.saldoTotal)}</span></div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:18px">
+      <div class="toolbar"><div><h3>Carteiras & Categorias</h3><div class="ph-sub">Cadastre contas e categorias</div></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn ghost" style="padding:6px 14px;font-size:12px" onclick="abrirCarteiraForm()">+ Carteira</button>
+          <button class="btn ghost" style="padding:6px 14px;font-size:12px" onclick="abrirCatForm()">+ Categoria</button>
+        </div></div>
+      <div id="cartCatBox"></div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap">
+        <div style="flex:1;min-width:240px">
+          <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);font-weight:600;margin-bottom:10px">Carteiras</div>
+          ${CARTEIRAS.map(w=>`<div class="rank-row" style="cursor:default"><span class="rank-name">${w.nome}</span><span style="display:flex;gap:8px;align-items:center"><span class="rank-sub">início ${BRL(w.saldoInicial)}</span><button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="editarCarteira('${w.id}')">editar</button>${CARTEIRAS.length>1?`<button class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="delCarteira('${w.id}')">×</button>`:''}</span></div>`).join('')}
+        </div>
+        <div style="flex:1;min-width:240px">
+          <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);font-weight:600;margin-bottom:10px">Categorias de despesa</div>
+          <div style="display:flex;flex-wrap:wrap;gap:7px">${CAT_DESPESA.map(cat=>`<span style="display:inline-flex;align-items:center;gap:6px;background:var(--cream);border:1px solid var(--line);border-radius:18px;padding:5px 12px;font-size:12.5px">${cat}<span style="cursor:pointer;color:var(--grey)" onclick="delCat('despesa','${cat.replace(/'/g,"")}')">×</span></span>`).join('')}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row two-eq" style="margin-bottom:18px">
+      <div class="panel">
+        <h3>Despesas por categoria</h3><div class="ph-sub">Total gasto em cada categoria no período</div>
+        ${c.catDespesaArr.length?c.catDespesaArr.map(x=>{
+          const w=c.despesa?x.valor/c.despesa*100:0;
+          return `<div style="margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:5px"><span>${x.cat}</span><span><b>${BRL(x.valor)}</b> <span style="color:var(--grey);font-size:12px">${PCT0(x.valor/c.despesa)}</span></span></div>
+            <div class="bar"><i style="width:${w}%;background:var(--red)"></i></div></div>`;
+        }).join(''):'<div style="color:var(--grey);font-size:13px">Nenhuma despesa lançada.</div>'}
+      </div>
+      <div class="panel">
+        <h3>Receitas por categoria</h3><div class="ph-sub">Total recebido em cada categoria</div>
+        ${c.catReceitaArr.length?c.catReceitaArr.map(x=>{
+          const w=c.receita?x.valor/c.receita*100:0;
+          return `<div style="margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:5px"><span>${x.cat}</span><span><b>${BRL(x.valor)}</b> <span style="color:var(--grey);font-size:12px">${PCT0(x.valor/c.receita)}</span></span></div>
+            <div class="bar"><i style="width:${w}%;background:var(--green)"></i></div></div>`;
+        }).join(''):'<div style="color:var(--grey);font-size:13px">Nenhuma receita lançada.</div>'}
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="toolbar"><div><h3>Lançamentos</h3><div class="ph-sub">Receita, aporte, despesa, retirada e transferência</div></div>
+        <button class="btn" onclick="abrirLancForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo lançamento</button>
+      </div>
+      <div id="lancFormBox"></div>
+      <table class="data">
+        <thead><tr><th>Data</th><th class="ctr">Tipo</th><th>Categoria</th><th>Descrição</th><th>Carteira</th><th class="num">Valor</th><th class="num">Saldo</th><th class="ctr">Ações</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>`;
+}
+function tipoBg(t){return {receita:'var(--green-bg)',aporte:'var(--sage-bg)',despesa:'var(--red-bg)',retirada:'var(--amber-bg)',transferencia:'var(--grey-l)'}[t]||'var(--grey-l)';}
+
+function abrirLancForm(){ editarLanc(0); }
+function editarLanc(id){
+  const m = (id && id!=='0')? CAIXA.find(x=>x.id==id) : {id:0,data:'2026-06-14',tipo:'receita',categoria:'Procedimento',desc:'',valor:'',carteira:CARTEIRAS[0].id,carteiraDest:CARTEIRAS[1]?CARTEIRAS[1].id:CARTEIRAS[0].id};
+  const fs='padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;width:100%;background:var(--paper);color:var(--ink)';
+  const tipoOpts=Object.keys(TIPOS_LANC).map(t=>`<option value="${t}" ${t===m.tipo?'selected':''}>${TIPOS_LANC[t].label}</option>`).join('');
+  const cartOpts=CARTEIRAS.map(w=>`<option value="${w.id}" ${w.id===m.carteira?'selected':''}>${w.nome}</option>`).join('');
+  const cartDestOpts=CARTEIRAS.map(w=>`<option value="${w.id}" ${w.id===m.carteiraDest?'selected':''}>${w.nome}</option>`).join('');
+  document.getElementById('lancFormBox').innerHTML=`
+    <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px">
+        <div class="field"><label>Data</label><input type="date" id="lc_data" value="${m.data}" style="${fs}"></div>
+        <div class="field"><label>Tipo</label><select id="lc_tipo" onchange="lancTipoMudou()" style="${fs}">${tipoOpts}</select></div>
+        <div class="field" id="lc_catWrap"><label>Categoria</label><select id="lc_cat" style="${fs}"></select></div>
+        <div class="field"><label>Valor (R$)</label><input type="number" id="lc_valor" value="${m.valor}" style="${fs}"></div>
+        <div class="field"><label>Descrição</label><input id="lc_desc" value="${m.desc}" placeholder="Descrição" style="${fs}"></div>
+        <div class="field" id="lc_cartWrap"><label>Carteira</label><select id="lc_cart" style="${fs}">${cartOpts}</select></div>
+        <div class="field" id="lc_cartDestWrap" style="display:none"><label>Carteira destino</label><select id="lc_cartDest" style="${fs}">${cartDestOpts}</select></div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn" onclick="salvarLanc('${m.id}')">Salvar</button>
+        <button class="btn ghost" onclick="document.getElementById('lancFormBox').innerHTML=''">Cancelar</button>
+      </div>
+      <div id="lc_hint" style="margin-top:10px;font-size:12px;color:var(--grey);font-style:italic"></div>
+    </div>`;
+  lancTipoMudou();
+  if(m.categoria){const sel=document.getElementById('lc_cat');[...sel.options].forEach(o=>{if(o.value===m.categoria)o.selected=true;});}
+}
+function lancTipoMudou(){
+  const tipo=document.getElementById('lc_tipo').value;
+  const catSel=document.getElementById('lc_cat');
+  const catWrap=document.getElementById('lc_catWrap');
+  const destWrap=document.getElementById('lc_cartDestWrap');
+  const hint=document.getElementById('lc_hint');
+  let cats=[];
+  if(tipo==='receita') cats=CAT_RECEITA;
+  else if(tipo==='despesa') cats=CAT_DESPESA;
+  else if(tipo==='aporte') cats=['Reforço de caixa','Capital próprio','Empréstimo','Outros'];
+  else if(tipo==='retirada') cats=['Pró-labore','Distribuição de lucro','Outros'];
+  else cats=['Transferência'];
+  catSel.innerHTML=cats.map(c=>`<option>${c}</option>`).join('');
+  destWrap.style.display = tipo==='transferencia'?'block':'none';
+  catWrap.style.display = tipo==='transferencia'?'none':'block';
+  const hints={receita:'Entra na carteira E conta como faturamento.',aporte:'Entra na carteira, mas NÃO é receita (reforço de caixa).',despesa:'Sai da carteira e conta como gasto da clínica.',retirada:'Sai da carteira, mas NÃO é despesa (retirada de lucro/pró-labore).',transferencia:'Move saldo de uma carteira para outra — neutro no total.'};
+  hint.textContent=hints[tipo]||'';
+}
+async function salvarLanc(id){
+  const v=i=>document.getElementById(i).value;
+  const tipo=v('lc_tipo');
+  const dados={data:v('lc_data'),tipo,
+    categoria: tipo==='transferencia'?'Transferência':v('lc_cat'),
+    desc:v('lc_desc')||'—',valor:+v('lc_valor')||0,carteira:+v('lc_cart'),
+    carteiraDest: tipo==='transferencia'?+v('lc_cartDest'):null};
+  if(MODO_NUVEM){
+    const reg={data:dados.data,tipo:dados.tipo,categoria:dados.categoria,descricao:dados.desc,valor:dados.valor,carteira_id:document.getElementById('lc_cart').value,carteira_dest:tipo==='transferencia'?document.getElementById('lc_cartDest').value:null};
+    if(id && id!=='0') await sbUpdate('lancamentos',id,reg); else await sbInsert('lancamentos',reg);
+    await carregarTudo(); go('caixa'); return;
+  }
+  if(id && id!=='0'){const m=CAIXA.find(x=>x.id==id);Object.assign(m,dados);}
+  else{CAIXA.push({id:CAIXA_SEQ++,...dados});}
+  go('caixa');
+}
+async function excluirCaixa(id){ if(MODO_NUVEM){await sbDelete('lancamentos',id);await carregarTudo();} else {CAIXA=CAIXA.filter(m=>m.id!=id);} go('caixa');}
+
+function abrirCarteiraForm(){ editarCarteira(0); }
+function editarCarteira(id){
+  const w=id?CARTEIRAS.find(x=>x.id===id):{id:0,nome:'',saldoInicial:''};
+  const fs='padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink)';
+  document.getElementById('cartCatBox').innerHTML=`
+    <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:16px;margin-bottom:16px;display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+      <div class="field"><label>Nome da carteira</label><input id="cw_nome" value="${w.nome}" placeholder="Ex: Conta Banco" style="${fs};min-width:200px"></div>
+      <div class="field"><label>Saldo inicial (R$)</label><input type="number" id="cw_saldo" value="${w.saldoInicial}" style="${fs};min-width:140px"></div>
+      <button class="btn" onclick="salvarCarteira('${w.id}')">Salvar</button>
+      <button class="btn ghost" onclick="document.getElementById('cartCatBox').innerHTML=''">Cancelar</button>
+    </div>`;
+}
+async function salvarCarteira(id){
+  const nome=document.getElementById('cw_nome').value.trim()||'Carteira';
+  const saldo=+document.getElementById('cw_saldo').value||0;
+  if(MODO_NUVEM){
+    if(id && id!=='0') await sbUpdate('carteiras',id,{nome,saldo_inicial:saldo}); else await sbInsert('carteiras',{nome,saldo_inicial:saldo});
+    await carregarTudo(); go('caixa'); return;
+  }
+  if(id && id!=='0' && id!==0){const w=CARTEIRAS.find(x=>x.id==id);w.nome=nome;w.saldoInicial=saldo;}
+  else{CARTEIRAS.push({id:CART_SEQ++,nome,saldoInicial:saldo});}
+  go('caixa');
+}
+async function delCarteira(id){
+  if(CAIXA.some(m=>m.carteira==id||m.carteiraDest==id)){alert('Esta carteira tem lançamentos. Remova-os antes de excluir.');return;}
+  if(MODO_NUVEM){await sbDelete('carteiras',id);await carregarTudo();} else {CARTEIRAS=CARTEIRAS.filter(w=>w.id!=id);}
+  go('caixa');
+}
+function abrirCatForm(){
+  const fs='padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink)';
+  document.getElementById('cartCatBox').innerHTML=`
+    <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:16px;margin-bottom:16px;display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+      <div class="field"><label>Tipo</label><select id="ct_tipo" style="${fs}"><option value="despesa">Despesa</option><option value="receita">Receita</option></select></div>
+      <div class="field"><label>Nome da categoria</label><input id="ct_nome" placeholder="Ex: Limpeza" style="${fs};min-width:200px"></div>
+      <button class="btn" onclick="salvarCat()">Adicionar</button>
+      <button class="btn ghost" onclick="document.getElementById('cartCatBox').innerHTML=''">Cancelar</button>
+    </div>`;
+}
+async function salvarCat(){
+  const tipo=document.getElementById('ct_tipo').value;
+  const nome=document.getElementById('ct_nome').value.trim();
+  if(!nome)return;
+  if(MODO_NUVEM){ await sbInsert('categorias',{nome,tipo}); await carregarTudo(); go('caixa'); return; }
+  const arr=tipo==='receita'?CAT_RECEITA:CAT_DESPESA;
+  if(!arr.includes(nome))arr.splice(arr.length-1,0,nome);
+  go('caixa');
+}
+async function delCat(tipo,nome){
+  if(MODO_NUVEM){
+    const t=tipo==='receita'?'receita':'despesa';
+    await sb.from('categorias').delete().eq('nome',nome).eq('tipo',t);
+    await carregarTudo(); go('caixa'); return;
+  }
+  if(tipo==='despesa')CAT_DESPESA=CAT_DESPESA.filter(c=>c!==nome);
+  else CAT_RECEITA=CAT_RECEITA.filter(c=>c!==nome);
+  go('caixa');
+}
+
+/* ============================ RELATÓRIO PDF ============================ */
+function renderRelatorio(pg){
+  const chk=(id,label,desc)=>`
+    <label style="display:flex;gap:12px;align-items:flex-start;padding:14px;border:1px solid var(--line);border-radius:12px;cursor:pointer;background:var(--paper);transition:.15s" onmouseover="this.style.borderColor='var(--gold-l)'" onmouseout="this.style.borderColor='var(--line)'">
+      <input type="checkbox" id="rb_${id}" checked style="width:18px;height:18px;margin-top:1px;accent-color:var(--gold-d)">
+      <span><span style="font-weight:600;font-size:14px">${label}</span><br><span style="font-size:12px;color:var(--grey)">${desc}</span></span>
+    </label>`;
+  pg.innerHTML=`
+    <div class="panel">
+      <div class="panel-head"><div><h3>Gerador de Relatório</h3><div class="ph-sub">Escolha o que incluir e o período — o PDF é gerado sob medida</div></div></div>
+
+      <div style="margin-bottom:22px">
+        <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);font-weight:600;margin-bottom:12px">1 · Período do relatório</div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
+          <div class="field"><label>Agrupar por</label>
+            <select id="rb_grao" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;min-width:140px">
+              <option value="dia">Diário</option><option value="semana">Semanal</option>
+              <option value="mes" selected>Mensal</option><option value="ano">Anual</option>
+            </select>
+          </div>
+          <div class="field"><label>Referência</label>
+            <input id="rb_ref" value="Junho 2026" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;min-width:160px">
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);font-weight:600;margin-bottom:12px">2 · Blocos a incluir</div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
+          ${chk('resumo','Resumo executivo','Faturamento, lucro, ticket, atendimentos')}
+          ${chk('faturamento','Faturamento detalhado','Por procedimento e por canal')}
+          ${chk('leads','Leads e conversão','Funil, conversão e desempenho por canal')}
+          ${chk('atendimentos','Atendimentos','Lista de atendimentos do período')}
+          ${chk('comissoes','Metas e bonificações','Bônus por funcionário e faixa atingida')}
+          ${chk('caixa','Fluxo de caixa','Entradas, saídas e saldo')}
+          ${chk('pacientes','Pacientes','Base, recompra e LTV')}
+          ${chk('conformidade','Conformidade','Status sanitário e legal')}
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-top:24px">
+        <button class="btn" onclick="gerarPDF()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Gerar relatório PDF</button>
+        <span style="font-size:12px;color:var(--grey);align-self:center;font-style:italic">Abre a janela de impressão — escolha "Salvar como PDF".</span>
+      </div>
+    </div>`;
+}
+
+function gerarPDF(){
+  const k=calc();
+  const on=id=>{const e=document.getElementById('rb_'+id);return e&&e.checked;};
+  const grao=document.getElementById('rb_grao').value;
+  const ref=document.getElementById('rb_ref').value||'';
+  const hoje=new Date().toLocaleDateString('pt-BR');
+  const sec=(t,inner)=>`<h2>${t}</h2>${inner}`;
+  const tbl=(heads,rows)=>`<table><thead><tr>${heads.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>`;
+  let body='';
+
+  if(on('resumo')){
+    body+=sec('Resumo executivo', tbl(['Indicador','Valor'],[
+      ['Faturamento',BRL(k.faturamento)],['Lucro líquido',BRL(k.lucro)],['Margem',PCT(k.margem)],
+      ['Ticket médio',BRL(k.ticket)],['Atendimentos',k.nAtend],['Taxa de comparecimento',PCT(k.txComp)],
+      ['Conversão de leads',PCT(k.txConv)],['Custo total',BRL(k.custoTotal)]
+    ].map(r=>`<tr><td>${r[0]}</td><td class="n">${r[1]}</td></tr>`).join('')));
+  }
+  if(on('faturamento')){
+    body+=sec('Faturamento por procedimento', tbl(['Procedimento','Qtd','Receita','%'],
+      k.porProc.map(p=>`<tr><td>${p.proc}</td><td class="n">${p.qtd}</td><td class="n">${BRL(p.receita)}</td><td class="n">${PCT0(p.share)}</td></tr>`).join('')));
+    body+=sec('Faturamento por canal', tbl(['Canal','Receita'],
+      k.porCanal.map(c=>`<tr><td>${c.canal}</td><td class="n">${BRL(c.receita)}</td></tr>`).join('')));
+  }
+  if(on('leads')){
+    body+=sec('Leads e conversão', tbl(['Canal','Leads','Fechados','Conversão','Receita'],
+      k.porCanal.map(c=>`<tr><td>${c.canal}</td><td class="n">${c.leads}</td><td class="n">${c.fechados}</td><td class="n">${PCT0(c.conv)}</td><td class="n">${BRL(c.receita)}</td></tr>`).join('')));
+  }
+  if(on('atendimentos')){
+    body+=sec('Atendimentos do período', tbl(['Data','Paciente','Procedimento','Profissional','Valor','Status'],
+      DATA.atendimentos.map(a=>`<tr><td>${fmtDate(a.data)}</td><td>${a.paciente}</td><td>${a.proc}</td><td>${a.func||'—'}</td><td class="n">${BRL(a.valor)}</td><td>${a.agenda}</td></tr>`).join('')));
+  }
+  if(on('comissoes')){
+    const rows=METAS.map(m=>{const av=avaliarMeta(m);const T=TIPO_META[m.tipo];
+      return `<tr><td>${funcNome(m.funcId)}</td><td>${T.label} (${m.escopo})</td><td class="n">${T.fmt(av.real)}</td><td>${av.atingida?av.atingida.nome:'—'}</td><td class="n">${BRL(av.bonus)}</td></tr>`;}).join('');
+    body+=sec('Metas e bonificações', tbl(['Funcionário','Meta','Realizado','Faixa','Bônus'],rows));
+  }
+  if(on('caixa')){
+    const cc=calcCaixa();
+    const linhas=[
+      ['Receita (procedimentos)',BRL(cc.receita)],
+      ['Aportes (não-receita)',BRL(cc.aporte)],
+      ['Despesas',BRL(cc.despesa)],
+      ['Retiradas',BRL(cc.retirada)],
+      ['Resultado da clínica (receita − despesa)',BRL(cc.resultado)],
+      ['Saldo total em caixa',BRL(cc.saldoTotal)],
+    ].map(r=>`<tr><td>${r[0]}</td><td class="n">${r[1]}</td></tr>`).join('');
+    body+=sec('Fluxo de caixa', tbl(['Indicador','Valor'],linhas));
+    const cart=CARTEIRAS.map(w=>`<tr><td>${w.nome}</td><td class="n">${BRL(cc.saldos[w.id])}</td></tr>`).join('');
+    body+=sec('Saldo por carteira', tbl(['Carteira','Saldo atual'],cart));
+  }
+  if(on('pacientes')){
+    body+=sec('Pacientes', tbl(['Indicador','Valor'],[
+      ['Total de pacientes',k.totalPacientes],['Recorrentes',k.pacRecorrentes],
+      ['Taxa de recompra',PCT(k.txRecompra)],['LTV médio',BRL(k.ltv)]
+    ].map(r=>`<tr><td>${r[0]}</td><td class="n">${r[1]}</td></tr>`).join('')));
+  }
+  if(on('conformidade')){
+    body+=sec('Conformidade', tbl(['Item','Responsável','Status'],
+      DATA.conformidade.map(c=>`<tr><td>${c.item}</td><td>${c.resp}</td><td>${c.status}</td></tr>`).join('')));
+  }
+
+  const graoLabel={dia:'Diário',semana:'Semanal',mes:'Mensal',ano:'Anual'}[grao];
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Relatório · Instituto Bruna Braga</title>
+  <style>
+    @page{margin:18mm}
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:Georgia,'Times New Roman',serif;color:#211C16;font-size:12px;line-height:1.5}
+    .hd{border-bottom:3px solid #C9A24B;padding-bottom:14px;margin-bottom:22px}
+    .hd .brand{font-size:24px;font-weight:700;color:#9A7B2E;letter-spacing:.5px}
+    .hd .sub{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#8A8175;margin-top:4px}
+    .hd .meta{margin-top:10px;font-size:11px;color:#555}
+    h2{font-size:15px;color:#9A7B2E;border-bottom:1px solid #E8DEC8;padding-bottom:6px;margin:22px 0 10px}
+    table{width:100%;border-collapse:collapse;margin-bottom:6px;font-family:Arial,sans-serif;font-size:11px}
+    th{background:#211C16;color:#fff;text-align:left;padding:7px 9px;font-size:10px;text-transform:uppercase;letter-spacing:.5px}
+    td{padding:6px 9px;border-bottom:1px solid #eee}
+    td.n,th.n{text-align:right}
+    tr:nth-child(even) td{background:#FBF8F1}
+    .ft{margin-top:30px;padding-top:12px;border-top:1px solid #E8DEC8;font-size:10px;color:#999;text-align:center}
+  </style></head><body>
+    <div class="hd">
+      <div class="brand">Instituto Bruna Braga</div>
+      <div class="sub">Harmonização Facial · Relatório Gerencial</div>
+      <div class="meta">Período: <b>${ref}</b> · Agrupamento: ${graoLabel} · Emitido em ${hoje}</div>
+    </div>
+    ${body||'<p>Nenhum bloco selecionado.</p>'}
+    <div class="ft">Documento gerado pelo Sistema de Gestão · Instituto Bruna Braga</div>
+  </body></html>`;
+  const w=window.open('','_blank');
+  if(!w){alert('Permita pop-ups para gerar o relatório.');return;}
+  w.document.write(html); w.document.close();
+  setTimeout(()=>{w.focus();w.print();},400);
+}
+
+/* ============================ CONFIGURAÇÕES ============================ */
+const CONFIG_LISTAS = {
+  procedimentos:{label:'Procedimentos',desc:'Serviços oferecidos pela clínica',get:()=>PROCS,set:v=>{PROCS=v;}},
+  plataformas:{label:'Plataformas de captação',desc:'Origens usadas no relatório de marketing',get:()=>PLATAFORMAS,set:v=>{PLATAFORMAS=v;}},
+  func_tipos:{label:'Tipos de funcionário',desc:'Categorias da equipe',get:()=>FUNC_TIPOS,set:v=>{FUNC_TIPOS=v;}},
+  canais:{label:'Canais de origem',desc:'De onde o paciente veio',get:()=>CANAIS,set:v=>{CANAIS=v;}},
+};
+
+function renderConfig(pg){
+  const blocos=Object.entries(CONFIG_LISTAS).map(([chave,cfg])=>{
+    const itens=cfg.get();
+    const chips=itens.map(it=>`<span style="display:inline-flex;align-items:center;gap:7px;background:var(--cream);border:1px solid var(--line);border-radius:18px;padding:6px 14px;font-size:13px">${it}<span style="cursor:pointer;color:var(--grey);font-weight:600" onclick="delConfigItem('${chave}','${it.replace(/'/g,"\\'")}')">×</span></span>`).join('');
+    return `<div class="panel" style="margin-bottom:18px">
+      <div class="panel-head"><div><h3>${cfg.label}</h3><div class="ph-sub">${cfg.desc}</div></div></div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">${chips||'<span style="color:var(--grey);font-size:13px">Nenhum item ainda.</span>'}</div>
+      <div style="display:flex;gap:10px">
+        <input id="cfg_${chave}" placeholder="Adicionar novo..." style="flex:1;max-width:300px;padding:9px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink)" onkeydown="if(event.key==='Enter')addConfigItem('${chave}')">
+        <button class="btn" onclick="addConfigItem('${chave}')">Adicionar</button>
+      </div>
+    </div>`;
+  }).join('');
+  pg.innerHTML=`
+    <div class="panel" style="margin-bottom:18px">
+      <div class="panel-head"><div><h3>Configurações gerais</h3><div class="ph-sub">Crie e edite as listas do sistema — sem precisar mexer no código</div></div></div>
+      <div style="font-size:13px;color:var(--grey);line-height:1.6">Tudo que você adicionar aqui aparece automaticamente nos formulários do sistema (atendimentos, captação, funcionários, etc.). ${MODO_NUVEM?'As alterações são salvas na nuvem.':'<b style="color:var(--amber)">Modo local:</b> as alterações valem só nesta sessão até conectar o Supabase.'}</div>
+    </div>
+    ${blocos}`;
+}
+async function addConfigItem(chave){
+  const inp=document.getElementById('cfg_'+chave);
+  const val=inp.value.trim(); if(!val)return;
+  const cfg=CONFIG_LISTAS[chave]; const arr=cfg.get();
+  if(!arr.includes(val)){ arr.push(val); cfg.set(arr); await salvarConfig(chave); }
+  go('config');
+}
+async function delConfigItem(chave,item){
+  const cfg=CONFIG_LISTAS[chave]; let arr=cfg.get().filter(x=>x!==item);
+  cfg.set(arr); await salvarConfig(chave); go('config');
+}
+async function salvarConfig(chave){
+  if(!MODO_NUVEM)return;
+  const valores=CONFIG_LISTAS[chave].get();
+  const { data:{ user } } = await sb.auth.getUser();
+  const { error } = await sb.from('configuracoes').upsert({user_id:user.id,chave,valores},{onConflict:'user_id,chave'});
+  if(error)console.error('config save',error);
+}
+
+</script>
+</body>
+</html>
