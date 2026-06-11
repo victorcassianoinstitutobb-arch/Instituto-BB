@@ -757,19 +757,21 @@ async function carregarTudo(){
       sb.from('conformidade').select('*').order('criado_em'),
       sb.from('documentos').select('*').order('criado_em'),
     ]);
-    if (func.data && func.data.length) FUNCIONARIOS = func.data.map(f=>({id:f.id,nome:f.nome,funcao:f.funcao,tipo:f.tipo,atende:f.atende,registro:f.registro,contato:f.contato,admissao:f.admissao,ativo:f.ativo}));
-    if (cart.data && cart.data.length) CARTEIRAS = cart.data.map(c=>({id:c.id,nome:c.nome,saldoInicial:+c.saldo_inicial}));
-    if (cat.data && cat.data.length){
-      CAT_RECEITA = cat.data.filter(c=>c.tipo==='receita').map(c=>c.nome);
-      CAT_DESPESA = cat.data.filter(c=>c.tipo==='despesa').map(c=>c.nome);
-    }
-    if (lanc.data) CAIXA = lanc.data.map(l=>({id:l.id,data:l.data,tipo:l.tipo,categoria:l.categoria,desc:l.descricao,valor:+l.valor,carteira:l.carteira_id,carteiraDest:l.carteira_dest}));
-    if (atend.data) DATA.atendimentos = atend.data.map(a=>({id:a.id,data:a.data,paciente:a.paciente,proc:a.procedimento,func:a.funcionario,canal:a.canal,valor:+a.valor,custo:+a.custo,pag:a.pagamento,agenda:a.agenda}));
-    if (capt.data) CAPTACAO = capt.data.map(c=>({id:c.id,data:c.data,plataforma:c.plataforma,seguidores:c.seguidores,leads:c.leads,agendadas:c.agendadas,investido:+c.investido,gasto:+c.gasto,campanhas:c.campanhas}));
-    if (met.data) METAS = met.data.map(m=>({id:m.id,funcId:m.func_id,escopo:m.escopo,tipo:m.tipo,periodo:m.periodo,faixas:m.faixas}));
-    if (conf.data && conf.data.length) DATA.conformidade = conf.data.map(c=>({id:c.id,item:c.item,resp:c.responsavel,status:c.status}));
-    if (docs.data && docs.data.length) { while(DOCS.length)DOCS.pop(); docs.data.forEach(d=>DOCS.push({id:d.id,nome:d.nome,cat:d.categoria,data:d.data,validade:d.validade,status:d.status,ref:d.referencia})); }
-    // configurações (listas customizáveis)
+    // MODO NUVEM: o estado do app é exatamente o que está no banco (vazio = vazio).
+    // Os dados de exemplo NÃO são usados aqui — só existem no modo local de teste.
+    FUNCIONARIOS = (func.data||[]).map(f=>({id:f.id,nome:f.nome,funcao:f.funcao,tipo:f.tipo,atende:f.atende,registro:f.registro,contato:f.contato,admissao:f.admissao,ativo:f.ativo}));
+    CARTEIRAS = (cart.data||[]).map(c=>({id:c.id,nome:c.nome,saldoInicial:+c.saldo_inicial}));
+    CAT_RECEITA = (cat.data||[]).filter(c=>c.tipo==='receita').map(c=>c.nome);
+    CAT_DESPESA = (cat.data||[]).filter(c=>c.tipo==='despesa').map(c=>c.nome);
+    CAIXA = (lanc.data||[]).map(l=>({id:l.id,data:l.data,tipo:l.tipo,categoria:l.categoria,desc:l.descricao,valor:+l.valor,carteira:l.carteira_id,carteiraDest:l.carteira_dest}));
+    DATA.atendimentos = (atend.data||[]).map(a=>({id:a.id,data:a.data,paciente:a.paciente,proc:a.procedimento,func:a.funcionario,canal:a.canal,valor:+a.valor,custo:+a.custo,pag:a.pagamento,agenda:a.agenda}));
+    CAPTACAO = (capt.data||[]).map(c=>({id:c.id,data:c.data,plataforma:c.plataforma,seguidores:c.seguidores,leads:c.leads,agendadas:c.agendadas,investido:+c.investido,gasto:+c.gasto,campanhas:c.campanhas}));
+    METAS = (met.data||[]).map(m=>({id:m.id,funcId:m.func_id,escopo:m.escopo,tipo:m.tipo,periodo:m.periodo,faixas:m.faixas}));
+    DATA.conformidade = (conf.data||[]).map(c=>({id:c.id,item:c.item,resp:c.responsavel,status:c.status}));
+    while(DOCS.length)DOCS.pop(); (docs.data||[]).forEach(d=>DOCS.push({id:d.id,nome:d.nome,cat:d.categoria,data:d.data,validade:d.validade,status:d.status,ref:d.referencia}));
+    // zera o período anterior (não há histórico real ainda)
+    DATA.periodoAnterior = {faturamento:0,nAtend:0,leads:0,comandas:0};
+    // configurações (listas customizáveis) — só sobrescreve se houver no banco
     const cfg = await sb.from('configuracoes').select('*');
     if (cfg.data) cfg.data.forEach(row=>{
       if(CONFIG_LISTAS[row.chave] && Array.isArray(row.valores)) CONFIG_LISTAS[row.chave].set(row.valores);
