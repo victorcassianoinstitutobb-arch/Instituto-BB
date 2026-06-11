@@ -11,9 +11,9 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
-  --black:#0E0D0C; --ink:#ECE7DD; --gold:#D4AF5A; --gold-l:#E8D29A; --gold-d:#B8923F;
+  --black:#0E0D0C; --ink:#F7F4EE; --gold:#D4AF5A; --gold-l:#E8D29A; --gold-d:#B8923F;
   --ivory:#13110F; --ivory2:#1C1A16; --cream:#1A1714; --paper:#191614;
-  --grey:#9A9182; --grey-l:#2A2620; --line:#2E2A23;
+  --grey:#B5AD9E; --grey-l:#2A2620; --line:#2E2A23;
   --sage:#8FA08C; --sage-bg:#1B201A;
   --green:#6FB287; --green-bg:#16251C; --red:#D08A80; --red-bg:#2A1A17;
   --amber:#D6AB5E; --amber-bg:#2A2114;
@@ -768,6 +768,9 @@ async function carregarTudo(){
     CAPTACAO = (capt.data||[]).map(c=>({id:c.id,data:c.data,plataforma:c.plataforma,seguidores:c.seguidores,leads:c.leads,agendadas:c.agendadas,investido:+c.investido,gasto:+c.gasto,campanhas:c.campanhas}));
     METAS = (met.data||[]).map(m=>({id:m.id,funcId:m.func_id,escopo:m.escopo,tipo:m.tipo,periodo:m.periodo,faixas:m.faixas}));
     DATA.conformidade = (conf.data||[]).map(c=>({id:c.id,item:c.item,resp:c.responsavel,status:c.status}));
+    // leads e custos antigos (exemplo) não são usados na nuvem — zera para o painel refletir a realidade
+    DATA.leads = [];
+    DATA.custos = [];
     while(DOCS.length)DOCS.pop(); (docs.data||[]).forEach(d=>DOCS.push({id:d.id,nome:d.nome,cat:d.categoria,data:d.data,validade:d.validade,status:d.status,ref:d.referencia}));
     // zera o período anterior (não há histórico real ainda)
     DATA.periodoAnterior = {faturamento:0,nAtend:0,leads:0,comandas:0};
@@ -1212,22 +1215,27 @@ function analisarCaptacao(){
     </div>`;
 }
 function renderCustos(pg){
-  const k=calc(), rows=DATA.custos;
-  const total=rows.reduce((s,c)=>s+c.valor,0);
-  const body=k.porCat.map(c=>{
-    const share=c.valor/total;
-    return `<tr><td>${c.cat}</td><td class="num">${BRL(c.valor)}</td>
+  // fonte única: as despesas e receitas vêm do Livro-Caixa (dados reais)
+  const c = calcCaixa();
+  const total = c.despesa;
+  const faturamento = c.receita;
+  const resultado = c.resultado;
+  const margem = faturamento ? resultado/faturamento : 0;
+  const cats = c.catDespesaArr; // [{cat, valor}]
+  const body = cats.length ? cats.map(x=>{
+    const share = total ? x.valor/total : 0;
+    return `<tr><td>${x.cat}</td><td class="num">${BRL(x.valor)}</td>
       <td style="width:140px"><span class="minibar" style="width:${share*100}%"></span></td>
       <td class="num" style="color:var(--grey)">${PCT0(share)}</td></tr>`;
-  }).join('');
+  }).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--grey);padding:24px">Nenhuma despesa lançada. Registre no Livro-Caixa.</td></tr>';
   pg.innerHTML=`
     <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">
-      <div class="kpi" style="animation-delay:0ms"><div class="label">Custo total</div><div class="val">${BRL(total)}</div><div class="meta">no período</div></div>
-      <div class="kpi green" style="animation-delay:70ms"><div class="label">Faturamento</div><div class="val" style="color:var(--ink)">${BRL(k.faturamento)}</div><div class="meta">receita realizada</div></div>
-      <div class="kpi ${k.lucro>=0?'green':'green neg'}" style="animation-delay:140ms"><div class="label">Resultado</div><div class="val">${BRL(k.lucro)}</div><div class="meta">margem <span class="tag ${k.lucro>=0?'up':'down'}">${PCT(k.margem)}</span></div></div>
+      <div class="kpi" style="animation-delay:0ms"><div class="label">Custo total</div><div class="val">${BRL(total)}</div><div class="meta">despesas no período</div></div>
+      <div class="kpi green" style="animation-delay:70ms"><div class="label">Faturamento</div><div class="val" style="color:var(--ink)">${BRL(faturamento)}</div><div class="meta">receita realizada</div></div>
+      <div class="kpi ${resultado>=0?'green':'green neg'}" style="animation-delay:140ms"><div class="label">Resultado</div><div class="val">${BRL(resultado)}</div><div class="meta">margem <span class="tag ${resultado>=0?'up':'down'}">${PCT(margem)}</span></div></div>
     </div>
     <div class="row two-eq">
-      <div class="panel"><h3>Despesas por categoria</h3><div class="ph-sub">Distribuição do mês</div>
+      <div class="panel"><h3>Despesas por categoria</h3><div class="ph-sub">Vindas do Livro-Caixa</div>
         <table class="data"><thead><tr><th>Categoria</th><th class="num">Valor</th><th></th><th class="num">%</th></tr></thead><tbody>${body}</tbody></table>
       </div>
       <div class="panel"><h3>Composição</h3><div class="ph-sub">Visual</div>
@@ -1235,12 +1243,15 @@ function renderCustos(pg){
         <div class="chart-wrap"><canvas id="chCat" role="img" aria-label="Despesas por categoria"></canvas></div>
       </div>
     </div>`;
-  if(typeof Chart==='undefined'){document.getElementById('chCat').parentElement.innerHTML='<div style=\"display:flex;align-items:center;justify-content:center;height:100%;color:var(--grey);font-size:13px\">Gráfico disponível no navegador.</div>';}else{
-  charts.cat=new Chart(document.getElementById('chCat'),{type:'doughnut',
-    data:{labels:k.porCat.map(c=>c.cat),datasets:[{data:k.porCat.map(c=>c.valor),backgroundColor:GOLDS,borderColor:'#fff',borderWidth:2}]},
-    options:{responsive:true,maintainAspectRatio:false,cutout:'56%',plugins:{legend:{display:false},
-      tooltip:{callbacks:{label:c=>` ${c.label}: ${BRL(c.parsed)}`}}}}});
-  document.getElementById('leg2').innerHTML=k.porCat.map((c,i)=>`<span><i style="background:${GOLDS[i%GOLDS.length]}"></i>${c.cat}</span>`).join('');}
+  if(typeof Chart==='undefined' || !cats.length){
+    const el=document.getElementById('chCat'); if(el) el.parentElement.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--grey);font-size:13px">'+(cats.length?'Gráfico disponível no navegador.':'Sem despesas para exibir.')+'</div>';
+  } else {
+    charts.cat=new Chart(document.getElementById('chCat'),{type:'doughnut',
+      data:{labels:cats.map(x=>x.cat),datasets:[{data:cats.map(x=>x.valor),backgroundColor:GOLDS,borderColor:'#191614',borderWidth:2}]},
+      options:{responsive:true,maintainAspectRatio:false,cutout:'56%',plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:c=>` ${c.label}: ${BRL(c.parsed)}`}}}}});
+    document.getElementById('leg2').innerHTML=cats.map((x,i)=>`<span><i style="background:${GOLDS[i%GOLDS.length]}"></i>${x.cat}</span>`).join('');
+  }
 }
 
 /* ============================ CONFORMIDADE ============================ */
