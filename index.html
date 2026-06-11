@@ -1724,10 +1724,55 @@ function anexarDoc(i){
 }
 
 /* ============================ ANÁLISE AVANÇADA ============================ */
-let GRAO_ANALISE='dia'; // 'dia' | 'semana' | 'mes'
+let GRAO_ANALISE='mes'; // 'dia' | 'semana' | 'mes' | 'ano'
 function setGrao(g){GRAO_ANALISE=g; go('analise');}
 
-// agrupa a série diária de atendimentos em dia / semana / mês
+// retorna o intervalo de datas do período selecionado, baseado no dado mais recente
+function periodoAtual(grao){
+  const datas=DATA.atendimentos.map(a=>a.data).filter(Boolean).sort();
+  const ref = datas.length? datas[datas.length-1] : new Date().toISOString().slice(0,10);
+  const d=new Date(ref+'T00:00:00');
+  if(grao==='dia'){
+    return {ini:ref, fim:ref, label:fmtDateFull(ref)};
+  } else if(grao==='semana'){
+    const sem=Math.ceil(d.getDate()/7);
+    const ym=ref.slice(0,7);
+    const ini=ym+'-'+String((sem-1)*7+1).padStart(2,'0');
+    const fimDia=Math.min(sem*7, new Date(d.getFullYear(),d.getMonth()+1,0).getDate());
+    const fim=ym+'-'+String(fimDia).padStart(2,'0');
+    return {ini,fim,label:'Semana '+sem+' de '+mesAno(ref)};
+  } else if(grao==='ano'){
+    const y=ref.slice(0,4);
+    return {ini:y+'-01-01', fim:y+'-12-31', label:'Ano '+y};
+  } else { // mes
+    const ym=ref.slice(0,7);
+    const ult=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+    return {ini:ym+'-01', fim:ym+'-'+String(ult).padStart(2,'0'), label:mesAno(ref)};
+  }
+}
+function mesAno(s){const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];const[y,m]=s.split('-');return meses[+m-1]+' de '+y;}
+
+// calcula indicadores (LTV, CAC, recompra) sobre os atendimentos de um intervalo
+function calcIndicadores(ini,fim){
+  const noPeriodo = DATA.atendimentos.filter(a=>a.data>=ini && a.data<=fim);
+  const comp = noPeriodo.filter(a=>a.agenda==='Compareceu');
+  const nomes=[...new Set(comp.map(a=>a.paciente))];
+  const pacientes=nomes.map(nome=>{
+    const hist=comp.filter(a=>a.paciente===nome);
+    return {nome, visitas:hist.length, valorTotal:hist.reduce((s,a)=>s+a.valor,0), recorrente:hist.length>1};
+  });
+  const totalPac=pacientes.length;
+  const recorrentes=pacientes.filter(p=>p.recorrente).length;
+  const txRecompra= totalPac? recorrentes/totalPac : 0;
+  const ltv= totalPac? pacientes.reduce((s,p)=>s+p.valorTotal,0)/totalPac : 0;
+  // CAC: investimento em captação no período / clientes fechados (compareceram)
+  const captPeriodo = CAPTACAO.filter(c=>c.data>=ini && c.data<=fim);
+  const investido = captPeriodo.reduce((s,c)=>s+(c.gasto||c.investido||0),0);
+  const cac= totalPac? investido/totalPac : 0;
+  return {txRecompra, ltv, cac, totalPac, recorrentes, faturamento:comp.reduce((s,a)=>s+a.valor,0), nAtend:comp.length};
+}
+
+// agrupa a série diária de atendimentos em dia / semana / mês / ano
 function agruparSerie(grao){
   const at=DATA.atendimentos.filter(a=>a.agenda==='Compareceu');
   const buckets={};
@@ -1737,9 +1782,10 @@ function agruparSerie(grao){
     if(grao==='dia'){
       chave=a.data.slice(8)+'/'+a.data.slice(5,7); ordem=a.data;
     } else if(grao==='semana'){
-      // semana do mês (1-5)
       const sem=Math.ceil(d.getDate()/7);
       chave='Sem '+sem+'/'+a.data.slice(5,7); ordem=a.data.slice(0,7)+'-S'+sem;
+    } else if(grao==='ano'){
+      chave=''+d.getFullYear(); ordem=a.data.slice(0,4);
     } else {
       const meses=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
       chave=meses[d.getMonth()]+'/'+d.getFullYear(); ordem=a.data.slice(0,7);
@@ -1753,21 +1799,26 @@ function agruparSerie(grao){
 function renderAnalise(pg){
   const k=calc();
   const serie=agruparSerie(GRAO_ANALISE);
+  const per=periodoAtual(GRAO_ANALISE);
+  const ind=calcIndicadores(per.ini, per.fim);
   const graoBtn=(g,label)=>`<button class="${GRAO_ANALISE===g?'active':''}" data-itab="${g}" onclick="setGrao('${g}')">${label}</button>`;
   pg.innerHTML=`
+    <div class="panel" style="margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div><h3 style="font-size:18px">Período de análise</h3><div class="ph-sub">Indicadores e gráficos referentes a: <b style="color:var(--gold)">${per.label}</b></div></div>
+      <div class="itabs">${graoBtn('dia','Diário')}${graoBtn('semana','Semanal')}${graoBtn('mes','Mensal')}${graoBtn('ano','Anual')}</div>
+    </div>
     <div class="trend-grid" style="grid-template-columns:repeat(4,1fr)">
-      <div class="tcard" style="animation-delay:0ms"><div class="tc-head">Recompra</div><div class="tc-val" style="color:var(--green)">${PCT0(k.txRecompra)}</div><div class="tc-sub">pacientes que retornam</div></div>
-      <div class="tcard" style="animation-delay:70ms"><div class="tc-head">LTV médio</div><div class="tc-val">${BRL(k.ltv)}</div><div class="tc-sub">valor por paciente</div></div>
-      <div class="tcard" style="animation-delay:140ms"><div class="tc-head">CAC</div><div class="tc-val">${BRL(k.cac)}</div><div class="tc-sub">custo de aquisição</div></div>
-      <div class="tcard" style="animation-delay:210ms"><div class="tc-head">LTV / CAC</div><div class="tc-val" style="color:${k.cac&&k.ltv/k.cac>=3?'var(--green)':'var(--ink)'}">${k.cac?(k.ltv/k.cac).toFixed(1).replace('.',',')+'x':'—'}</div><div class="tc-sub">retorno sobre aquisição</div></div>
+      <div class="tcard" style="animation-delay:0ms"><div class="tc-head">Recompra</div><div class="tc-val" style="color:var(--green)">${PCT0(ind.txRecompra)}</div><div class="tc-sub">${ind.recorrentes} de ${ind.totalPac} pacientes</div></div>
+      <div class="tcard" style="animation-delay:70ms"><div class="tc-head">LTV médio</div><div class="tc-val">${BRL(ind.ltv)}</div><div class="tc-sub">valor por paciente</div></div>
+      <div class="tcard" style="animation-delay:140ms"><div class="tc-head">CAC</div><div class="tc-val">${BRL(ind.cac)}</div><div class="tc-sub">custo de aquisição</div></div>
+      <div class="tcard" style="animation-delay:210ms"><div class="tc-head">LTV / CAC</div><div class="tc-val" style="color:${ind.cac&&ind.ltv/ind.cac>=3?'var(--green)':'var(--ink)'}">${ind.cac?(ind.ltv/ind.cac).toFixed(1).replace('.',',')+'x':'—'}</div><div class="tc-sub">retorno sobre aquisição</div></div>
     </div>
     <div class="panel" style="margin-bottom:18px">
-      <div class="panel-head"><div><h3>Receita por período</h3><div class="ph-sub">Mesmos dados, três níveis de detalhe — escolha a lente</div></div></div>
-      <div class="itabs" style="margin-bottom:18px">${graoBtn('dia','Diário')}${graoBtn('semana','Semanal')}${graoBtn('mes','Mensal')}</div>
+      <div class="panel-head"><div><h3>Receita por período</h3><div class="ph-sub">Faturamento e atendimentos ao longo do tempo</div></div></div>
       <div class="chart-wrap" style="height:280px"><canvas id="chSerie"></canvas></div>
     </div>
     <div class="row two">
-      <div class="panel"><h3>Evolução de faturamento e lucro</h3><div class="ph-sub">Últimos 4 meses</div>
+      <div class="panel"><h3>Evolução de faturamento e lucro</h3><div class="ph-sub">Por mês</div>
         <div class="chart-wrap" style="height:260px"><canvas id="chEvol"></canvas></div>
       </div>
       <div class="panel"><h3>Projeção</h3><div class="ph-sub">Tendência simples</div>
