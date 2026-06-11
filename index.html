@@ -11,19 +11,31 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
-  --black:#0E0D0C; --ink:#F7F4EE; --gold:#D4AF5A; --gold-l:#E8D29A; --gold-d:#B8923F;
-  --ivory:#13110F; --ivory2:#1C1A16; --cream:#1A1714; --paper:#191614;
-  --grey:#B5AD9E; --grey-l:#2A2620; --line:#2E2A23;
-  --sage:#8FA08C; --sage-bg:#1B201A;
-  --green:#6FB287; --green-bg:#16251C; --red:#D08A80; --red-bg:#2A1A17;
-  --amber:#D6AB5E; --amber-bg:#2A2114;
-  --shadow:0 1px 3px rgba(0,0,0,.3), 0 8px 28px rgba(0,0,0,.35);
-  --shadow-sm:0 1px 2px rgba(0,0,0,.25);
+  /* DARK (padrão) — grafite quente, menos preto puro, mais suave à vista */
+  --black:#1E1B18; --ink:#F2EEE6; --gold:#D8B468; --gold-l:#EAD49A; --gold-d:#C09A4C;
+  --ivory:#1A1815; --ivory2:#252119; --cream:#221F1A; --paper:#252220;
+  --grey:#B0A899; --grey-l:#332E27; --line:#383229;
+  --sage:#93A48F; --sage-bg:#202519;
+  --green:#74B98C; --green-bg:#1B2A20; --red:#D9928A; --red-bg:#2E2019;
+  --amber:#DAB163; --amber-bg:#2E2517;
+  --shadow:0 1px 3px rgba(0,0,0,.25), 0 8px 28px rgba(0,0,0,.28);
+  --shadow-sm:0 1px 2px rgba(0,0,0,.2);
   --radius:18px; --radius-sm:12px;
+}
+body.light{
+  /* CLARO — off-white quente, dourado suave, sage; descansado e elegante */
+  --black:#2B2620; --ink:#33302A; --gold:#B8923F; --gold-l:#D9BE7E; --gold-d:#8F6E2C;
+  --ivory:#FBF9F5; --ivory2:#F1ECE3; --cream:#F6F2EA; --paper:#FFFFFF;
+  --grey:#8A8175; --grey-l:#EDE8DF; --line:#E7E0D4;
+  --sage:#6F8270; --sage-bg:#EDF1EC;
+  --green:#4E7C5C; --green-bg:#EAF1EC; --red:#B5685F; --red-bg:#F6EBE9;
+  --amber:#B0852F; --amber-bg:#F7EFDD;
+  --shadow:0 1px 3px rgba(58,53,46,.05), 0 6px 20px rgba(58,53,46,.07);
+  --shadow-sm:0 1px 2px rgba(58,53,46,.05);
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Inter',system-ui,sans-serif;background:var(--ivory);color:var(--ink);
-  -webkit-font-smoothing:antialiased;line-height:1.55}
+  -webkit-font-smoothing:antialiased;line-height:1.55;transition:background .25s,color .25s}
 .serif{font-family:'Cormorant Garamond',Georgia,serif}
 
 /* ---------- App shell ---------- */
@@ -42,7 +54,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--ivory);color:var(
   background:none;border:none;color:#CFC6B6;font-family:inherit;font-size:14px;
   border-radius:11px;cursor:pointer;transition:.18s;text-align:left}
 .nav button svg{width:18px;height:18px;stroke-width:1.7;flex-shrink:0}
-.nav button:hover{background:rgba(212,175,90,.12);color:var(--ink)}
+.nav button:hover{background:rgba(212,175,90,.14);color:#FFF8EC}
 .nav button.active{background:var(--gold);color:var(--black);font-weight:600}
 .nav .nav-label{font-size:10px;letter-spacing:1.8px;color:#6E6657;text-transform:uppercase;
   padding:14px 14px 6px}
@@ -207,7 +219,7 @@ table.data tbody tr:hover{background:var(--cream)}
 /* ---------- sidebar groups (collapsible) ---------- */
 .nav-group>.ng-head{display:flex;align-items:center;gap:13px;width:100%;padding:11px 14px;background:none;
   border:none;color:#CFC6B6;font-family:inherit;font-size:14px;border-radius:11px;cursor:pointer;text-align:left;transition:.18s}
-.nav-group>.ng-head:hover{background:rgba(212,175,90,.12);color:var(--ink)}
+.nav-group>.ng-head:hover{background:rgba(212,175,90,.14);color:#FFF8EC}
 .nav-group>.ng-head svg.ic{width:18px;height:18px;stroke-width:1.7;flex-shrink:0}
 .nav-group>.ng-head .chev{margin-left:auto;width:14px;height:14px;transition:.2s;stroke-width:2}
 .nav-group.open>.ng-head .chev{transform:rotate(90deg)}
@@ -215,7 +227,7 @@ table.data tbody tr:hover{background:var(--cream)}
 .nav-group.open .ng-items{max-height:300px}
 .ng-items button{display:block;width:100%;padding:9px 14px 9px 45px;background:none;border:none;
   color:#A89E8E;font-family:inherit;font-size:13px;border-radius:9px;cursor:pointer;text-align:left;transition:.14s}
-.ng-items button:hover{background:rgba(212,175,90,.10);color:var(--ink)}
+.ng-items button:hover{background:rgba(212,175,90,.12);color:#FFF8EC}
 .ng-items button.active{background:var(--gold);color:var(--black);font-weight:600}
 .new-btn{margin:6px 14px 10px;padding:10px;background:var(--gold);color:#0E0D0C;border:none;border-radius:11px;
   font-family:inherit;font-weight:600;font-size:13.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;transition:.16s}
@@ -305,6 +317,7 @@ table.data tbody tr:hover{background:var(--cream)}
           <option>Junho 2026</option><option>Maio 2026</option><option>Abril 2026</option>
           <option>Acumulado 2026</option>
         </select>
+        <button class="btn ghost" onclick="alternarTema()" id="temaBtn" title="Alternar tema claro/escuro"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:14px;height:14px;stroke-width:2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><span id="temaLabel">Claro</span></button>
         <button class="btn ghost" onclick="go(currentPage)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:14px;height:14px;stroke-width:2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Atualizar</button>
       </div>
     </div>
@@ -323,9 +336,9 @@ const BRL2 = n => n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const PCT = n => (n*100).toFixed(1).replace('.',',') + '%';
 const PCT0 = n => Math.round(n*100) + '%';
 
-const META = {
-  faturamento:60000, ticket:800, comparecimento:0.90, ocupacao:0.75,
-  conversao:0.30, imposto:0.06, horasMes:176, duracaoMedia:1.0,
+let META = {
+  faturamento:0, ticket:0, comparecimento:0, ocupacao:0,
+  conversao:0, imposto:0.06, horasMes:176, duracaoMedia:1.0,
   comissaoPercent:0.30, comissaoBase:'bruto', profissionalPadrao:'Dra. Bruna Braga'
 };
 
@@ -663,13 +676,19 @@ function calc(){
   const docVencer = DOCS.filter(d=>d.status==='A vencer').length;
   const docOk = DOCS.filter(d=>d.status==='Arquivado'||d.status==='Vigente').length;
 
-  // ---- evolução mensal (período atual + anteriores simulados) ----
-  const evolucao = [
-    {mes:'Mar', fat: 9800, lucro: -2100},
-    {mes:'Abr', fat: 10800, lucro: -1200},
-    {mes:'Mai', fat: 11900, lucro: 400},
-    {mes:'Jun', fat: faturamento, lucro: lucro},
-  ];
+  // ---- evolução mensal: calculada a partir dos atendimentos reais ----
+  const mesesNomes=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const porMes={};
+  compareceu.forEach(a=>{
+    const ym=a.data.slice(0,7); // AAAA-MM
+    if(!porMes[ym]) porMes[ym]={ym, fat:0, custo:0};
+    porMes[ym].fat += a.valor;
+    porMes[ym].custo += (a.custo||0);
+  });
+  const evolucao = Object.values(porMes).sort((a,b)=>a.ym.localeCompare(b.ym)).map(m=>{
+    const mm=parseInt(m.ym.slice(5,7),10)-1;
+    return {mes:mesesNomes[mm]||m.ym, fat:m.fat, lucro:m.fat-m.custo};
+  });
 
   const out = {faturamento,ticket,custoInsumo,custoTotal,imposto,lucro,margem,nAtend,txComp,noShows,
     txConv,investMkt,cac,txOcup,porCanal,porProc,porCat,confOK,confTotal:DATA.conformidade.length,
@@ -778,6 +797,10 @@ async function carregarTudo(){
     const cfg = await sb.from('configuracoes').select('*');
     if (cfg.data) cfg.data.forEach(row=>{
       if(CONFIG_LISTAS[row.chave] && Array.isArray(row.valores)) CONFIG_LISTAS[row.chave].set(row.valores);
+      if(row.chave==='metas_gerais' && row.valores && typeof row.valores==='object'){
+        META.faturamento=row.valores.faturamento||0; META.ticket=row.valores.ticket||0;
+        META.comparecimento=row.valores.comparecimento||0; META.conversao=row.valores.conversao||0; META.ocupacao=row.valores.ocupacao||0;
+      }
     });
     window.__lastCalc=null;
   } catch(e){ console.error('Erro ao carregar dados:', e); }
@@ -857,7 +880,7 @@ function renderPainel(pg){
       <div class="tcard" style="animation-delay:0ms">
         <div class="tc-head"><span class="tc-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4"/></svg></span> Faturamento total</div>
         <div class="tc-val">${BRL(k.faturamento)}</div>
-        <div class="tc-sub">Meta do mês: ${BRL(META.faturamento)}</div>
+        <div class="tc-sub">${META.faturamento>0?'Meta do mês: '+BRL(META.faturamento):'no período'}</div>
         <div class="tc-spark"><canvas id="spk1"></canvas></div>
         ${cmpTag(k.comp.faturamento)}
       </div>
@@ -947,7 +970,14 @@ function metasBlock(k){
     {n:'Conversão de leads',r:k.txConv,m:META.conversao,f:PCT},
     {n:'Ocupação',r:k.txOcup,m:META.ocupacao,f:PCT},
   ];
-  return metas.map(x=>{
+  const algumaMeta = metas.some(x=>x.m>0);
+  if(!algumaMeta){
+    return `<div style="color:var(--grey);font-size:13px;line-height:1.6;padding:6px 0">
+      Você ainda não definiu as metas gerais da clínica.<br>
+      Defina-as em <b>Controle → Configurações → Metas gerais da clínica</b> para acompanhar o realizado x objetivo aqui.
+    </div>`;
+  }
+  return metas.filter(x=>x.m>0).map(x=>{
     const p=x.m?x.r/x.m:0, w=Math.min(p,1.15)/1.15*100;
     const cls=p>=1?'hit':(p<0.7?'low':'');
     const col=p>=1?'var(--green)':p<0.7?'var(--red)':'var(--gold-d)';
@@ -1307,14 +1337,16 @@ function gerarInsights(){
     ins.push({tipo:'bom',icone:'check',titulo:'Operação no azul',
       texto:`Lucro líquido de ${BRL(k.lucro)}, com margem de ${PCT(k.margem)}. Resultado saudável para o período.`});
   }
-  // Meta de faturamento
-  const pf=k.faturamento/META.faturamento;
-  if(pf<0.7){
-    ins.push({tipo:'alerta',icone:'target',titulo:'Faturamento abaixo da meta',
-      texto:`Você atingiu ${PCT0(pf)} da meta de ${BRL(META.faturamento)}. Faltam ${BRL(META.faturamento-k.faturamento)} para o objetivo do mês.`});
-  } else if(pf>=1){
-    ins.push({tipo:'bom',icone:'target',titulo:'Meta de faturamento batida',
-      texto:`Faturamento ${PCT0(pf)} da meta. Excelente desempenho comercial.`});
+  // Meta de faturamento (só se houver meta definida)
+  if(META.faturamento>0){
+    const pf=k.faturamento/META.faturamento;
+    if(pf<0.7){
+      ins.push({tipo:'alerta',icone:'target',titulo:'Faturamento abaixo da meta',
+        texto:`Você atingiu ${PCT0(pf)} da meta de ${BRL(META.faturamento)}. Faltam ${BRL(META.faturamento-k.faturamento)} para o objetivo do mês.`});
+    } else if(pf>=1){
+      ins.push({tipo:'bom',icone:'target',titulo:'Meta de faturamento batida',
+        texto:`Faturamento ${PCT0(pf)} da meta. Excelente desempenho comercial.`});
+    }
   }
   // Melhor e pior canal
   const canaisComLeads=k.porCanal.filter(c=>c.leads>0);
@@ -1727,13 +1759,16 @@ function renderAnalise(pg){
   drawAnaliseCharts(k, serie);
 }
 function projecaoBlock(k){
-  const ev=k.evolucao;
+  const ev=k.evolucao||[];
+  if(!ev.length){
+    return `<div style="color:var(--grey);font-size:13px;padding:8px 0">Sem dados suficientes para projeção. Conforme você lança atendimentos ao longo dos meses, a tendência aparece aqui.</div>`;
+  }
   const ultimos=ev.slice(-3).map(e=>e.fat);
   const media=ultimos.reduce((a,b)=>a+b,0)/ultimos.length;
-  const tend=(ev[ev.length-1].fat-ev[0].fat)/ev.length;
+  const tend=ev.length>1?(ev[ev.length-1].fat-ev[0].fat)/ev.length:0;
   const proj=Math.max(0,Math.round((media+tend)/100)*100);
   return `
-    <div class="dre-line"><span>Média 3 meses</span><span class="amt">${BRL(media)}</span></div>
+    <div class="dre-line"><span>Média ${ultimos.length} ${ultimos.length>1?'meses':'mês'}</span><span class="amt">${BRL(media)}</span></div>
     <div class="dre-line"><span>Tendência mensal</span><span class="amt ${tend>=0?'pos':'neg'}">${tend>=0?'+':''}${BRL(tend)}</span></div>
     <div class="dre-line total"><span>Projeção próximo mês</span><span class="amt pos">${BRL(proj)}</span></div>
     <div style="margin-top:14px;font-size:12px;color:var(--grey);font-style:italic">Estimativa baseada na média móvel e tendência. Quanto mais meses lançados, mais precisa fica.</div>`;
@@ -2001,11 +2036,18 @@ function tipoBg(t){return {receita:'var(--green-bg)',aporte:'var(--sage-bg)',des
 
 function abrirLancForm(){ editarLanc(0); }
 function editarLanc(id){
-  const m = (id && id!=='0')? CAIXA.find(x=>x.id==id) : {id:0,data:'2026-06-14',tipo:'receita',categoria:'Procedimento',desc:'',valor:'',carteira:CARTEIRAS[0].id,carteiraDest:CARTEIRAS[1]?CARTEIRAS[1].id:CARTEIRAS[0].id};
+  if(!CARTEIRAS.length){
+    document.getElementById('lancFormBox').innerHTML=`<div style="background:var(--amber-bg);border:1px solid var(--amber);border-radius:14px;padding:18px;margin-bottom:18px;color:var(--ink)">
+      <b>Cadastre uma carteira primeiro.</b><br><span style="font-size:13px;color:var(--grey)">Todo lançamento precisa estar vinculado a uma carteira (conta). Use o botão <b>+ Carteira</b> acima para criar uma (ex: Conta Stone, Dinheiro), depois lance os valores.</span>
+      <div style="margin-top:12px"><button class="btn" onclick="abrirCarteiraForm()">+ Criar carteira agora</button></div>
+    </div>`;
+    return;
+  }
+  const m = (id && id!=='0')? CAIXA.find(x=>x.id==id) : {id:0,data:new Date().toISOString().slice(0,10),tipo:'receita',categoria:'Procedimento',desc:'',valor:'',carteira:CARTEIRAS[0].id,carteiraDest:CARTEIRAS[1]?CARTEIRAS[1].id:CARTEIRAS[0].id};
   const fs='padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;width:100%;background:var(--paper);color:var(--ink)';
   const tipoOpts=Object.keys(TIPOS_LANC).map(t=>`<option value="${t}" ${t===m.tipo?'selected':''}>${TIPOS_LANC[t].label}</option>`).join('');
-  const cartOpts=CARTEIRAS.map(w=>`<option value="${w.id}" ${w.id===m.carteira?'selected':''}>${w.nome}</option>`).join('');
-  const cartDestOpts=CARTEIRAS.map(w=>`<option value="${w.id}" ${w.id===m.carteiraDest?'selected':''}>${w.nome}</option>`).join('');
+  const cartOpts=CARTEIRAS.map(w=>`<option value="${w.id}" ${w.id==m.carteira?'selected':''}>${w.nome}</option>`).join('');
+  const cartDestOpts=CARTEIRAS.map(w=>`<option value="${w.id}" ${w.id==m.carteiraDest?'selected':''}>${w.nome}</option>`).join('');
   document.getElementById('lancFormBox').innerHTML=`
     <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px">
@@ -2281,12 +2323,39 @@ function renderConfig(pg){
       </div>
     </div>`;
   }).join('');
+  const fs='padding:9px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);width:130px';
+  const metasGerais=`<div class="panel" style="margin-bottom:18px">
+    <div class="panel-head"><div><h3>Metas gerais da clínica</h3><div class="ph-sub">Objetivos do mês mostrados no Painel (deixe 0 para não exibir)</div></div></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px">
+      <div class="field"><label>Faturamento (R$)</label><input type="number" id="mg_fat" value="${META.faturamento||''}" placeholder="ex: 60000" style="${fs}"></div>
+      <div class="field"><label>Ticket médio (R$)</label><input type="number" id="mg_ticket" value="${META.ticket||''}" placeholder="ex: 800" style="${fs}"></div>
+      <div class="field"><label>Comparecimento (%)</label><input type="number" id="mg_comp" value="${META.comparecimento?Math.round(META.comparecimento*100):''}" placeholder="ex: 90" style="${fs}"></div>
+      <div class="field"><label>Conversão de leads (%)</label><input type="number" id="mg_conv" value="${META.conversao?Math.round(META.conversao*100):''}" placeholder="ex: 30" style="${fs}"></div>
+      <div class="field"><label>Ocupação (%)</label><input type="number" id="mg_ocup" value="${META.ocupacao?Math.round(META.ocupacao*100):''}" placeholder="ex: 75" style="${fs}"></div>
+    </div>
+    <div style="margin-top:16px"><button class="btn" onclick="salvarMetasGerais()">Salvar metas gerais</button></div>
+  </div>`;
   pg.innerHTML=`
     <div class="panel" style="margin-bottom:18px">
       <div class="panel-head"><div><h3>Configurações gerais</h3><div class="ph-sub">Crie e edite as listas do sistema — sem precisar mexer no código</div></div></div>
       <div style="font-size:13px;color:var(--grey);line-height:1.6">Tudo que você adicionar aqui aparece automaticamente nos formulários do sistema (atendimentos, captação, funcionários, etc.). ${MODO_NUVEM?'As alterações são salvas na nuvem.':'<b style="color:var(--amber)">Modo local:</b> as alterações valem só nesta sessão até conectar o Supabase.'}</div>
     </div>
+    ${metasGerais}
     ${blocos}`;
+}
+async function salvarMetasGerais(){
+  const num=i=>{const v=document.getElementById(i).value;return v===''?0:+v;};
+  META.faturamento=num('mg_fat');
+  META.ticket=num('mg_ticket');
+  META.comparecimento=num('mg_comp')/100;
+  META.conversao=num('mg_conv')/100;
+  META.ocupacao=num('mg_ocup')/100;
+  if(MODO_NUVEM){
+    const { data:{ user } } = await sb.auth.getUser();
+    await sb.from('configuracoes').upsert({user_id:user.id,chave:'metas_gerais',valores:{faturamento:META.faturamento,ticket:META.ticket,comparecimento:META.comparecimento,conversao:META.conversao,ocupacao:META.ocupacao}},{onConflict:'user_id,chave'});
+  }
+  window.__lastCalc=null;
+  go('config');
 }
 async function addConfigItem(chave){
   const inp=document.getElementById('cfg_'+chave);
@@ -2306,6 +2375,28 @@ async function salvarConfig(chave){
   const { error } = await sb.from('configuracoes').upsert({user_id:user.id,chave,valores},{onConflict:'user_id,chave'});
   if(error)console.error('config save',error);
 }
+
+/* ============================ TEMA (claro/escuro) ============================ */
+function aplicarTema(t){
+  if(t==='light'){ document.body.classList.add('light'); }
+  else { document.body.classList.remove('light'); }
+  const lbl=document.getElementById('temaLabel');
+  if(lbl) lbl.textContent = t==='light' ? 'Escuro' : 'Claro';
+  // redesenha gráficos com as novas cores, se houver página com chart
+  try{ if(typeof currentPage!=='undefined' && ['painel','custos','analise'].includes(currentPage)) go(currentPage); }catch(e){}
+}
+function alternarTema(){
+  const atual = document.body.classList.contains('light') ? 'light' : 'dark';
+  const novo = atual==='light' ? 'dark' : 'light';
+  try{ localStorage.setItem('ibb_tema', novo); }catch(e){}
+  aplicarTema(novo);
+}
+// aplica o tema salvo ao carregar
+(function(){
+  let t='dark';
+  try{ t = localStorage.getItem('ibb_tema') || 'dark'; }catch(e){}
+  window.addEventListener('DOMContentLoaded',()=>aplicarTema(t));
+})();
 
 </script>
 </body>
