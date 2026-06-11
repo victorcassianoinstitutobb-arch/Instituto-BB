@@ -1074,46 +1074,71 @@ function renderAtend(pg){
     <td style="font-size:12.5px">${a.func||'—'}</td>
     <td>${a.canal}</td><td class="num">${BRL(a.valor)}</td>
     <td class="ctr">${pagPill(a.pag)}</td><td class="ctr">${agPill(a.agenda)}</td>
+    <td class="ctr"><button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="editarAtend('${a.id}')">editar</button> <button class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="excluirAtend('${a.id}')">×</button></td>
   </tr>`).join('');
-  const hoje=new Date().toISOString().slice(0,10);
-  const funcOpts=FUNCIONARIOS.filter(f=>f.atende&&f.ativo).map(f=>`<option>${f.nome}</option>`).join('');
   pg.innerHTML=`
     <div class="panel">
       <div class="toolbar">
         <div><h3>Atendimentos do período</h3><div class="ph-sub">${rows.length} registros · receita ${BRL(rows.filter(a=>a.agenda==='Compareceu').reduce((s,a)=>s+a.valor,0))}</div></div>
-        <button class="btn" onclick="toggleForm('formAt')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo atendimento</button>
+        <button class="btn" onclick="abrirAtendForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo atendimento</button>
       </div>
-      <div class="form-row" id="formAt">
-        <div class="field"><label>Data do atendimento</label><input id="naData" type="date" value="${hoje}"></div>
-        <div class="field"><label>Paciente</label><input id="naPac" placeholder="Nome"></div>
-        <div class="field"><label>Realizado por</label><select id="naFunc">${funcOpts}</select></div>
-        <div class="field"><label>Procedimento</label><select id="naProc">${PROCS.concat('Avaliação').map(p=>`<option>${p}</option>`).join('')}</select></div>
-        <div class="field"><label>Canal</label><select id="naCanal">${CANAIS.map(c=>`<option>${c}</option>`).join('')}</select></div>
-        <div class="field"><label>Valor (R$)</label><input id="naValor" type="number" value="1200" style="min-width:100px"></div>
-        <div class="field"><label>Status</label><select id="naAg"><option>Compareceu</option><option>Agendado</option><option>No-show</option><option>Reagendado</option></select></div>
-        <button class="btn" onclick="addAtend()">Salvar</button>
-        <button class="btn ghost" onclick="toggleForm('formAt')">Cancelar</button>
-      </div>
+      <div id="atendFormBox"></div>
       <div style="font-size:12px;color:var(--grey);font-style:italic;margin-bottom:14px">
         Dica: registre cada atendimento com a <b>data real</b> em que aconteceu, mesmo que você lance vários de uma vez no fim da semana. Assim os relatórios diário, semanal e mensal ficam todos corretos.
       </div>
       <table class="data">
-        <thead><tr><th>Data</th><th>Paciente</th><th>Procedimento</th><th>Realizado por</th><th>Canal</th><th class="num">Valor</th><th class="ctr">Pagamento</th><th class="ctr">Agenda</th></tr></thead>
-        <tbody>${body}</tbody>
+        <thead><tr><th>Data</th><th>Paciente</th><th>Procedimento</th><th>Realizado por</th><th>Canal</th><th class="num">Valor</th><th class="ctr">Pagamento</th><th class="ctr">Agenda</th><th class="ctr">Ações</th></tr></thead>
+        <tbody>${body||'<tr><td colspan="9" style="text-align:center;color:var(--grey);padding:24px">Nenhum atendimento ainda.</td></tr>'}</tbody>
       </table>
     </div>`;
 }
-async function addAtend(){
-  const v=id=>document.getElementById(id).value;
+function abrirAtendForm(){ editarAtend(0); }
+function editarAtend(id){
+  const a = (id && id!=='0')? DATA.atendimentos.find(x=>x.id==id) : {id:0,data:new Date().toISOString().slice(0,10),paciente:'',func:'',proc:'',canal:'',valor:'',pag:'Pago',agenda:'Compareceu'};
+  const fs='padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink)';
+  const funcOpts=FUNCIONARIOS.filter(f=>f.atende&&f.ativo).map(f=>`<option ${f.nome===a.func?'selected':''}>${f.nome}</option>`).join('');
+  const procOpts=PROCS.concat('Avaliação').map(p=>`<option ${p===a.proc?'selected':''}>${p}</option>`).join('');
+  const canalOpts=CANAIS.map(c=>`<option ${c===a.canal?'selected':''}>${c}</option>`).join('');
+  const agOpts=['Compareceu','Agendado','No-show','Reagendado'].map(s=>`<option ${s===a.agenda?'selected':''}>${s}</option>`).join('');
+  const pagOpts=['Pago','Parcial','Pendente'].map(s=>`<option ${s===a.pag?'selected':''}>${s}</option>`).join('');
+  document.getElementById('atendFormBox').innerHTML=`
+    <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px">
+        <div class="field"><label>Data do atendimento</label><input id="naData" type="date" value="${a.data}" style="${fs};width:100%"></div>
+        <div class="field"><label>Paciente</label><input id="naPac" value="${a.paciente}" placeholder="Nome" style="${fs};width:100%"></div>
+        <div class="field"><label>Realizado por</label><select id="naFunc" style="${fs};width:100%"><option value="">—</option>${funcOpts}</select></div>
+        <div class="field"><label>Procedimento</label><select id="naProc" style="${fs};width:100%">${procOpts}</select></div>
+        <div class="field"><label>Canal</label><select id="naCanal" style="${fs};width:100%">${canalOpts}</select></div>
+        <div class="field"><label>Valor (R$)</label><input id="naValor" type="number" value="${a.valor}" style="${fs};width:100%"></div>
+        <div class="field"><label>Pagamento</label><select id="naPag" style="${fs};width:100%">${pagOpts}</select></div>
+        <div class="field"><label>Status</label><select id="naAg" style="${fs};width:100%">${agOpts}</select></div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn" onclick="salvarAtend('${a.id}')">Salvar</button>
+        <button class="btn ghost" onclick="document.getElementById('atendFormBox').innerHTML=''">Cancelar</button>
+      </div>
+    </div>`;
+  document.getElementById('atendFormBox').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+async function salvarAtend(id){
+  const v=i=>document.getElementById(i).value;
+  const valor=+v('naValor')||0;
   const reg={data:v('naData')||new Date().toISOString().slice(0,10),
-    paciente:v('naPac')||'Novo paciente',func:v('naFunc')||META.profissionalPadrao,
-    proc:v('naProc'),canal:v('naCanal'),valor:+v('naValor')||0,custo:Math.round((+v('naValor')||0)*0.3),
-    pag:'Pago',agenda:v('naAg')};
+    paciente:v('naPac')||'Sem nome',func:v('naFunc')||'',
+    proc:v('naProc'),canal:v('naCanal'),valor,custo:Math.round(valor*0.3),
+    pag:v('naPag')||'Pago',agenda:v('naAg')};
   if(MODO_NUVEM){
-    await sbInsert('atendimentos',{data:reg.data,paciente:reg.paciente,procedimento:reg.proc,funcionario:reg.func,canal:reg.canal,valor:reg.valor,custo:reg.custo,pagamento:reg.pag,agenda:reg.agenda});
+    const reg2={data:reg.data,paciente:reg.paciente,procedimento:reg.proc,funcionario:reg.func,canal:reg.canal,valor:reg.valor,custo:reg.custo,pagamento:reg.pag,agenda:reg.agenda};
+    if(id && id!=='0') await sbUpdate('atendimentos',id,reg2); else await sbInsert('atendimentos',reg2);
     await carregarTudo(); go('atendimentos'); return;
   }
-  DATA.atendimentos.unshift(reg);
+  if(id && id!=='0'){ const a=DATA.atendimentos.find(x=>x.id==id); Object.assign(a,reg); }
+  else { DATA.atendimentos.unshift({id:Date.now(),...reg}); }
+  go('atendimentos');
+}
+async function excluirAtend(id){
+  if(MODO_NUVEM){ await sbDelete('atendimentos',id); await carregarTudo(); }
+  else { DATA.atendimentos=DATA.atendimentos.filter(a=>a.id!=id); }
   go('atendimentos');
 }
 
@@ -1645,12 +1670,14 @@ function renderPacientes(pg){
 function fichaPaciente(nome){
   const k=calc(); const p=k.pacientes.find(x=>x.nome===nome); if(!p)return;
   const hist=DATA.atendimentos.filter(a=>a.paciente===nome);
-  const linhas=hist.map(a=>`<tr><td>${fmtDate(a.data)}</td><td>${a.proc}</td><td class="num">${BRL(a.valor)}</td><td class="ctr">${agPill(a.agenda)}</td></tr>`).join('');
+  const linhas=hist.map(a=>`<tr><td>${fmtDate(a.data)}</td><td>${a.proc}</td><td class="num">${BRL(a.valor)}</td><td class="ctr">${agPill(a.agenda)}</td>
+    <td class="ctr"><button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="go('atendimentos');setTimeout(()=>editarAtend('${a.id}'),200)">editar</button></td></tr>`).join('');
   const box=document.getElementById('fichaBox');
   box.innerHTML=`<div class="panel" style="border:1px solid var(--gold-l)">
     <div class="panel-head"><div><h3>Ficha · ${p.nome}</h3><div class="ph-sub">${p.canal} · ${p.visitas} visita(s) · ${BRL(p.valorTotal)} acumulado</div></div>
       <button class="btn ghost" onclick="document.getElementById('fichaBox').innerHTML=''">Fechar</button></div>
-    <table class="data"><thead><tr><th>Data</th><th>Procedimento</th><th class="num">Valor</th><th class="ctr">Status</th></tr></thead><tbody>${linhas}</tbody></table>
+    <div style="font-size:12px;color:var(--grey);margin-bottom:12px">Para editar os dados do paciente (nome, procedimento, valor), edite o atendimento correspondente.</div>
+    <table class="data"><thead><tr><th>Data</th><th>Procedimento</th><th class="num">Valor</th><th class="ctr">Status</th><th class="ctr">Ação</th></tr></thead><tbody>${linhas}</tbody></table>
   </div>`;
   box.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
