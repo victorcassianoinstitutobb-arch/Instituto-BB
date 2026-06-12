@@ -296,6 +296,8 @@ table.data tbody tr:hover{background:var(--cream)}
         <div class="ng-items">
           <button data-page="custos">Custos & Despesas</button>
           <button data-page="caixa">Livro-Caixa</button>
+          <button data-page="contas">Contas a Pagar/Receber</button>
+          <button data-page="horaclinica">Custo Operacional</button>
           <button data-page="comissoes">Metas & Bonificações</button>
         </div>
       </div>
@@ -305,6 +307,7 @@ table.data tbody tr:hover{background:var(--cream)}
           <button data-page="funcionarios">Funcionários</button>
           <button data-page="pacientes">Pacientes</button>
           <button data-page="atendimentos">Atendimentos</button>
+          <button data-page="estoque">Estoque</button>
         </div>
       </div>
       <div class="nav-group" data-group="marketing">
@@ -482,25 +485,60 @@ const cartNome = id => (CARTEIRAS.find(c=>c.id===id)||{}).nome || '—';
 
 
 // valor realizado de uma meta, respeitando escopo (geral x individual) e funcionário
+let META_MES = null; // AAAA-MM de referência das metas
+function metaMesRef(){
+  if(META_MES) return META_MES;
+  const datas=DATA.atendimentos.map(a=>a.data).filter(Boolean).sort();
+  return datas.length? datas[datas.length-1].slice(0,7) : new Date().toISOString().slice(0,7);
+}
+function setMetaMes(v){ META_MES=v; go('comissoes'); }
+
+// filtra registros pelo mês de referência (e opcionalmente por semana do mês)
+function filtroPeriodoMeta(data, periodo){
+  const mesRef=metaMesRef();
+  if(data.slice(0,7)!==mesRef) return false;
+  return true; // mensal: todo o mês; semanal é tratado na agregação por semana
+}
+
 function realizadoMeta(meta){
-  const k = window.__lastCalc || calc();
   const tipo = meta.tipo;
+  const mesRef=metaMesRef();
   if(meta.escopo==='geral'){
-    if(tipo==='faturamento') return k.faturamento;
-    if(tipo==='leads') return k.nLeads;
-    if(tipo==='agendamentos') return k.nAtend;
+    if(tipo==='faturamento') return DATA.atendimentos.filter(a=>a.agenda==='Compareceu'&&a.data.slice(0,7)===mesRef).reduce((s,a)=>s+a.valor,0);
+    if(tipo==='leads') return CAPTACAO.filter(c=>c.data.slice(0,7)===mesRef).reduce((s,c)=>s+(c.leads||0),0);
+    if(tipo==='agendamentos') return DATA.atendimentos.filter(a=>a.agenda==='Compareceu'&&a.data.slice(0,7)===mesRef).length;
     return 0;
   }
-  // individual: filtra pelo funcionário que realizou
   const nome = funcNome(meta.funcId);
-  const at = DATA.atendimentos.filter(a=>a.func===nome && a.agenda==='Compareceu');
+  const at = DATA.atendimentos.filter(a=>a.func===nome && a.agenda==='Compareceu' && a.data.slice(0,7)===mesRef);
   if(tipo==='faturamento') return at.reduce((s,a)=>s+a.valor,0);
   if(tipo==='agendamentos') return at.length;
-  if(tipo==='leads'){
-    // leads atribuídos ao funcionário (se houver campo func em leads); senão, 0 individual
-    return DATA.leads.filter(l=>l.func===nome).length;
-  }
+  if(tipo==='leads') return CAPTACAO.filter(c=>c.data.slice(0,7)===mesRef).reduce((s,c)=>s+(c.leads||0),0);
   return 0;
+}
+
+// para metas semanais: retorna o realizado de cada semana do mês de referência
+function realizadoPorSemana(meta){
+  const mesRef=metaMesRef();
+  const tipo=meta.tipo;
+  const semanas=[1,2,3,4,5];
+  const nome= meta.escopo==='individual'? funcNome(meta.funcId): null;
+  return semanas.map(sem=>{
+    const filtraSemana=(data)=>{
+      if(data.slice(0,7)!==mesRef) return false;
+      const dia=parseInt(data.slice(8,10),10);
+      return Math.ceil(dia/7)===sem;
+    };
+    let val=0;
+    if(tipo==='faturamento'||tipo==='agendamentos'){
+      let at=DATA.atendimentos.filter(a=>a.agenda==='Compareceu'&&filtraSemana(a.data));
+      if(nome) at=at.filter(a=>a.func===nome);
+      val= tipo==='faturamento'? at.reduce((s,a)=>s+a.valor,0): at.length;
+    } else if(tipo==='leads'){
+      val=CAPTACAO.filter(c=>filtraSemana(c.data)).reduce((s,c)=>s+(c.leads||0),0);
+    }
+    return {sem, val};
+  }).filter(s=>true);
 }
 
 // dada uma meta, retorna a faixa mais alta atingida (ou null) e o bônus em R$
@@ -603,6 +641,20 @@ let CAPTACAO = [
 ];
 let CAPT_SEQ = 6;
 let PROCS = ['Toxina Botulínica','Preenchimento Labial','Preenchimento Facial','Bioestimulador','Fios de PDO','Skinbooster','Peeling','Microagulhamento'];
+
+/* ===== Contas a pagar/receber ===== */
+// natureza: 'parcelada' | 'recorrente' | 'avulsa'
+// parcelas: [{n, vencimento, pago, lancId}]
+let CONTAS = [];
+let CONTA_SEQ = 1;
+let CAT_CONTAS = ['Equipamento','Fornecedor','Aluguel','Salário','Imposto','Software','Empréstimo','Outros'];
+
+/* ===== Estoque ===== */
+let ESTOQUE = [];
+let EST_SEQ = 1;
+let EST_MOV = [];
+let MOV_SEQ = 1;
+const UNIDADES = ['un','ml','frasco','caixa','ampola','seringa','kit'];
 
 /* ---------- calc engine ---------- */
 function calc(){
@@ -815,6 +867,15 @@ async function carregarTudo(){
     CAPTACAO = (capt.data||[]).map(c=>({id:c.id,data:c.data,plataforma:c.plataforma,seguidores:c.seguidores,leads:c.leads,agendadas:c.agendadas,investido:+c.investido,gasto:+c.gasto,campanhas:c.campanhas}));
     METAS = (met.data||[]).map(m=>({id:m.id,funcId:m.func_id,escopo:m.escopo,tipo:m.tipo,periodo:m.periodo,faixas:m.faixas}));
     DATA.conformidade = (conf.data||[]).map(c=>({id:c.id,item:c.item,resp:c.responsavel,status:c.status}));
+    // contas a pagar/receber + estoque
+    const [contasR, estR, movR] = await Promise.all([
+      sb.from('contas').select('*').order('criado_em'),
+      sb.from('estoque').select('*').order('produto'),
+      sb.from('estoque_mov').select('*').order('data'),
+    ]);
+    CONTAS = (contasR.data||[]).map(c=>({id:c.id,tipo:c.tipo,descricao:c.descricao,categoria:c.categoria,natureza:c.natureza,valorParcela:+c.valor_parcela,numParcelas:c.num_parcelas,carteira:c.carteira_id,parcelas:c.parcelas||[]}));
+    ESTOQUE = (estR.data||[]).map(e=>({id:e.id,produto:e.produto,unidade:e.unidade,quantidade:+e.quantidade,minimo:+e.minimo,custoUnit:+e.custo_unit}));
+    EST_MOV = (movR.data||[]).map(m=>({id:m.id,produtoId:m.produto_id,data:m.data,tipo:m.tipo,quantidade:+m.quantidade,obs:m.obs}));
     // leads e custos antigos (exemplo) não são usados na nuvem — zera para o painel refletir a realidade
     DATA.leads = [];
     DATA.custos = [];
@@ -829,6 +890,7 @@ async function carregarTudo(){
         META.faturamento=row.valores.faturamento||0; META.ticket=row.valores.ticket||0;
         META.comparecimento=row.valores.comparecimento||0; META.conversao=row.valores.conversao||0; META.ocupacao=row.valores.ocupacao||0;
       }
+      if(row.chave==='horas_mes' && row.valores && row.valores.horas){ META.horasMes=row.valores.horas; }
     });
     window.__lastCalc=null;
   } catch(e){ console.error('Erro ao carregar dados:', e); }
@@ -876,7 +938,7 @@ const TITLES={painel:['Painel','Visão Geral da Clínica'],atendimentos:['Cadast
   comissoes:['Financeiro','Metas & Bonificações'],pacientes:['Cadastros','Base de Pacientes'],
   documentos:['Controle','Documentos & Arquivo'],analise:['Relatórios','Análise Avançada de Dados'],
   funcionarios:['Cadastros','Funcionários'],caixa:['Financeiro','Livro-Caixa'],
-  relatorio:['Relatórios','Gerador de Relatório PDF'],config:['Controle','Configurações']};
+  relatorio:['Relatórios','Gerador de Relatório PDF'],config:['Controle','Configurações'],horaclinica:['Financeiro','Custo Operacional & Hora Clínica'],contas:['Financeiro','Contas a Pagar e Receber'],estoque:['Cadastros','Controle de Estoque']};
 
 function go(page){
   currentPage=page;
@@ -894,7 +956,7 @@ function go(page){
   ({painel:renderPainel,atendimentos:renderAtend,leads:renderLeads,custos:renderCustos,
     conformidade:renderConf,comissoes:renderComissoes,pacientes:renderPacientes,
     documentos:renderDocumentos,analise:renderAnalise,
-    funcionarios:renderFuncionarios,caixa:renderCaixa,relatorio:renderRelatorio,config:renderConfig}[page])(pg);
+    funcionarios:renderFuncionarios,caixa:renderCaixa,relatorio:renderRelatorio,config:renderConfig,horaclinica:renderHoraClinica,contas:renderContas,estoque:renderEstoque}[page])(pg);
 }
 
 /* ============================ PAINEL ============================ */
@@ -1508,14 +1570,26 @@ function responder(pergunta){
 /* ============================ COMISSÕES ============================ */
 function renderComissoes(pg){
   const k=calc();
+  const mesRef=metaMesRef();
   // avalia todas as metas
   const avaliadas = METAS.map(m=>({meta:m, av:avaliarMeta(m)}));
   const totalBonus = avaliadas.reduce((s,x)=>s+x.av.bonus,0);
   const pessoas = [...new Set(METAS.map(m=>funcNome(m.funcId)))];
+  // opções de mês (a partir de atendimentos + mês atual)
+  const meses=[...new Set(DATA.atendimentos.map(a=>a.data.slice(0,7)))].sort().reverse();
+  if(!meses.includes(mesRef)) meses.unshift(mesRef);
+  const mesOpts=meses.map(m=>`<option value="${m}" ${m===mesRef?'selected':''}>${mesAnoCurto(m)}</option>`).join('');
 
   // cards resumo
   const atingidas = avaliadas.filter(x=>x.av.atingida).length;
   pg.innerHTML=`
+    <div class="panel" style="margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div><h3 style="font-size:18px">Metas do mês</h3><div class="ph-sub">As metas são contabilizadas sobre o mês selecionado${MODO_NUVEM?'':''}. Metas semanais mostram cada semana desse mês.</div></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <label style="font-size:12px;color:var(--grey)">Mês de referência</label>
+        <select onchange="setMetaMes(this.value)" style="padding:8px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink)">${mesOpts}</select>
+      </div>
+    </div>
     <div class="trend-grid" style="grid-template-columns:repeat(3,1fr)">
       <div class="tcard" style="animation-delay:0ms">
         <div class="tc-head"><span class="tc-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4"/></svg></span> Bonificação a pagar</div>
@@ -1564,6 +1638,19 @@ function metaCard(m, av){
   const faltaTxt = av.proxima
     ? `Faltam <b>${T.fmt(av.proxima.alvo-real)}</b> para a faixa ${av.proxima.nome} (${bonusLabel(av.proxima.bonus)})`
     : `<b style="color:var(--green)">Faixa máxima atingida!</b>`;
+  // detalhamento por semana (metas semanais)
+  let semanasHTML='';
+  if(m.periodo==='semanal'){
+    const sems=realizadoPorSemana(m).filter(s=>s.val>0 || s.sem<=4);
+    semanasHTML=`<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">
+      <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--grey);font-weight:600;margin-bottom:10px">Por semana do mês</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${sems.map(s=>`<div style="flex:1;min-width:90px;text-align:center;padding:8px;border-radius:9px;background:var(--cream);border:1px solid var(--line)">
+          <div style="font-size:10.5px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">Semana ${s.sem}</div>
+          <div style="font-size:15px;font-weight:600;color:var(--ink);margin-top:3px">${T.fmt(s.val)}</div>
+        </div>`).join('')}
+      </div></div>`;
+  }
   return `<div class="panel" style="margin-bottom:16px">
     <div class="panel-head">
       <div>
@@ -1579,6 +1666,7 @@ function metaCard(m, av){
     <div class="bar" style="margin-bottom:16px"><i class="${av.proxima?'':'hit'}" data-w="${prog}" style="width:${prog}%"></i></div>
     <div style="display:flex;gap:10px">${faixasHTML}</div>
     <div style="margin-top:14px;font-size:13px;color:var(--grey)">${faltaTxt}</div>
+    ${semanasHTML}
   </div>`;
 }
 
@@ -1682,8 +1770,8 @@ function renderPacientes(pg){
     <div class="trend-grid" style="grid-template-columns:repeat(4,1fr)">
       <div class="tcard" style="animation-delay:0ms"><div class="tc-head">Total de pacientes</div><div class="tc-val">${k.totalPacientes}</div><div class="tc-sub">na base</div></div>
       <div class="tcard" style="animation-delay:70ms"><div class="tc-head">Recorrentes</div><div class="tc-val" style="color:var(--green)">${k.pacRecorrentes}</div><div class="tc-sub">${PCT0(k.txRecompra)} de recompra</div></div>
-      <div class="tcard" style="animation-delay:140ms"><div class="tc-head">Valor médio (LTV)</div><div class="tc-val">${BRL(k.ltv)}</div><div class="tc-sub">por paciente</div></div>
-      <div class="tcard" style="animation-delay:210ms"><div class="tc-head">Ticket médio</div><div class="tc-val">${BRL(k.ticket)}</div><div class="tc-sub">por atendimento</div></div>
+      <div class="tcard" style="animation-delay:140ms"><div class="tc-head">Ticket médio por paciente</div><div class="tc-val">${BRL(k.ltv)}</div><div class="tc-sub">valor acumulado por pessoa</div></div>
+      <div class="tcard" style="animation-delay:210ms"><div class="tc-head">Ticket por atendimento</div><div class="tc-val">${BRL(k.ticket)}</div><div class="tc-sub">valor médio de cada visita</div></div>
     </div>
     <div class="panel">
       <div class="toolbar"><div><h3>Base de pacientes</h3><div class="ph-sub">Clique em um paciente para ver a ficha · ${k.totalPacientes} cadastrados</div></div>
@@ -1838,9 +1926,9 @@ function renderAnalise(pg){
     </div>
     <div class="trend-grid" style="grid-template-columns:repeat(4,1fr)">
       <div class="tcard" style="animation-delay:0ms"><div class="tc-head">Recompra</div><div class="tc-val" style="color:var(--green)">${PCT0(ind.txRecompra)}</div><div class="tc-sub">${ind.recorrentes} de ${ind.totalPac} pacientes</div></div>
-      <div class="tcard" style="animation-delay:70ms"><div class="tc-head">LTV médio</div><div class="tc-val">${BRL(ind.ltv)}</div><div class="tc-sub">valor por paciente</div></div>
+      <div class="tcard" style="animation-delay:70ms"><div class="tc-head">Ticket médio</div><div class="tc-val">${BRL(ind.ltv)}</div><div class="tc-sub">por paciente no período</div></div>
       <div class="tcard" style="animation-delay:140ms"><div class="tc-head">CAC</div><div class="tc-val">${BRL(ind.cac)}</div><div class="tc-sub">custo de aquisição</div></div>
-      <div class="tcard" style="animation-delay:210ms"><div class="tc-head">LTV / CAC</div><div class="tc-val" style="color:${ind.cac&&ind.ltv/ind.cac>=3?'var(--green)':'var(--ink)'}">${ind.cac?(ind.ltv/ind.cac).toFixed(1).replace('.',',')+'x':'—'}</div><div class="tc-sub">retorno sobre aquisição</div></div>
+      <div class="tcard" style="animation-delay:210ms"><div class="tc-head">Ticket / CAC</div><div class="tc-val" style="color:${ind.cac&&ind.ltv/ind.cac>=3?'var(--green)':'var(--ink)'}">${ind.cac?(ind.ltv/ind.cac).toFixed(1).replace('.',',')+'x':'—'}</div><div class="tc-sub">retorno sobre aquisição</div></div>
     </div>
     <div class="panel" style="margin-bottom:18px">
       <div class="panel-head"><div><h3>Receita por período</h3><div class="ph-sub">Faturamento e atendimentos ao longo do tempo</div></div></div>
@@ -2304,7 +2392,8 @@ function renderRelatorio(pg){
           ${chk('atendimentos','Atendimentos','Lista de atendimentos do período')}
           ${chk('comissoes','Metas e bonificações','Bônus por funcionário e faixa atingida')}
           ${chk('caixa','Fluxo de caixa','Entradas, saídas e saldo')}
-          ${chk('pacientes','Pacientes','Base, recompra e LTV')}
+          ${chk('custoop','Custo operacional & hora clínica','Despesas do mês e custo por hora')}
+          ${chk('pacientes','Pacientes','Base, recompra e ticket médio')}
           ${chk('conformidade','Conformidade','Status sanitário e legal')}
         </div>
       </div>
@@ -2327,10 +2416,31 @@ function gerarPDF(){
   let body='';
 
   if(on('resumo')){
+    const cc=calcCaixa();
+    const mesRef=ref&&/^\d{4}-\d{2}/.test(ref)?ref.slice(0,7):hcMesRef();
+    const despMes=CAIXA.filter(l=>l.tipo==='despesa'&&l.data.slice(0,7)===mesRef);
+    const custoOp=despMes.reduce((s,l)=>s+l.valor,0);
+    const horaClin=(META.horasMes||176)?custoOp/(META.horasMes||176):0;
+    // cards de destaque
+    body+=`<div class="cards">
+      <div class="card"><div class="cl">Faturamento</div><div class="cv">${BRL(k.faturamento)}</div></div>
+      <div class="card"><div class="cl">Resultado da clínica</div><div class="cv" style="color:${cc.resultado>=0?'#2E7D4F':'#B23A3A'}">${BRL(cc.resultado)}</div></div>
+      <div class="card"><div class="cl">Atendimentos</div><div class="cv">${k.nAtend}</div></div>
+      <div class="card"><div class="cl">Ticket médio</div><div class="cv">${BRL(k.ticket)}</div></div>
+      <div class="card"><div class="cl">Custo da hora clínica</div><div class="cv">${BRL(horaClin)}</div></div>
+      <div class="card"><div class="cl">Saldo em caixa</div><div class="cv">${BRL(cc.saldoTotal)}</div></div>
+    </div>`;
     body+=sec('Resumo executivo', tbl(['Indicador','Valor'],[
-      ['Faturamento',BRL(k.faturamento)],['Lucro líquido',BRL(k.lucro)],['Margem',PCT(k.margem)],
-      ['Ticket médio',BRL(k.ticket)],['Atendimentos',k.nAtend],['Taxa de comparecimento',PCT(k.txComp)],
-      ['Conversão de leads',PCT(k.txConv)],['Custo total',BRL(k.custoTotal)]
+      ['Faturamento (receita de procedimentos)',BRL(k.faturamento)],
+      ['Custo operacional do mês',BRL(custoOp)],
+      ['Resultado da clínica (receita − despesa)',BRL(cc.resultado)],
+      ['Margem',PCT(k.margem)],
+      ['Ticket médio por atendimento',BRL(k.ticket)],
+      ['Atendimentos realizados',k.nAtend],
+      ['Taxa de comparecimento',PCT(k.txComp)],
+      ['Conversão de leads',PCT(k.txConv)],
+      ['Custo da hora clínica',BRL(horaClin)],
+      ['Saldo total em caixa',BRL(cc.saldoTotal)]
     ].map(r=>`<tr><td>${r[0]}</td><td class="n">${r[1]}</td></tr>`).join('')));
   }
   if(on('faturamento')){
@@ -2366,10 +2476,27 @@ function gerarPDF(){
     const cart=CARTEIRAS.map(w=>`<tr><td>${w.nome}</td><td class="n">${BRL(cc.saldos[w.id])}</td></tr>`).join('');
     body+=sec('Saldo por carteira', tbl(['Carteira','Saldo atual'],cart));
   }
+  if(on('custoop')){
+    const mesRef=ref&&/^\d{4}-\d{2}/.test(ref)?ref.slice(0,7):hcMesRef();
+    const despMes=CAIXA.filter(l=>l.tipo==='despesa'&&l.data.slice(0,7)===mesRef);
+    const custoOp=despMes.reduce((s,l)=>s+l.valor,0);
+    const horas=META.horasMes||176;
+    const horaClin=horas?custoOp/horas:0;
+    const atendMes=DATA.atendimentos.filter(a=>a.agenda==='Compareceu'&&a.data.slice(0,7)===mesRef);
+    const porCat={}; despMes.forEach(l=>porCat[l.categoria]=(porCat[l.categoria]||0)+l.valor);
+    const catRows=Object.entries(porCat).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<tr><td>${c}</td><td class="n">${BRL(v)}</td></tr>`).join('');
+    body+=sec('Custo operacional & hora clínica', tbl(['Indicador','Valor'],[
+      ['Custo operacional total do mês',BRL(custoOp)],
+      ['Horas clínicas disponíveis',horas+'h'],
+      ['Custo da hora clínica',BRL(horaClin)],
+      ['Custo por atendimento',BRL(atendMes.length?custoOp/atendMes.length:0)]
+    ].map(r=>`<tr><td>${r[0]}</td><td class="n">${r[1]}</td></tr>`).join('')));
+    if(catRows) body+=sec('Composição do custo operacional', tbl(['Categoria','Valor'],catRows));
+  }
   if(on('pacientes')){
     body+=sec('Pacientes', tbl(['Indicador','Valor'],[
       ['Total de pacientes',k.totalPacientes],['Recorrentes',k.pacRecorrentes],
-      ['Taxa de recompra',PCT(k.txRecompra)],['LTV médio',BRL(k.ltv)]
+      ['Taxa de recompra',PCT(k.txRecompra)],['Ticket médio por paciente',BRL(k.ltv)]
     ].map(r=>`<tr><td>${r[0]}</td><td class="n">${r[1]}</td></tr>`).join('')));
   }
   if(on('conformidade')){
@@ -2394,6 +2521,10 @@ function gerarPDF(){
     td.n,th.n{text-align:right}
     tr:nth-child(even) td{background:#FBF8F1}
     .ft{margin-top:30px;padding-top:12px;border-top:1px solid #E8DEC8;font-size:10px;color:#999;text-align:center}
+    .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:6px 0 14px}
+    .card{border:1px solid #E8DEC8;border-radius:8px;padding:12px 14px;background:#FBF8F1}
+    .card .cl{font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:#8A8175;font-weight:bold}
+    .card .cv{font-size:19px;font-weight:bold;color:#211C16;margin-top:4px;font-family:Georgia,serif}
   </style></head><body>
     <div class="hd">
       <div class="brand">Instituto Bruna Braga</div>
@@ -2515,6 +2646,376 @@ function fecharMenu(){
   document.body.classList.remove('menu-open');
   const ov=document.getElementById('navOverlay');
   if(ov) ov.style.display='none';
+}
+
+/* ============================ CUSTO OPERACIONAL & HORA CLÍNICA ============================ */
+// mês de referência da hora clínica (AAAA-MM); padrão = mês do último lançamento ou atual
+let HC_MES = null;
+function hcMesRef(){
+  if(HC_MES) return HC_MES;
+  const datas=CAIXA.map(l=>l.data).filter(Boolean).sort();
+  return datas.length? datas[datas.length-1].slice(0,7) : new Date().toISOString().slice(0,7);
+}
+function setHcMes(v){ HC_MES=v; go('horaclinica'); }
+
+function renderHoraClinica(pg){
+  const mesRef=hcMesRef();
+  // todas as despesas lançadas no mês de referência (custo real de manutenção)
+  const desp=CAIXA.filter(l=>l.tipo==='despesa' && l.data.slice(0,7)===mesRef);
+  const totalCusto=desp.reduce((s,l)=>s+l.valor,0);
+  // agrupa por categoria
+  const porCat={};
+  desp.forEach(l=>{porCat[l.categoria]=(porCat[l.categoria]||0)+l.valor;});
+  const cats=Object.entries(porCat).map(([cat,v])=>({cat,v})).sort((a,b)=>b.v-a.v);
+  // horas clínicas disponíveis no mês
+  const horas=META.horasMes||176;
+  const horaClinica = horas? totalCusto/horas : 0;
+  // receita e atendimentos do mês (para comparar)
+  const atendMes=DATA.atendimentos.filter(a=>a.agenda==='Compareceu' && a.data.slice(0,7)===mesRef);
+  const receitaMes=atendMes.reduce((s,a)=>s+a.valor,0);
+  const custoPorAtend = atendMes.length? totalCusto/atendMes.length : 0;
+  // opções de mês
+  const meses=[...new Set(CAIXA.map(l=>l.data.slice(0,7)))].sort().reverse();
+  if(!meses.includes(mesRef)) meses.unshift(mesRef);
+  const mesOpts=meses.map(m=>`<option value="${m}" ${m===mesRef?'selected':''}>${mesAnoCurto(m)}</option>`).join('');
+
+  const catBody=cats.length?cats.map(c=>{
+    const share=totalCusto?c.v/totalCusto:0;
+    return `<tr><td>${c.cat}</td><td class="num">${BRL(c.v)}</td><td style="width:120px"><span class="minibar" style="width:${share*100}%"></span></td><td class="num" style="color:var(--grey)">${PCT0(share)}</td></tr>`;
+  }).join(''):'<tr><td colspan="4" style="text-align:center;color:var(--grey);padding:24px">Nenhuma despesa lançada neste mês. Registre no Livro-Caixa.</td></tr>';
+
+  pg.innerHTML=`
+    <div class="panel" style="margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div><h3 style="font-size:18px">Custo operacional do mês</h3><div class="ph-sub">Soma de tudo que a clínica gasta para funcionar — base do cálculo da hora clínica</div></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <label style="font-size:12px;color:var(--grey)">Mês de referência</label>
+        <select onchange="setHcMes(this.value)" style="padding:8px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink)">${mesOpts}</select>
+      </div>
+    </div>
+
+    <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="kpi" style="animation-delay:0ms"><div class="label">Custo operacional total</div><div class="val">${BRL(totalCusto)}</div><div class="meta">${desp.length} despesas no mês</div></div>
+      <div class="kpi gold" style="animation-delay:70ms"><div class="label">Horas clínicas no mês</div><div class="val" style="color:var(--ink)">${horas}h</div><div class="meta">capacidade de atendimento</div></div>
+      <div class="kpi" style="animation-delay:140ms"><div class="label">Custo da hora clínica</div><div class="val" style="color:var(--gold)">${BRL(horaClinica)}</div><div class="meta">por hora de atendimento</div></div>
+      <div class="kpi" style="animation-delay:210ms"><div class="label">Custo por atendimento</div><div class="val">${BRL(custoPorAtend)}</div><div class="meta">${atendMes.length} atendimentos no mês</div></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:18px">
+      <div class="panel-head"><div><h3>Como configurar as horas clínicas</h3></div></div>
+      <div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap">
+        <div class="field"><label>Horas de atendimento disponíveis no mês</label>
+          <input type="number" id="hc_horas" value="${horas}" style="padding:9px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);width:160px"></div>
+        <button class="btn" onclick="salvarHoras()">Salvar horas</button>
+        <div style="font-size:12px;color:var(--grey);flex:1;min-width:220px">Ex: 8h/dia × 22 dias úteis = 176h. Ajuste conforme a agenda real da clínica (dias e horas que há atendimento).</div>
+      </div>
+    </div>
+
+    <div class="row two">
+      <div class="panel"><h3>Composição do custo operacional</h3><div class="ph-sub">Todas as despesas do mês, por categoria</div>
+        <table class="data"><thead><tr><th>Categoria</th><th class="num">Valor</th><th></th><th class="num">%</th></tr></thead><tbody>${catBody}</tbody></table>
+      </div>
+      <div class="panel"><h3>O que isso significa</h3><div class="ph-sub">Interpretação</div>
+        <div style="font-size:14px;line-height:1.7;color:var(--ink)">
+          <p style="margin-bottom:12px">Cada hora de atendimento na clínica custa <b style="color:var(--gold)">${BRL(horaClinica)}</b> só para manter as portas abertas (aluguel, salários, impostos, insumos, etc.).</p>
+          <p style="margin-bottom:12px">Isso significa que <b>todo procedimento precisa cobrir pelo menos esse custo por hora</b> antes de gerar lucro. Um atendimento de 1h que rende menos de ${BRL(horaClinica)} está no prejuízo operacional.</p>
+          ${receitaMes>0?`<p>No mês, a receita foi ${BRL(receitaMes)} e o custo ${BRL(totalCusto)} — ${receitaMes>=totalCusto?`<b style="color:var(--green)">resultado positivo de ${BRL(receitaMes-totalCusto)}</b>`:`<b style="color:var(--red)">déficit de ${BRL(totalCusto-receitaMes)}</b>`}.</p>`:''}
+        </div>
+      </div>
+    </div>`;
+}
+function mesAnoCurto(s){const meses=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];const[y,m]=s.split('-');return meses[+m-1]+'/'+y;}
+async function salvarHoras(){
+  META.horasMes=+document.getElementById('hc_horas').value||176;
+  if(MODO_NUVEM){
+    const { data:{ user } } = await sb.auth.getUser();
+    await sb.from('configuracoes').upsert({user_id:user.id,chave:'horas_mes',valores:{horas:META.horasMes}},{onConflict:'user_id,chave'});
+  }
+  go('horaclinica');
+}
+
+/* ============================ CONTAS A PAGAR / RECEBER ============================ */
+let CONTAS_FILTRO='todas'; // todas | pagar | receber
+function setContasFiltro(f){CONTAS_FILTRO=f;go('contas');}
+
+function renderContas(pg){
+  // resumo
+  let aPagar=0, aReceber=0, vencidoPagar=0, prox=[];
+  const hoje=new Date().toISOString().slice(0,10);
+  CONTAS.forEach(c=>{
+    (c.parcelas||[]).forEach(p=>{
+      if(!p.pago){
+        if(c.tipo==='pagar'){ aPagar+=c.valorParcela; if(p.vencimento<hoje)vencidoPagar+=c.valorParcela; }
+        else aReceber+=c.valorParcela;
+        prox.push({conta:c,parc:p});
+      }
+    });
+  });
+  prox.sort((a,b)=>(a.parc.vencimento||'').localeCompare(b.parc.vencimento||''));
+  const lista=CONTAS.filter(c=>CONTAS_FILTRO==='todas'||c.tipo===CONTAS_FILTRO);
+
+  const contaCard=(c)=>{
+    const parcelas=c.parcelas||[];
+    const pagas=parcelas.filter(p=>p.pago).length;
+    const proxima=parcelas.find(p=>!p.pago);
+    const total=c.valorParcela*c.numParcelas;
+    const cor = c.tipo==='pagar'?'var(--red)':'var(--green)';
+    const natLabel={parcelada:'Parcelada',recorrente:'Recorrente',avulsa:'Avulsa'}[c.natureza]||'';
+    const parcChips=parcelas.map(p=>{
+      const venc=p.vencimento?fmtDate(p.vencimento):'';
+      const st=p.pago?'pago':(p.vencimento<hoje?'vencido':'aberto');
+      const bg={pago:'var(--green-bg)',vencido:'var(--red-bg)',aberto:'var(--cream)'}[st];
+      const cl={pago:'var(--green)',vencido:'var(--red)',aberto:'var(--grey)'}[st];
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-radius:9px;background:${bg};border:1px solid var(--line);margin-bottom:6px">
+        <div><b style="font-size:13px">${p.n}/${c.numParcelas}</b> <span style="font-size:12px;color:var(--grey)">· venc. ${venc}</span></div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-weight:600;color:${cl};font-size:13px">${BRL(c.valorParcela)}</span>
+          ${p.pago?`<span style="font-size:11px;color:var(--green)">✓ ${c.tipo==='pagar'?'pago':'recebido'}</span>`:`<button class="btn ghost" style="padding:3px 10px;font-size:11px" onclick="quitarParcela('${c.id}',${p.n})">${c.tipo==='pagar'?'pagar':'receber'}</button>`}
+        </div></div>`;
+    }).join('');
+    return `<div class="panel" style="margin-bottom:16px">
+      <div class="panel-head">
+        <div><h3 style="font-size:17px">${c.descricao}</h3>
+          <div class="ph-sub"><span style="text-transform:uppercase;font-size:10px;letter-spacing:.5px;background:var(--cream);padding:2px 8px;border-radius:10px;color:var(--gold-d)">${c.tipo==='pagar'?'A pagar':'A receber'} · ${natLabel}</span> · ${c.categoria} · ${pagas}/${c.numParcelas} quitadas</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">Total</div>
+          <div style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600;color:${cor}">${BRL(total)}</div>
+          <button class="btn ghost" style="padding:3px 10px;font-size:11px;margin-top:4px" onclick="excluirConta('${c.id}')">excluir</button>
+        </div>
+      </div>
+      <div style="margin-top:12px">${parcChips}</div>
+    </div>`;
+  };
+
+  pg.innerHTML=`
+    <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="kpi" style="animation-delay:0ms"><div class="label">Total a pagar (em aberto)</div><div class="val" style="color:var(--red)">${BRL(aPagar)}</div><div class="meta">${vencidoPagar>0?`<span style="color:var(--red)">${BRL(vencidoPagar)} vencido</span>`:'em dia'}</div></div>
+      <div class="kpi" style="animation-delay:70ms"><div class="label">Total a receber (em aberto)</div><div class="val" style="color:var(--green)">${BRL(aReceber)}</div><div class="meta">parcelas futuras</div></div>
+      <div class="kpi gold" style="animation-delay:140ms"><div class="label">Saldo previsto</div><div class="val" style="color:var(--ink)">${BRL(aReceber-aPagar)}</div><div class="meta">a receber − a pagar</div></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:18px">
+      <div class="toolbar"><div><h3>Próximos vencimentos</h3><div class="ph-sub">As 6 parcelas em aberto mais próximas</div></div>
+        <button class="btn" onclick="abrirContaForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Nova conta</button>
+      </div>
+      <div id="contaFormBox"></div>
+      ${prox.length?`<table class="data"><thead><tr><th>Vencimento</th><th>Descrição</th><th class="ctr">Parcela</th><th class="ctr">Tipo</th><th class="num">Valor</th><th class="ctr">Ação</th></tr></thead><tbody>
+        ${prox.slice(0,6).map(x=>{const vencido=x.parc.vencimento<hoje;return `<tr>
+          <td style="${vencido?'color:var(--red);font-weight:600':''}">${fmtDate(x.parc.vencimento)}${vencido?' ⚠':''}</td>
+          <td>${x.conta.descricao}</td><td class="ctr">${x.parc.n}/${x.conta.numParcelas}</td>
+          <td class="ctr">${x.conta.tipo==='pagar'?'<span style="color:var(--red)">Pagar</span>':'<span style="color:var(--green)">Receber</span>'}</td>
+          <td class="num">${BRL(x.conta.valorParcela)}</td>
+          <td class="ctr"><button class="btn ghost" style="padding:3px 10px;font-size:11px" onclick="quitarParcela('${x.conta.id}',${x.parc.n})">${x.conta.tipo==='pagar'?'pagar':'receber'}</button></td>
+        </tr>`;}).join('')}
+      </tbody></table>`:'<div style="color:var(--grey);font-size:13px;padding:14px 0">Nenhuma parcela em aberto.</div>'}
+    </div>
+
+    <div class="panel">
+      <div class="toolbar"><div><h3>Todas as contas</h3><div class="ph-sub">Parcelamentos, recorrentes e avulsas</div></div>
+        <div class="itabs">
+          <button class="${CONTAS_FILTRO==='todas'?'active':''}" onclick="setContasFiltro('todas')">Todas</button>
+          <button class="${CONTAS_FILTRO==='pagar'?'active':''}" onclick="setContasFiltro('pagar')">A pagar</button>
+          <button class="${CONTAS_FILTRO==='receber'?'active':''}" onclick="setContasFiltro('receber')">A receber</button>
+        </div>
+      </div>
+      ${lista.length?lista.map(contaCard).join(''):'<div style="color:var(--grey);font-size:13px;padding:14px 0">Nenhuma conta cadastrada. Clique em "Nova conta".</div>'}
+    </div>`;
+}
+
+function abrirContaForm(){ 
+  const fs='padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);width:100%';
+  const catOpts=CAT_CONTAS.map(c=>`<option>${c}</option>`).join('');
+  const cartOpts=CARTEIRAS.map(w=>`<option value="${w.id}">${w.nome}</option>`).join('');
+  document.getElementById('contaFormBox').innerHTML=`
+    <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px">
+        <div class="field"><label>Tipo</label><select id="ct_tipo" style="${fs}"><option value="pagar">A pagar</option><option value="receber">A receber</option></select></div>
+        <div class="field"><label>Natureza</label><select id="ct_nat" onchange="contaNatMudou()" style="${fs}"><option value="parcelada">Parcelada (ex: 10x)</option><option value="recorrente">Recorrente (todo mês)</option><option value="avulsa">Avulsa (única)</option></select></div>
+        <div class="field"><label>Categoria</label><select id="ct_cat" style="${fs}">${catOpts}</select></div>
+        <div class="field" style="grid-column:span 2"><label>Descrição</label><input id="ct_desc" placeholder="Ex: Equipamento de laser" style="${fs}"></div>
+        <div class="field"><label>Carteira (de onde sai/entra)</label><select id="ct_cart" style="${fs}">${cartOpts}</select></div>
+        <div class="field"><label>Valor da parcela (R$)</label><input type="number" id="ct_valor" placeholder="0,00" style="${fs}"></div>
+        <div class="field" id="ct_nparcWrap"><label>Nº de parcelas</label><input type="number" id="ct_nparc" value="10" style="${fs}"></div>
+        <div class="field"><label>1º vencimento</label><input type="date" id="ct_venc" value="${new Date().toISOString().slice(0,10)}" style="${fs}"></div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn" onclick="salvarConta()">Salvar conta</button>
+        <button class="btn ghost" onclick="document.getElementById('contaFormBox').innerHTML=''">Cancelar</button>
+      </div>
+      <div id="ct_hint" style="margin-top:10px;font-size:12px;color:var(--grey);font-style:italic">Parcelada: cria todas as parcelas com vencimento mensal. Ao quitar cada uma, ela entra no Livro-Caixa do mês.</div>
+    </div>`;
+  contaNatMudou();
+}
+function contaNatMudou(){
+  const nat=document.getElementById('ct_nat').value;
+  const wrap=document.getElementById('ct_nparcWrap');
+  const hint=document.getElementById('ct_hint');
+  if(nat==='parcelada'){wrap.style.display='block';document.getElementById('ct_nparc').value=document.getElementById('ct_nparc').value||10;hint.textContent='Parcelada: cria N parcelas com vencimento mensal. Ao quitar cada uma, entra no Livro-Caixa do mês.';}
+  else if(nat==='recorrente'){wrap.style.display='block';document.getElementById('ct_nparc').value=12;hint.textContent='Recorrente: cria 12 meses de parcelas iguais (ex: aluguel). Ajuste o número se quiser.';}
+  else {wrap.style.display='none';hint.textContent='Avulsa: uma única parcela com vencimento na data informada.';}
+}
+async function salvarConta(){
+  const v=i=>document.getElementById(i).value;
+  const tipo=v('ct_tipo'), nat=v('ct_nat');
+  const valorParcela=+v('ct_valor')||0;
+  let numParcelas = nat==='avulsa'?1:(+v('ct_nparc')||1);
+  const venc0=v('ct_venc');
+  // gera parcelas com vencimento mensal
+  const parcelas=[];
+  for(let i=0;i<numParcelas;i++){
+    const d=new Date(venc0+'T00:00:00'); d.setMonth(d.getMonth()+i);
+    parcelas.push({n:i+1, vencimento:d.toISOString().slice(0,10), pago:false, lancId:null});
+  }
+  const conta={tipo, descricao:v('ct_desc')||'Conta', categoria:v('ct_cat'), natureza:nat,
+    valorParcela, numParcelas, carteira:+v('ct_cart')||(CARTEIRAS[0]&&CARTEIRAS[0].id), parcelas};
+  if(MODO_NUVEM){
+    const reg={tipo:conta.tipo,descricao:conta.descricao,categoria:conta.categoria,natureza:conta.natureza,
+      valor_parcela:conta.valorParcela,num_parcelas:conta.numParcelas,carteira_id:document.getElementById('ct_cart').value||null,
+      primeiro_venc:venc0,parcelas:conta.parcelas};
+    await sbInsert('contas',reg); await carregarTudo(); go('contas'); return;
+  }
+  conta.id=CONTA_SEQ++; CONTAS.push(conta); go('contas');
+}
+async function excluirConta(id){
+  if(MODO_NUVEM){await sbDelete('contas',id);await carregarTudo();}
+  else {CONTAS=CONTAS.filter(c=>c.id!=id);}
+  go('contas');
+}
+// quitar uma parcela: marca como paga E cria lançamento no Livro-Caixa
+async function quitarParcela(contaId, n){
+  const c=CONTAS.find(x=>x.id==contaId); if(!c)return;
+  const p=(c.parcelas||[]).find(x=>x.n===n); if(!p||p.pago)return;
+  const hoje=new Date().toISOString().slice(0,10);
+  const tipoLanc = c.tipo==='pagar'?'despesa':'receita';
+  const desc=`${c.descricao} (${n}/${c.numParcelas})`;
+  if(MODO_NUVEM){
+    const { data:{ user } } = await sb.auth.getUser();
+    // cria lançamento no caixa
+    const lanc={user_id:user.id,data:hoje,tipo:tipoLanc,categoria:c.categoria,descricao:desc,valor:c.valorParcela,carteira_id:c.carteira||null,carteira_dest:null};
+    const ins=await sb.from('lancamentos').insert(lanc).select().single();
+    // marca parcela paga
+    const novasParc=c.parcelas.map(x=>x.n===n?{...x,pago:true,lancId:ins.data?ins.data.id:null}:x);
+    await sb.from('contas').update({parcelas:novasParc}).eq('id',contaId);
+    await carregarTudo(); go('contas'); return;
+  }
+  // local
+  CAIXA.push({id:CAIXA_SEQ++,data:hoje,tipo:tipoLanc,categoria:c.categoria,desc,valor:c.valorParcela,carteira:c.carteira||(CARTEIRAS[0]&&CARTEIRAS[0].id),carteiraDest:null});
+  p.pago=true;
+  go('contas');
+}
+
+/* ============================ ESTOQUE ============================ */
+function renderEstoque(pg){
+  const baixo=ESTOQUE.filter(e=>e.minimo>0 && e.quantidade<=e.minimo);
+  const valorTotal=ESTOQUE.reduce((s,e)=>s+e.quantidade*e.custoUnit,0);
+  const linhas=ESTOQUE.map(e=>{
+    const alerta=e.minimo>0 && e.quantidade<=e.minimo;
+    return `<tr>
+      <td><b>${e.produto}</b></td>
+      <td class="ctr">${e.quantidade} ${e.unidade||''}</td>
+      <td class="ctr" style="color:var(--grey)">${e.minimo||'—'}</td>
+      <td class="num">${e.custoUnit?BRL(e.custoUnit):'—'}</td>
+      <td class="num">${BRL(e.quantidade*e.custoUnit)}</td>
+      <td class="ctr">${alerta?'<span style="color:var(--red);font-size:12px;font-weight:600">⚠ repor</span>':'<span style="color:var(--green);font-size:12px">ok</span>'}</td>
+      <td class="ctr">
+        <button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="movEstoque('${e.id}','entrada')">+ entrada</button>
+        <button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="movEstoque('${e.id}','saida')">− saída</button>
+        <button class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="excluirProduto('${e.id}')">×</button>
+      </td>
+    </tr>`;
+  }).join('');
+  const movs=[...EST_MOV].sort((a,b)=>(b.data||'').localeCompare(a.data||'')).slice(0,12).map(m=>{
+    const prod=ESTOQUE.find(e=>e.id==m.produtoId);
+    return `<tr><td>${fmtDate(m.data)}</td><td>${prod?prod.produto:'—'}</td><td class="ctr">${m.tipo==='entrada'?'<span style="color:var(--green)">Entrada</span>':'<span style="color:var(--red)">Saída</span>'}</td><td class="num">${m.quantidade}</td><td>${m.obs||''}</td></tr>`;
+  }).join('');
+
+  pg.innerHTML=`
+    <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="kpi" style="animation-delay:0ms"><div class="label">Produtos cadastrados</div><div class="val">${ESTOQUE.length}</div><div class="meta">itens no estoque</div></div>
+      <div class="kpi ${baixo.length?'':'gold'}" style="animation-delay:70ms"><div class="label">Abaixo do mínimo</div><div class="val" style="color:${baixo.length?'var(--red)':'var(--ink)'}">${baixo.length}</div><div class="meta">${baixo.length?'precisam reposição':'tudo ok'}</div></div>
+      <div class="kpi" style="animation-delay:140ms"><div class="label">Valor em estoque</div><div class="val">${BRL(valorTotal)}</div><div class="meta">custo total imobilizado</div></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:18px">
+      <div class="toolbar"><div><h3>Produtos</h3><div class="ph-sub">Controle de entrada e saída manual</div></div>
+        <button class="btn" onclick="abrirProdutoForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo produto</button>
+      </div>
+      <div id="produtoFormBox"></div>
+      <div id="movFormBox"></div>
+      <table class="data">
+        <thead><tr><th>Produto</th><th class="ctr">Quantidade</th><th class="ctr">Mínimo</th><th class="num">Custo un.</th><th class="num">Valor total</th><th class="ctr">Status</th><th class="ctr">Movimentar</th></tr></thead>
+        <tbody>${linhas||'<tr><td colspan="7" style="text-align:center;color:var(--grey);padding:24px">Nenhum produto cadastrado.</td></tr>'}</tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h3>Últimas movimentações</h3><div class="ph-sub">Histórico de entradas e saídas</div>
+      <table class="data"><thead><tr><th>Data</th><th>Produto</th><th class="ctr">Tipo</th><th class="num">Qtd</th><th>Obs</th></tr></thead>
+      <tbody>${movs||'<tr><td colspan="5" style="text-align:center;color:var(--grey);padding:20px">Nenhuma movimentação ainda.</td></tr>'}</tbody></table>
+    </div>`;
+}
+function abrirProdutoForm(){
+  const fs='padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);width:100%';
+  const uniOpts=UNIDADES.map(u=>`<option>${u}</option>`).join('');
+  document.getElementById('produtoFormBox').innerHTML=`
+    <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:12px">
+        <div class="field" style="grid-column:span 2"><label>Produto</label><input id="pr_nome" placeholder="Ex: Toxina Botulínica 100U" style="${fs}"></div>
+        <div class="field"><label>Unidade</label><select id="pr_uni" style="${fs}">${uniOpts}</select></div>
+        <div class="field"><label>Qtd inicial</label><input type="number" id="pr_qtd" value="0" style="${fs}"></div>
+        <div class="field"><label>Estoque mínimo</label><input type="number" id="pr_min" value="0" style="${fs}"></div>
+        <div class="field"><label>Custo unitário (R$)</label><input type="number" id="pr_custo" value="0" style="${fs}"></div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn" onclick="salvarProduto()">Salvar produto</button>
+        <button class="btn ghost" onclick="document.getElementById('produtoFormBox').innerHTML=''">Cancelar</button>
+      </div>
+    </div>`;
+}
+async function salvarProduto(){
+  const v=i=>document.getElementById(i).value;
+  const prod={produto:v('pr_nome')||'Produto',unidade:v('pr_uni'),quantidade:+v('pr_qtd')||0,minimo:+v('pr_min')||0,custoUnit:+v('pr_custo')||0};
+  if(MODO_NUVEM){
+    await sbInsert('estoque',{produto:prod.produto,unidade:prod.unidade,quantidade:prod.quantidade,minimo:prod.minimo,custo_unit:prod.custoUnit});
+    await carregarTudo(); go('estoque'); return;
+  }
+  prod.id=EST_SEQ++; ESTOQUE.push(prod); go('estoque');
+}
+async function excluirProduto(id){
+  if(MODO_NUVEM){await sbDelete('estoque',id);await carregarTudo();}
+  else {ESTOQUE=ESTOQUE.filter(e=>e.id!=id);}
+  go('estoque');
+}
+function movEstoque(id,tipo){
+  const e=ESTOQUE.find(x=>x.id==id); if(!e)return;
+  const fs='padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);width:100%';
+  document.getElementById('movFormBox').innerHTML=`
+    <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
+      <div style="font-weight:600;margin-bottom:10px">${tipo==='entrada'?'Entrada':'Saída'} de estoque — ${e.produto} <span style="color:var(--grey);font-weight:400">(atual: ${e.quantidade} ${e.unidade})</span></div>
+      <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+        <div class="field"><label>Quantidade</label><input type="number" id="mv_qtd" value="1" style="${fs};width:120px"></div>
+        <div class="field" style="flex:1;min-width:180px"><label>Observação (opcional)</label><input id="mv_obs" placeholder="Ex: compra fornecedor / uso em procedimento" style="${fs}"></div>
+        <button class="btn" onclick="salvarMov('${id}','${tipo}')">Confirmar ${tipo==='entrada'?'entrada':'saída'}</button>
+        <button class="btn ghost" onclick="document.getElementById('movFormBox').innerHTML=''">Cancelar</button>
+      </div>
+    </div>`;
+  document.getElementById('movFormBox').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+async function salvarMov(id,tipo){
+  const e=ESTOQUE.find(x=>x.id==id); if(!e)return;
+  const qtd=+document.getElementById('mv_qtd').value||0;
+  const obs=document.getElementById('mv_obs').value||'';
+  const hoje=new Date().toISOString().slice(0,10);
+  const novaQtd = tipo==='entrada'? e.quantidade+qtd : Math.max(0,e.quantidade-qtd);
+  if(MODO_NUVEM){
+    const { data:{ user } } = await sb.auth.getUser();
+    await sb.from('estoque').update({quantidade:novaQtd}).eq('id',id);
+    await sb.from('estoque_mov').insert({user_id:user.id,produto_id:id,data:hoje,tipo,quantidade:qtd,obs});
+    await carregarTudo(); go('estoque'); return;
+  }
+  e.quantidade=novaQtd;
+  EST_MOV.push({id:MOV_SEQ++,produtoId:id,data:hoje,tipo,quantidade:qtd,obs});
+  go('estoque');
 }
 
 </script>
