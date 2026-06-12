@@ -170,13 +170,37 @@ table.data tbody tr:hover{background:var(--cream)}
 .health .txt{font-size:13px;color:var(--grey)}
 .health .txt b{color:var(--ink);font-weight:600}
 
-@media(max-width:1080px){.kpi-grid{grid-template-columns:repeat(2,1fr)}.row.two,.row.two-eq{grid-template-columns:1fr}}
+@media(max-width:1080px){.kpi-grid{grid-template-columns:repeat(2,1fr)}.row.two,.row.two-eq{grid-template-columns:1fr}.trend-grid{grid-template-columns:repeat(2,1fr)!important}}
 @media(max-width:760px){
-  .app{flex-direction:column}.sidebar{width:100%;height:auto;position:static;flex-direction:row;
-    overflow-x:auto;align-items:center}.brand{border-bottom:none;border-right:1px solid rgba(201,162,75,.2);white-space:nowrap}
-  .nav{flex-direction:row;padding:10px;flex:none}.nav .nav-label,.side-foot{display:none}
-  .nav button span.t{display:none}.nav button{padding:11px}
-  .content{padding:20px 16px}.topbar{padding:16px 18px}.kpi-grid{grid-template-columns:1fr 1fr;gap:12px}
+  /* sidebar vira menu deslizante */
+  .sidebar{position:fixed;top:0;left:0;height:100vh;width:270px;max-width:84vw;z-index:100;
+    transform:translateX(-100%);transition:transform .26s ease;box-shadow:0 0 40px rgba(0,0,0,.5)}
+  body.menu-open .sidebar{transform:translateX(0)}
+  #menuBtn{display:inline-flex!important}
+  .content{padding:18px 14px 40px}
+  .topbar{padding:14px 14px;flex-wrap:wrap;gap:12px}
+  .topbar .title{font-size:21px}
+  .period{flex-wrap:wrap;gap:8px;width:100%}
+  .period select{flex:1;min-width:120px}
+  /* tudo em coluna única */
+  .kpi-grid,.trend-grid{grid-template-columns:1fr!important;gap:14px}
+  .row.two,.row.two-eq,.row.three{grid-template-columns:1fr!important}
+  /* tabelas com rolagem horizontal */
+  .data{display:block;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch}
+  .panel{padding:18px 16px}
+  /* formulários em grade adaptam */
+  .form-row{flex-direction:column;align-items:stretch}
+  .form-row .field{width:100%}
+  /* grids internos de formulários (lançamento, captação, atendimento) */
+  [style*="grid-template-columns:repeat(4,1fr)"]{grid-template-columns:1fr 1fr!important}
+  /* KPIs e cards com fonte um pouco menor */
+  .kpi .val,.tcard .tc-val{font-size:26px}
+  h3{font-size:17px}
+}
+@media(max-width:430px){
+  [style*="grid-template-columns:repeat(4,1fr)"]{grid-template-columns:1fr!important}
+  .topbar .title{font-size:19px}
+  .kpi .val,.tcard .tc-val{font-size:24px}
 }
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 /* ---------- CRM trend cards ---------- */
@@ -258,6 +282,7 @@ table.data tbody tr:hover{background:var(--cream)}
   </div>
 </div>
 <div class="app" id="appRoot" style="display:none">
+  <div id="navOverlay" onclick="toggleMenu()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:90"></div>
   <aside class="sidebar">
     <div class="brand">
       <div class="mark">Instituto<br>Bruna Braga</div>
@@ -308,9 +333,12 @@ table.data tbody tr:hover{background:var(--cream)}
   </aside>
   <main class="main">
     <div class="topbar">
-      <div>
-        <div class="crumb" id="crumb">Gestão</div>
-        <div class="title" id="pageTitle">Painel Gerencial</div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <button id="menuBtn" onclick="toggleMenu()" aria-label="Menu" style="display:none;background:none;border:1px solid var(--line);border-radius:10px;padding:8px;cursor:pointer;color:var(--ink)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:20px;height:20px;stroke-width:2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+        <div>
+          <div class="crumb" id="crumb">Gestão</div>
+          <div class="title" id="pageTitle">Painel Gerencial</div>
+        </div>
       </div>
       <div class="period">
         <select id="periodSel">
@@ -852,6 +880,7 @@ const TITLES={painel:['Painel','Visão Geral da Clínica'],atendimentos:['Cadast
 
 function go(page){
   currentPage=page;
+  if(typeof fecharMenu==='function') fecharMenu();
   document.querySelectorAll('#nav button[data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===page));
   document.querySelectorAll('.nav-group').forEach(g=>{
     if(g.querySelector(`button[data-page="${page}"]`)) g.classList.add('open');
@@ -2475,6 +2504,18 @@ function alternarTema(){
   try{ t = localStorage.getItem('ibb_tema') || 'dark'; }catch(e){}
   window.addEventListener('DOMContentLoaded',()=>aplicarTema(t));
 })();
+
+/* ============================ MENU MOBILE ============================ */
+function toggleMenu(){
+  const open = document.body.classList.toggle('menu-open');
+  const ov=document.getElementById('navOverlay');
+  if(ov) ov.style.display = open ? 'block' : 'none';
+}
+function fecharMenu(){
+  document.body.classList.remove('menu-open');
+  const ov=document.getElementById('navOverlay');
+  if(ov) ov.style.display='none';
+}
 
 </script>
 </body>
