@@ -320,6 +320,8 @@ table.data tbody tr:hover{background:var(--cream)}
         <button class="ng-head"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3v18h18"/><path d="M7 14l3-4 4 3 5-7"/></svg><span class="t">Relatórios</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="9 6 15 12 9 18"/></svg></button>
         <div class="ng-items">
           <button data-page="analise">Análise Avançada</button>
+          <button data-page="comparativo">Comparativo Mensal</button>
+          <button data-page="checkup">Check-up da Clínica</button>
           <button data-page="relatorio">Relatório PDF</button>
         </div>
       </div>
@@ -656,6 +658,12 @@ let EST_MOV = [];
 let MOV_SEQ = 1;
 const UNIDADES = ['un','ml','frasco','caixa','ampola','seringa','kit'];
 
+/* ===== Faturamento histórico (meses anteriores lançados manualmente) ===== */
+// permite registrar o faturamento/custo de meses que já passaram, sem precisar
+// lançar atendimento por atendimento. Alimenta o comparativo e a projeção.
+let HISTORICO = []; // [{ym:'2026-01', faturamento, custo}]
+let HIST_SEQ = 1;
+
 /* ---------- calc engine ---------- */
 function calc(){
   const at = DATA.atendimentos, ld = DATA.leads, cs = DATA.custos;
@@ -891,6 +899,7 @@ async function carregarTudo(){
         META.comparecimento=row.valores.comparecimento||0; META.conversao=row.valores.conversao||0; META.ocupacao=row.valores.ocupacao||0;
       }
       if(row.chave==='horas_mes' && row.valores && row.valores.horas){ META.horasMes=row.valores.horas; }
+      if(row.chave==='historico' && Array.isArray(row.valores)){ HISTORICO=row.valores; }
     });
     window.__lastCalc=null;
   } catch(e){ console.error('Erro ao carregar dados:', e); }
@@ -938,7 +947,7 @@ const TITLES={painel:['Painel','Visão Geral da Clínica'],atendimentos:['Cadast
   comissoes:['Financeiro','Metas & Bonificações'],pacientes:['Cadastros','Base de Pacientes'],
   documentos:['Controle','Documentos & Arquivo'],analise:['Relatórios','Análise Avançada de Dados'],
   funcionarios:['Cadastros','Funcionários'],caixa:['Financeiro','Livro-Caixa'],
-  relatorio:['Relatórios','Gerador de Relatório PDF'],config:['Controle','Configurações'],horaclinica:['Financeiro','Custo Operacional & Hora Clínica'],contas:['Financeiro','Contas a Pagar e Receber'],estoque:['Cadastros','Controle de Estoque']};
+  relatorio:['Relatórios','Gerador de Relatório PDF'],config:['Controle','Configurações'],horaclinica:['Financeiro','Custo Operacional & Hora Clínica'],contas:['Financeiro','Contas a Pagar e Receber'],estoque:['Cadastros','Controle de Estoque'],comparativo:['Relatórios','Comparativo Mensal'],checkup:['Relatórios','Check-up da Clínica']};
 
 function go(page){
   currentPage=page;
@@ -956,7 +965,7 @@ function go(page){
   ({painel:renderPainel,atendimentos:renderAtend,leads:renderLeads,custos:renderCustos,
     conformidade:renderConf,comissoes:renderComissoes,pacientes:renderPacientes,
     documentos:renderDocumentos,analise:renderAnalise,
-    funcionarios:renderFuncionarios,caixa:renderCaixa,relatorio:renderRelatorio,config:renderConfig,horaclinica:renderHoraClinica,contas:renderContas,estoque:renderEstoque}[page])(pg);
+    funcionarios:renderFuncionarios,caixa:renderCaixa,relatorio:renderRelatorio,config:renderConfig,horaclinica:renderHoraClinica,contas:renderContas,estoque:renderEstoque,comparativo:renderComparativo,checkup:renderCheckup}[page])(pg);
 }
 
 /* ============================ PAINEL ============================ */
@@ -2735,7 +2744,11 @@ async function salvarHoras(){
 
 /* ============================ CONTAS A PAGAR / RECEBER ============================ */
 let CONTAS_FILTRO='todas'; // todas | pagar | receber
+let CONTAS_EXPANDIDA=null;  // id da conta com parcelas abertas
+let CONTAS_VER_MAIS=false;  // ver todas as parcelas próximas
 function setContasFiltro(f){CONTAS_FILTRO=f;go('contas');}
+function toggleConta(id){ CONTAS_EXPANDIDA = (CONTAS_EXPANDIDA===String(id))?null:String(id); go('contas'); }
+function toggleVerMais(){ CONTAS_VER_MAIS=!CONTAS_VER_MAIS; go('contas'); }
 
 function renderContas(pg){
   // resumo
@@ -2760,6 +2773,7 @@ function renderContas(pg){
     const total=c.valorParcela*c.numParcelas;
     const cor = c.tipo==='pagar'?'var(--red)':'var(--green)';
     const natLabel={parcelada:'Parcelada',recorrente:'Recorrente',avulsa:'Avulsa'}[c.natureza]||'';
+    const aberto = CONTAS_EXPANDIDA===String(c.id);
     const parcChips=parcelas.map(p=>{
       const venc=p.vencimento?fmtDate(p.vencimento):'';
       const st=p.pago?'pago':(p.vencimento<hoje?'vencido':'aberto');
@@ -2769,21 +2783,30 @@ function renderContas(pg){
         <div><b style="font-size:13px">${p.n}/${c.numParcelas}</b> <span style="font-size:12px;color:var(--grey)">· venc. ${venc}</span></div>
         <div style="display:flex;align-items:center;gap:10px">
           <span style="font-weight:600;color:${cl};font-size:13px">${BRL(c.valorParcela)}</span>
-          ${p.pago?`<span style="font-size:11px;color:var(--green)">✓ ${c.tipo==='pagar'?'pago':'recebido'}</span>`:`<button class="btn ghost" style="padding:3px 10px;font-size:11px" onclick="quitarParcela('${c.id}',${p.n})">${c.tipo==='pagar'?'pagar':'receber'}</button>`}
+          ${p.pago
+            ? `<span style="font-size:11px;color:var(--green)">✓ ${c.tipo==='pagar'?'pago':'recebido'}</span> <button class="btn ghost" style="padding:2px 8px;font-size:10px" onclick="estornarParcela('${c.id}',${p.n})">estornar</button>`
+            : `<button class="btn ghost" style="padding:3px 10px;font-size:11px" onclick="quitarParcela('${c.id}',${p.n})">${c.tipo==='pagar'?'pagar':'receber'}</button>`}
         </div></div>`;
     }).join('');
-    return `<div class="panel" style="margin-bottom:16px">
-      <div class="panel-head">
-        <div><h3 style="font-size:17px">${c.descricao}</h3>
-          <div class="ph-sub"><span style="text-transform:uppercase;font-size:10px;letter-spacing:.5px;background:var(--cream);padding:2px 8px;border-radius:10px;color:var(--gold-d)">${c.tipo==='pagar'?'A pagar':'A receber'} · ${natLabel}</span> · ${c.categoria} · ${pagas}/${c.numParcelas} quitadas</div>
+    const proxTxt = proxima ? `Próxima: ${proxima.n}/${c.numParcelas} em ${fmtDate(proxima.vencimento)}` : 'Todas quitadas';
+    return `<div class="panel" style="margin-bottom:14px">
+      <div class="panel-head" style="cursor:pointer" onclick="toggleConta('${c.id}')">
+        <div><h3 style="font-size:17px">${c.descricao} <span style="font-size:13px;color:var(--grey)">${aberto?'▲':'▼'}</span></h3>
+          <div class="ph-sub"><span style="text-transform:uppercase;font-size:10px;letter-spacing:.5px;background:var(--cream);padding:2px 8px;border-radius:10px;color:var(--gold-d)">${c.tipo==='pagar'?'A pagar':'A receber'} · ${natLabel}</span> · ${c.categoria} · ${pagas}/${c.numParcelas} quitadas · <span style="color:var(--gold-d)">${proxTxt}</span></div>
         </div>
         <div style="text-align:right">
-          <div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">Total</div>
-          <div style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600;color:${cor}">${BRL(total)}</div>
-          <button class="btn ghost" style="padding:3px 10px;font-size:11px;margin-top:4px" onclick="excluirConta('${c.id}')">excluir</button>
+          <div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">Valor da parcela</div>
+          <div style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600;color:${cor}">${BRL(c.valorParcela)}</div>
+          <div style="font-size:11px;color:var(--grey)">total ${BRL(total)}</div>
         </div>
       </div>
-      <div style="margin-top:12px">${parcChips}</div>
+      ${aberto?`<div style="margin-top:14px">
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button class="btn ghost" style="padding:5px 12px;font-size:12px" onclick="editarConta('${c.id}')">Editar conta</button>
+          <button class="btn ghost" style="padding:5px 12px;font-size:12px;color:var(--red)" onclick="excluirConta('${c.id}')">Excluir conta</button>
+        </div>
+        ${parcChips}
+      </div>`:''}
     </div>`;
   };
 
@@ -2795,19 +2818,21 @@ function renderContas(pg){
     </div>
 
     <div class="panel" style="margin-bottom:18px">
-      <div class="toolbar"><div><h3>Próximos vencimentos</h3><div class="ph-sub">As 6 parcelas em aberto mais próximas</div></div>
+      <div class="toolbar"><div><h3>Próximos vencimentos</h3><div class="ph-sub">Parcelas em aberto mais próximas</div></div>
         <button class="btn" onclick="abrirContaForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Nova conta</button>
       </div>
       <div id="contaFormBox"></div>
       ${prox.length?`<table class="data"><thead><tr><th>Vencimento</th><th>Descrição</th><th class="ctr">Parcela</th><th class="ctr">Tipo</th><th class="num">Valor</th><th class="ctr">Ação</th></tr></thead><tbody>
-        ${prox.slice(0,6).map(x=>{const vencido=x.parc.vencimento<hoje;return `<tr>
+        ${prox.slice(0, CONTAS_VER_MAIS?prox.length:3).map(x=>{const vencido=x.parc.vencimento<hoje;return `<tr>
           <td style="${vencido?'color:var(--red);font-weight:600':''}">${fmtDate(x.parc.vencimento)}${vencido?' ⚠':''}</td>
           <td>${x.conta.descricao}</td><td class="ctr">${x.parc.n}/${x.conta.numParcelas}</td>
           <td class="ctr">${x.conta.tipo==='pagar'?'<span style="color:var(--red)">Pagar</span>':'<span style="color:var(--green)">Receber</span>'}</td>
           <td class="num">${BRL(x.conta.valorParcela)}</td>
           <td class="ctr"><button class="btn ghost" style="padding:3px 10px;font-size:11px" onclick="quitarParcela('${x.conta.id}',${x.parc.n})">${x.conta.tipo==='pagar'?'pagar':'receber'}</button></td>
         </tr>`;}).join('')}
-      </tbody></table>`:'<div style="color:var(--grey);font-size:13px;padding:14px 0">Nenhuma parcela em aberto.</div>'}
+      </tbody></table>
+      ${prox.length>3?`<div style="text-align:center;margin-top:12px"><button class="btn ghost" style="padding:6px 16px;font-size:12px" onclick="toggleVerMais()">${CONTAS_VER_MAIS?'Ver menos':'Ver todas ('+prox.length+' parcelas)'}</button></div>`:''}`
+      :'<div style="color:var(--grey);font-size:13px;padding:14px 0">Nenhuma parcela em aberto.</div>'}
     </div>
 
     <div class="panel">
@@ -2868,6 +2893,23 @@ async function salvarConta(){
   }
   const conta={tipo, descricao:v('ct_desc')||'Conta', categoria:v('ct_cat'), natureza:nat,
     valorParcela, numParcelas, carteira:+v('ct_cart')||(CARTEIRAS[0]&&CARTEIRAS[0].id), parcelas};
+  // edição?
+  const editId = document.getElementById('contaFormBox').dataset.editId;
+  if(editId){
+    const orig=CONTAS.find(c=>c.id==editId);
+    if(orig){
+      // preserva o status pago/lancId das parcelas que já existiam
+      conta.parcelas = parcelas.map(np=>{
+        const antiga=(orig.parcelas||[]).find(op=>op.n===np.n);
+        return antiga? {...np, pago:antiga.pago, lancId:antiga.lancId, vencimento:antiga.vencimento} : np;
+      });
+    }
+    if(MODO_NUVEM){
+      await sbUpdate('contas',editId,{tipo:conta.tipo,descricao:conta.descricao,categoria:conta.categoria,natureza:conta.natureza,valor_parcela:conta.valorParcela,num_parcelas:conta.numParcelas,carteira_id:document.getElementById('ct_cart').value||null,parcelas:conta.parcelas});
+      await carregarTudo(); go('contas'); return;
+    }
+    Object.assign(orig, conta); go('contas'); return;
+  }
   if(MODO_NUVEM){
     const reg={tipo:conta.tipo,descricao:conta.descricao,categoria:conta.categoria,natureza:conta.natureza,
       valor_parcela:conta.valorParcela,num_parcelas:conta.numParcelas,carteira_id:document.getElementById('ct_cart').value||null,
@@ -2903,8 +2945,40 @@ async function quitarParcela(contaId, n){
   p.pago=true;
   go('contas');
 }
-
-/* ============================ ESTOQUE ============================ */
+// estornar: desfaz o pagamento de uma parcela e remove o lançamento do caixa
+async function estornarParcela(contaId, n){
+  const c=CONTAS.find(x=>x.id==contaId); if(!c)return;
+  const p=(c.parcelas||[]).find(x=>x.n===n); if(!p||!p.pago)return;
+  if(MODO_NUVEM){
+    if(p.lancId){ await sb.from('lancamentos').delete().eq('id',p.lancId); }
+    const novasParc=c.parcelas.map(x=>x.n===n?{...x,pago:false,lancId:null}:x);
+    await sb.from('contas').update({parcelas:novasParc}).eq('id',contaId);
+    await carregarTudo(); go('contas'); return;
+  }
+  // local: remove o último lançamento que casa com a descrição
+  const desc=`${c.descricao} (${n}/${c.numParcelas})`;
+  const idx=CAIXA.map(l=>l.desc).lastIndexOf(desc);
+  if(idx>=0) CAIXA.splice(idx,1);
+  p.pago=false;
+  go('contas');
+}
+// editar conta: reabre o formulário preenchido (descrição, categoria, valor)
+function editarConta(id){
+  const c=CONTAS.find(x=>x.id==id); if(!c)return;
+  abrirContaForm();
+  setTimeout(()=>{
+    document.getElementById('ct_tipo').value=c.tipo;
+    document.getElementById('ct_nat').value=c.natureza; contaNatMudou();
+    document.getElementById('ct_cat').value=c.categoria;
+    document.getElementById('ct_desc').value=c.descricao;
+    document.getElementById('ct_valor').value=c.valorParcela;
+    if(document.getElementById('ct_nparc')) document.getElementById('ct_nparc').value=c.numParcelas;
+    const primeira=(c.parcelas&&c.parcelas[0])?c.parcelas[0].vencimento:'';
+    if(primeira) document.getElementById('ct_venc').value=primeira;
+    // guarda o id em edição
+    document.getElementById('contaFormBox').dataset.editId=id;
+  },60);
+}
 function renderEstoque(pg){
   const baixo=ESTOQUE.filter(e=>e.minimo>0 && e.quantidade<=e.minimo);
   const valorTotal=ESTOQUE.reduce((s,e)=>s+e.quantidade*e.custoUnit,0);
@@ -3016,6 +3090,316 @@ async function salvarMov(id,tipo){
   e.quantidade=novaQtd;
   EST_MOV.push({id:MOV_SEQ++,produtoId:id,data:hoje,tipo,quantidade:qtd,obs});
   go('estoque');
+}
+
+/* ============================ COMPARATIVO MENSAL ============================ */
+// agrega faturamento, custo e resultado por mês (dados reais)
+function dadosMensais(){
+  const meses={};
+  DATA.atendimentos.filter(a=>a.agenda==='Compareceu').forEach(a=>{
+    const ym=a.data.slice(0,7);
+    if(!meses[ym]) meses[ym]={ym,fat:0,custo:0,nAtend:0,receita:0};
+    meses[ym].fat+=a.valor; meses[ym].nAtend+=1;
+  });
+  CAIXA.forEach(l=>{
+    const ym=l.data.slice(0,7);
+    if(!meses[ym]) meses[ym]={ym,fat:0,custo:0,nAtend:0,receita:0};
+    if(l.tipo==='despesa') meses[ym].custo+=l.valor;
+    if(l.tipo==='receita') meses[ym].receita+=l.valor;
+  });
+  // mescla faturamento histórico lançado manualmente (soma ao que houver)
+  HISTORICO.forEach(h=>{
+    if(!meses[h.ym]) meses[h.ym]={ym:h.ym,fat:0,custo:0,nAtend:0,receita:0,historico:true};
+    meses[h.ym].receita += (h.faturamento||0);
+    meses[h.ym].custo += (h.custo||0);
+    meses[h.ym].historico=true;
+  });
+  return Object.values(meses).map(m=>({
+    ...m,
+    faturamento: m.receita||m.fat,
+    resultado: (m.receita||m.fat)-m.custo,
+    ticket: m.nAtend? (m.receita||m.fat)/m.nAtend : 0
+  })).sort((a,b)=>a.ym.localeCompare(b.ym));
+}
+
+function renderComparativo(pg){
+  const dados=dadosMensais();
+  // bloco de lançamento de faturamento histórico (sempre disponível)
+  const histForm=`
+    <div class="panel" style="margin-bottom:18px">
+      <div class="toolbar"><div><h3>Lançar faturamento de um mês</h3><div class="ph-sub">Registre meses anteriores (ou o mês atual) informando o total — sem precisar lançar atendimento por atendimento</div></div></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;align-items:end">
+        <div class="field"><label>Mês</label><input type="month" id="hist_mes" value="${new Date().toISOString().slice(0,7)}" style="padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);width:100%"></div>
+        <div class="field"><label>Faturamento do mês (R$)</label><input type="number" id="hist_fat" placeholder="0,00" style="padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);width:100%"></div>
+        <div class="field"><label>Custo do mês (R$) — opcional</label><input type="number" id="hist_custo" placeholder="0,00" style="padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);width:100%"></div>
+        <button class="btn" onclick="salvarHistorico()">Lançar mês</button>
+      </div>
+      ${HISTORICO.length?`<div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:8px">${HISTORICO.sort((a,b)=>a.ym.localeCompare(b.ym)).map(h=>`<span style="display:inline-flex;align-items:center;gap:8px;background:var(--cream);border:1px solid var(--line);border-radius:18px;padding:6px 14px;font-size:13px">${mesAnoCurto(h.ym)}: <b>${BRL(h.faturamento)}</b>${h.custo?` · custo ${BRL(h.custo)}`:''}<span style="cursor:pointer;color:var(--grey)" onclick="excluirHistorico('${h.ym}')">×</span></span>`).join('')}</div>`:''}
+      <div style="margin-top:10px;font-size:12px;color:var(--grey);font-style:italic">Dica: lance os últimos meses que já passaram para a projeção ficar mais precisa. Se já houver atendimentos lançados naquele mês, este valor soma ao que existe.</div>
+    </div>`;
+
+  if(!dados.length){
+    pg.innerHTML=histForm+`<div class="panel"><div class="ph-sub">Lance ao menos um mês acima para ver o comparativo e a projeção.</div></div>`;
+    return;
+  }
+  const ult=dados.slice(-6); // últimos 6 meses
+  const variacao=(atual,ant)=>ant?((atual-ant)/Math.abs(ant)*100):0;
+  const linhas=ult.map((m,i)=>{
+    const ant=i>0?ult[i-1]:null;
+    const vFat=ant?variacao(m.faturamento,ant.faturamento):null;
+    const vCusto=ant?variacao(m.custo,ant.custo):null;
+    const vRes=ant?variacao(m.resultado,ant.resultado):null;
+    const seta=(v,bomSubir)=>{if(v===null)return '';const up=v>=0;const bom=bomSubir?up:!up;return `<span style="font-size:11px;color:${bom?'var(--green)':'var(--red)'}">${up?'▲':'▼'} ${Math.abs(v).toFixed(0)}%</span>`;};
+    return `<tr>
+      <td style="font-weight:600">${mesAnoCurto(m.ym)}</td>
+      <td class="num">${BRL(m.faturamento)} ${seta(vFat,true)}</td>
+      <td class="num">${BRL(m.custo)} ${seta(vCusto,false)}</td>
+      <td class="num" style="font-weight:600;color:${m.resultado>=0?'var(--green)':'var(--red)'}">${BRL(m.resultado)} ${seta(vRes,true)}</td>
+      <td class="num">${BRL(m.ticket)}</td>
+      <td class="ctr">${m.nAtend}</td>
+    </tr>`;
+  }).join('');
+  // médias
+  const mFat=ult.reduce((s,m)=>s+m.faturamento,0)/ult.length;
+  const mCusto=ult.reduce((s,m)=>s+m.custo,0)/ult.length;
+  const mRes=ult.reduce((s,m)=>s+m.resultado,0)/ult.length;
+  // melhor e pior mês
+  const melhor=[...ult].sort((a,b)=>b.resultado-a.resultado)[0];
+  const pior=[...ult].sort((a,b)=>a.resultado-b.resultado)[0];
+  // projeção: tendência linear simples do faturamento
+  const projBloco=projecaoMensal(dados);
+
+  pg.innerHTML=histForm+`
+    <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="kpi" style="animation-delay:0ms"><div class="label">Faturamento médio/mês</div><div class="val">${BRL(mFat)}</div><div class="meta">últimos ${ult.length} meses</div></div>
+      <div class="kpi" style="animation-delay:70ms"><div class="label">Custo médio/mês</div><div class="val" style="color:var(--red)">${BRL(mCusto)}</div><div class="meta">média de despesas</div></div>
+      <div class="kpi ${mRes>=0?'green':'green neg'}" style="animation-delay:140ms"><div class="label">Resultado médio/mês</div><div class="val">${BRL(mRes)}</div><div class="meta">receita − custo</div></div>
+    </div>
+
+    ${projBloco}
+
+    <div class="panel" style="margin-bottom:18px">
+      <h3>Evolução lado a lado</h3><div class="ph-sub">Faturamento, custo e resultado mês a mês — com variação sobre o mês anterior</div>
+      <div class="chart-wrap" style="height:300px;margin:16px 0"><canvas id="chComp"></canvas></div>
+      <table class="data">
+        <thead><tr><th>Mês</th><th class="num">Faturamento</th><th class="num">Custo</th><th class="num">Resultado</th><th class="num">Ticket médio</th><th class="ctr">Atend.</th></tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    </div>
+
+    <div class="row two-eq">
+      <div class="panel" style="border-left:3px solid var(--green)"><h3>Melhor mês</h3><div class="ph-sub">Maior resultado</div>
+        <div style="font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:600;margin-top:8px">${mesAnoCurto(melhor.ym)}</div>
+        <div style="color:var(--green);font-size:18px;font-weight:600">${BRL(melhor.resultado)}</div>
+        <div style="font-size:13px;color:var(--grey);margin-top:6px">Faturamento ${BRL(melhor.faturamento)} · custo ${BRL(melhor.custo)}</div>
+      </div>
+      <div class="panel" style="border-left:3px solid var(--red)"><h3>Mês mais apertado</h3><div class="ph-sub">Menor resultado</div>
+        <div style="font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:600;margin-top:8px">${mesAnoCurto(pior.ym)}</div>
+        <div style="color:${pior.resultado>=0?'var(--green)':'var(--red)'};font-size:18px;font-weight:600">${BRL(pior.resultado)}</div>
+        <div style="font-size:13px;color:var(--grey);margin-top:6px">Faturamento ${BRL(pior.faturamento)} · custo ${BRL(pior.custo)}</div>
+      </div>
+    </div>`;
+
+  if(typeof Chart!=='undefined'){
+    const ctx=document.getElementById('chComp');
+    if(charts.comp)charts.comp.destroy();
+    const isLight=document.body.classList.contains('light');
+    const grid=isLight?'#E7E0D4':'#383229';
+    const tick=isLight?'#8A8175':'#B0A899';
+    charts.comp=new Chart(ctx,{type:'bar',
+      data:{labels:ult.map(m=>mesAnoCurto(m.ym)),datasets:[
+        {label:'Faturamento',data:ult.map(m=>m.faturamento),backgroundColor:'#D8B468',borderRadius:5},
+        {label:'Custo',data:ult.map(m=>m.custo),backgroundColor:'#C77B6F',borderRadius:5},
+        {type:'line',label:'Resultado',data:ult.map(m=>m.resultado),borderColor:'#74B98C',backgroundColor:'#74B98C',tension:.3,borderWidth:2,pointRadius:4,fill:false}
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{labels:{color:tick,font:{size:12}}},tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${BRL(c.parsed.y)}`}}},
+        scales:{x:{grid:{color:grid},ticks:{color:tick}},y:{grid:{color:grid},ticks:{color:tick,callback:v=>'R$'+(v/1000)+'k'}}}}});
+  }
+}
+
+// projeção: regressão linear simples sobre o faturamento dos meses lançados
+function projecaoMensal(dados){
+  if(dados.length<2){
+    return `<div class="panel" style="margin-bottom:18px;border-left:3px solid var(--gold)"><h3>Projeção</h3><div class="ph-sub">Tendência da clínica</div>
+      <div style="font-size:13px;color:var(--grey);margin-top:8px">Lance pelo menos 2 meses para o sistema projetar a tendência dos próximos meses.</div></div>`;
+  }
+  // regressão linear y = a + b*x sobre faturamento
+  const n=dados.length;
+  const xs=dados.map((_,i)=>i);
+  const ys=dados.map(m=>m.faturamento);
+  const sx=xs.reduce((a,b)=>a+b,0), sy=ys.reduce((a,b)=>a+b,0);
+  const sxy=xs.reduce((s,x,i)=>s+x*ys[i],0), sxx=xs.reduce((s,x)=>s+x*x,0);
+  const b=(n*sxy-sx*sy)/(n*sxx-sx*sx||1);
+  const a=(sy-b*sx)/n;
+  const proj=k=>Math.max(0,Math.round((a+b*(n-1+k))/100)*100);
+  // próximos 3 meses
+  const ultYm=dados[dados.length-1].ym;
+  const proximos=[1,2,3].map(k=>{
+    const d=new Date(ultYm+'-01T00:00:00'); d.setMonth(d.getMonth()+k);
+    return {ym:d.toISOString().slice(0,7), val:proj(k)};
+  });
+  const tendencia = b>=0?'crescimento':'queda';
+  const corTend = b>=0?'var(--green)':'var(--red)';
+  const mediaCusto=dados.slice(-3).reduce((s,m)=>s+m.custo,0)/Math.min(3,dados.length);
+  return `
+    <div class="panel" style="margin-bottom:18px;border-left:3px solid var(--gold)">
+      <h3>Projeção dos próximos meses</h3><div class="ph-sub">Baseada na tendência dos ${n} meses lançados</div>
+      <div style="display:flex;align-items:center;gap:10px;margin:10px 0 16px">
+        <span style="font-size:13px;color:var(--grey)">Tendência de faturamento:</span>
+        <span style="font-weight:600;color:${corTend}">${b>=0?'▲':'▼'} ${tendencia} de ${BRL(Math.abs(b))}/mês</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+        ${proximos.map(p=>{
+          const resultadoProj=p.val-mediaCusto;
+          return `<div style="padding:14px;border-radius:12px;background:var(--cream);border:1px solid var(--line)">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--grey)">${mesAnoCurto(p.ym)}</div>
+            <div style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600;color:var(--gold);margin:4px 0">${BRL(p.val)}</div>
+            <div style="font-size:12px;color:var(--grey)">faturamento previsto</div>
+            <div style="font-size:12px;color:${resultadoProj>=0?'var(--green)':'var(--red)'};margin-top:4px">resultado ~${BRL(resultadoProj)}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:var(--grey);font-style:italic">Projeção estatística pela tendência dos meses lançados (considera custo médio dos últimos 3 meses). Quanto mais meses, mais precisa.</div>
+    </div>`;
+}
+async function salvarHistorico(){
+  const ym=document.getElementById('hist_mes').value;
+  const fat=+document.getElementById('hist_fat').value||0;
+  const custo=+document.getElementById('hist_custo').value||0;
+  if(!ym||(!fat&&!custo))return;
+  const existente=HISTORICO.find(h=>h.ym===ym);
+  if(existente){ existente.faturamento=fat; existente.custo=custo; }
+  else { HISTORICO.push({ym,faturamento:fat,custo}); }
+  if(MODO_NUVEM){
+    const { data:{ user } } = await sb.auth.getUser();
+    await sb.from('configuracoes').upsert({user_id:user.id,chave:'historico',valores:HISTORICO},{onConflict:'user_id,chave'});
+  }
+  go('comparativo');
+}
+async function excluirHistorico(ym){
+  HISTORICO=HISTORICO.filter(h=>h.ym!==ym);
+  if(MODO_NUVEM){
+    const { data:{ user } } = await sb.auth.getUser();
+    await sb.from('configuracoes').upsert({user_id:user.id,chave:'historico',valores:HISTORICO},{onConflict:'user_id,chave'});
+  }
+  go('comparativo');
+}
+
+/* ============================ CHECK-UP DA CLÍNICA ============================ */
+function renderCheckup(pg){
+  const dados=dadosMensais();
+  const mesRef = dados.length? dados[dados.length-1].ym : new Date().toISOString().slice(0,7);
+  const mesAtual = dados.find(m=>m.ym===mesRef) || {faturamento:0,custo:0,resultado:0,nAtend:0,ticket:0};
+  const mesAnt = dados.length>1? dados[dados.length-2] : null;
+  const cc=calcCaixa();
+  const achados=[]; // {nivel:'critico'|'atencao'|'bom', titulo, texto, acao}
+
+  // 1. Margem / resultado
+  const margem = mesAtual.faturamento? mesAtual.resultado/mesAtual.faturamento : 0;
+  if(mesAtual.resultado<0){
+    achados.push({nivel:'critico',titulo:'Resultado negativo no mês',texto:`A clínica fechou ${mesAnoCurto(mesRef)} com prejuízo de ${BRL(Math.abs(mesAtual.resultado))} (custo maior que a receita).`,acao:'Revise os maiores gastos abaixo e veja onde dá para cortar, ou aumente o faturamento/ticket.'});
+  } else if(margem<0.15 && mesAtual.faturamento>0){
+    achados.push({nivel:'atencao',titulo:'Margem apertada',texto:`A margem do mês foi de ${PCT0(margem)} — abaixo do saudável (20-30%).`,acao:'Avalie reajustar preços ou reduzir custos fixos.'});
+  } else if(mesAtual.faturamento>0){
+    achados.push({nivel:'bom',titulo:'Margem saudável',texto:`Margem de ${PCT0(margem)} no mês. Resultado positivo de ${BRL(mesAtual.resultado)}.`,acao:''});
+  }
+
+  // 2. Crescimento de custo vs mês anterior
+  if(mesAnt && mesAnt.custo>0){
+    const varCusto=(mesAtual.custo-mesAnt.custo)/mesAnt.custo;
+    if(varCusto>0.2){
+      achados.push({nivel:'atencao',titulo:'Custos subiram bastante',texto:`As despesas cresceram ${PCT0(varCusto)} em relação a ${mesAnoCurto(mesAnt.ym)} (de ${BRL(mesAnt.custo)} para ${BRL(mesAtual.custo)}).`,acao:'Veja na composição abaixo qual categoria puxou o aumento.'});
+    }
+  }
+
+  // 3. Maiores categorias de despesa (concentração)
+  const despMes=CAIXA.filter(l=>l.tipo==='despesa'&&l.data.slice(0,7)===mesRef);
+  const totalDesp=despMes.reduce((s,l)=>s+l.valor,0);
+  const porCat={}; despMes.forEach(l=>porCat[l.categoria]=(porCat[l.categoria]||0)+l.valor);
+  const catsOrd=Object.entries(porCat).map(([cat,v])=>({cat,v,share:totalDesp?v/totalDesp:0})).sort((a,b)=>b.v-a.v);
+  if(catsOrd.length && catsOrd[0].share>0.4){
+    achados.push({nivel:'atencao',titulo:`"${catsOrd[0].cat}" concentra muito custo`,texto:`Essa categoria sozinha representa ${PCT0(catsOrd[0].share)} de todas as despesas (${BRL(catsOrd[0].v)}).`,acao:'Concentração alta num único ponto é risco — vale negociar ou buscar alternativas nessa categoria.'});
+  }
+
+  // 4. Contas vencidas
+  const hoje=new Date().toISOString().slice(0,10);
+  let vencidas=0, valVencido=0;
+  CONTAS.forEach(c=>{(c.parcelas||[]).forEach(p=>{if(!p.pago && c.tipo==='pagar' && p.vencimento<hoje){vencidas++;valVencido+=c.valorParcela;}});});
+  if(vencidas>0){
+    achados.push({nivel:'critico',titulo:`${vencidas} parcela(s) vencida(s)`,texto:`Há ${BRL(valVencido)} em contas a pagar já vencidas.`,acao:'Quite ou renegocie para evitar juros e multas.'});
+  }
+
+  // 5. Estoque abaixo do mínimo
+  const estBaixo=ESTOQUE.filter(e=>e.minimo>0 && e.quantidade<=e.minimo);
+  if(estBaixo.length>0){
+    achados.push({nivel:'atencao',titulo:`${estBaixo.length} produto(s) abaixo do mínimo`,texto:`Itens precisando reposição: ${estBaixo.map(e=>e.produto).join(', ')}.`,acao:'Programe a compra para não faltar durante atendimentos.'});
+  }
+
+  // 6. Saldo de caixa baixo
+  if(cc.saldoTotal>=0 && cc.saldoTotal< (mesAtual.custo||0)*0.5 && mesAtual.custo>0){
+    achados.push({nivel:'atencao',titulo:'Reserva de caixa baixa',texto:`O saldo em caixa (${BRL(cc.saldoTotal)}) cobre menos de meio mês de custos. Reserva recomendada: pelo menos 1 a 3 meses.`,acao:'Considere reforçar a reserva antes de novos investimentos.'});
+  } else if(cc.saldoTotal<0){
+    achados.push({nivel:'critico',titulo:'Caixa negativo',texto:`O saldo em caixa está negativo (${BRL(cc.saldoTotal)}).`,acao:'Atenção imediata ao fluxo de caixa.'});
+  }
+
+  // 7. Concentração de receita em poucos procedimentos
+  const k=calc();
+  if(k.porProc && k.porProc.length && k.porProc[0].share>0.5){
+    achados.push({nivel:'atencao',titulo:'Receita concentrada num procedimento',texto:`"${k.porProc[0].proc}" responde por ${PCT0(k.porProc[0].share)} do faturamento.`,acao:'Dependência de um só serviço é risco — diversificar protege o negócio.'});
+  }
+
+  // 8. Comparecimento baixo
+  if(k.txComp>0 && k.txComp<0.8 && k.nAtend>0){
+    achados.push({nivel:'atencao',titulo:'Taxa de comparecimento baixa',texto:`${PCT0(k.txComp)} dos agendamentos comparecem. Faltas representam receita perdida.`,acao:'Reforce lembretes e política de confirmação.'});
+  }
+
+  if(!achados.length){
+    achados.push({nivel:'bom',titulo:'Tudo sob controle',texto:'Não encontrei pontos críticos com os dados atuais. Continue lançando para um diagnóstico mais preciso.',acao:''});
+  }
+
+  // ordena: crítico > atenção > bom
+  const ordem={critico:0,atencao:1,bom:2};
+  achados.sort((a,b)=>ordem[a.nivel]-ordem[b.nivel]);
+  const nCrit=achados.filter(a=>a.nivel==='critico').length;
+  const nAten=achados.filter(a=>a.nivel==='atencao').length;
+
+  const cor={critico:'var(--red)',atencao:'var(--amber)',bom:'var(--green)'};
+  const bg={critico:'var(--red-bg)',atencao:'var(--amber-bg)',bom:'var(--green-bg)'};
+  const icone={critico:'⚠',atencao:'!',bom:'✓'};
+  const rotulo={critico:'Crítico',atencao:'Atenção',bom:'Tudo certo'};
+
+  const cards=achados.map(a=>`
+    <div class="panel" style="margin-bottom:14px;border-left:4px solid ${cor[a.nivel]}">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:${bg[a.nivel]};color:${cor[a.nivel]};font-weight:700;font-size:13px">${icone[a.nivel]}</span>
+        <span style="font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:${cor[a.nivel]};font-weight:600">${rotulo[a.nivel]}</span>
+        <h3 style="font-size:16px;margin-left:2px">${a.titulo}</h3>
+      </div>
+      <div style="font-size:14px;color:var(--ink);margin-bottom:${a.acao?'8px':'0'};padding-left:34px">${a.texto}</div>
+      ${a.acao?`<div style="font-size:13px;color:var(--grey);padding-left:34px"><b style="color:var(--gold-d)">→ </b>${a.acao}</div>`:''}
+    </div>`).join('');
+
+  // composição de custo (referência)
+  const catTabela=catsOrd.length?catsOrd.map(c=>`<tr><td>${c.cat}</td><td class="num">${BRL(c.v)}</td><td class="num" style="color:var(--grey)">${PCT0(c.share)}</td></tr>`).join(''):'<tr><td colspan="3" style="text-align:center;color:var(--grey);padding:18px">Sem despesas lançadas neste mês.</td></tr>';
+
+  pg.innerHTML=`
+    <div class="panel" style="margin-bottom:18px">
+      <div class="panel-head"><div><h3 style="font-size:19px">Check-up da Clínica</h3><div class="ph-sub">Diagnóstico automático de ${mesAnoCurto(mesRef)} — pontos que merecem sua atenção</div></div></div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:6px">
+        <div style="flex:1;min-width:130px;text-align:center;padding:14px;border-radius:12px;background:var(--red-bg)"><div style="font-size:30px;font-weight:700;color:var(--red);font-family:'Cormorant Garamond',serif">${nCrit}</div><div style="font-size:12px;color:var(--grey)">pontos críticos</div></div>
+        <div style="flex:1;min-width:130px;text-align:center;padding:14px;border-radius:12px;background:var(--amber-bg)"><div style="font-size:30px;font-weight:700;color:var(--amber);font-family:'Cormorant Garamond',serif">${nAten}</div><div style="font-size:12px;color:var(--grey)">pontos de atenção</div></div>
+        <div style="flex:1;min-width:130px;text-align:center;padding:14px;border-radius:12px;background:var(--green-bg)"><div style="font-size:30px;font-weight:700;color:var(--green);font-family:'Cormorant Garamond',serif">${achados.filter(a=>a.nivel==='bom').length}</div><div style="font-size:12px;color:var(--grey)">pontos positivos</div></div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:8px;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);font-weight:600">Diagnóstico</div>
+    ${cards}
+
+    <div class="panel" style="margin-top:18px">
+      <h3>Para onde o dinheiro foi em ${mesAnoCurto(mesRef)}</h3><div class="ph-sub">Maiores categorias de despesa — base para decidir onde economizar</div>
+      <table class="data" style="margin-top:12px"><thead><tr><th>Categoria</th><th class="num">Valor</th><th class="num">% do total</th></tr></thead><tbody>${catTabela}</tbody></table>
+    </div>`;
 }
 
 </script>
