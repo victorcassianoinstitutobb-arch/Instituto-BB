@@ -257,6 +257,35 @@ table.data tbody tr:hover{background:var(--cream)}
   font-family:inherit;font-weight:600;font-size:13.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;transition:.16s}
 .new-btn:hover{background:var(--gold-l)}
 .new-btn svg{width:16px;height:16px;stroke-width:2.5}
+
+/* ---------- Toast (feedback de ação) ---------- */
+#toastWrap{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:2000;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+.toast{background:var(--black);color:var(--ivory);padding:11px 20px;border-radius:11px;font-size:13.5px;font-weight:500;
+  box-shadow:0 6px 24px rgba(0,0,0,.3);border:1px solid var(--gold-d);display:flex;align-items:center;gap:9px;
+  animation:toastIn .3s cubic-bezier(.22,1,.36,1);max-width:90vw}
+.toast svg{width:16px;height:16px;stroke:var(--gold);stroke-width:2.4;flex-shrink:0}
+.toast.out{animation:toastOut .3s ease forwards}
+@keyframes toastIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes toastOut{to{opacity:0;transform:translateY(10px)}}
+
+/* ---------- Busca em tabelas ---------- */
+.tbl-search{display:flex;align-items:center;gap:8px;background:var(--cream);border:1px solid var(--line);
+  border-radius:9px;padding:7px 12px;margin-bottom:14px;max-width:320px}
+.tbl-search svg{width:15px;height:15px;stroke:var(--grey);stroke-width:2;flex-shrink:0}
+.tbl-search input{border:none;background:none;outline:none;font-family:inherit;font-size:13.5px;color:var(--ink);width:100%}
+.tbl-search input::placeholder{color:var(--grey)}
+
+/* ---------- Tabelas → cards no mobile ---------- */
+@media(max-width:720px){
+  table.data.cardify thead{display:none}
+  table.data.cardify, table.data.cardify tbody, table.data.cardify tr, table.data.cardify td{display:block;width:100%}
+  table.data.cardify tr{background:var(--paper);border:1px solid var(--line);border-radius:12px;
+    padding:12px 14px;margin-bottom:11px;box-shadow:var(--shadow-sm)}
+  table.data.cardify td{border:none;padding:5px 0;text-align:left !important;display:flex;justify-content:space-between;gap:14px}
+  table.data.cardify td::before{content:attr(data-label);font-size:11px;letter-spacing:.6px;text-transform:uppercase;
+    color:var(--grey);font-weight:600;flex-shrink:0}
+  table.data.cardify td.num,table.data.cardify td.ctr{text-align:right}
+}
 </style>
 </head>
 <body>
@@ -365,6 +394,14 @@ table.data tbody tr:hover{background:var(--cream)}
    ============================================================ */
 
 const BRL = n => 'R$ ' + Math.round(n).toLocaleString('pt-BR');
+function toast(msg){
+  let wrap=document.getElementById('toastWrap');
+  if(!wrap){ wrap=document.createElement('div'); wrap.id='toastWrap'; document.body.appendChild(wrap); }
+  const el=document.createElement('div'); el.className='toast';
+  el.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg><span>'+msg+'</span>';
+  wrap.appendChild(el);
+  setTimeout(()=>{ el.classList.add('out'); setTimeout(()=>el.remove(),300); }, 2600);
+}
 const BRL2 = n => n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const PCT = n => (n*100).toFixed(1).replace('.',',') + '%';
 const PCT0 = n => Math.round(n*100) + '%';
@@ -658,6 +695,11 @@ let EST_MOV = [];
 let MOV_SEQ = 1;
 const UNIDADES = ['un','ml','frasco','caixa','ampola','seringa','kit'];
 
+/* ===== Fichas técnicas (insumos consumidos por procedimento) =====
+   FICHAS = { 'Toxina Botulínica':[{produtoId, qtd}], ... }
+   Usada para baixa automática de estoque e cálculo de custo real por item. */
+let FICHAS = {};
+
 /* ===== Faturamento histórico (meses anteriores lançados manualmente) ===== */
 // permite registrar o faturamento/custo de meses que já passaram, sem precisar
 // lançar atendimento por atendimento. Alimenta o comparativo e a projeção.
@@ -693,11 +735,23 @@ function calc(){
     fechados:ld.filter(l=>l.canal===c&&l.fechou).length,
     receita:at.filter(a=>a.canal===c&&a.agenda==='Compareceu').reduce((s,a)=>s+a.valor,0),
   })).map(x=>({...x,conv:x.leads?x.fechados/x.leads:0}));
-  const porProc = PROCS.map(p=>({
-    proc:p,
-    qtd:compareceu.filter(a=>a.proc===p).length,
-    receita:compareceu.filter(a=>a.proc===p).reduce((s,a)=>s+a.valor,0),
-  })).map(x=>({...x,share:faturamento?x.receita/faturamento:0})).filter(x=>x.qtd>0);
+  // ---- agregação por procedimento: usa os ITENS quando existem; senão, o proc único (modo legado) ----
+  // procStats(p) => {qtd, receita} considerando atendimentos comparecidos
+  const procStats = (p)=>{
+    let qtd=0, receita=0;
+    compareceu.forEach(a=>{
+      if(a.itens && a.itens.length){
+        a.itens.forEach(it=>{ if(it.proc===p){ qtd++; receita+=(+it.valor||0); } });
+      } else if(a.proc===p){
+        qtd++; receita+=(+a.valor||0);
+      }
+    });
+    return {qtd, receita};
+  };
+  const porProc = PROCS.map(p=>{
+    const s=procStats(p);
+    return {proc:p, qtd:s.qtd, receita:s.receita};
+  }).map(x=>({...x,share:faturamento?x.receita/faturamento:0})).filter(x=>x.qtd>0);
   const cats = [...new Set(cs.map(c=>c.cat))];
   const porCat = cats.map(ca=>({cat:ca,valor:cs.filter(c=>c.cat===ca).reduce((s,c)=>s+c.valor,0)}))
     .sort((a,b)=>b.valor-a.valor);
@@ -721,11 +775,10 @@ function calc(){
   };
   const comandas = compareceu.filter(a=>a.valor>0).length;
   // ---- ranking de procedimentos por nº de atendimentos ----
-  const ranking = PROCS.map(p=>({
-    nome:p,
-    qtd:compareceu.filter(a=>a.proc===p).length,
-    receita:compareceu.filter(a=>a.proc===p).reduce((s,a)=>s+a.valor,0)
-  })).filter(x=>x.qtd>0).sort((a,b)=>b.qtd-a.qtd);
+  const ranking = PROCS.map(p=>{
+    const s=procStats(p);
+    return {nome:p, qtd:s.qtd, receita:s.receita};
+  }).filter(x=>x.qtd>0).sort((a,b)=>b.qtd-a.qtd);
   // ranking de pacientes por valor
   const rankPac = [...new Set(compareceu.map(a=>a.paciente))].map(nome=>({
     nome, valor:compareceu.filter(a=>a.paciente===nome).reduce((s,a)=>s+a.valor,0),
@@ -736,9 +789,8 @@ function calc(){
   const comissaoBaseTotal = compareceu.reduce((s,a)=>s+a.valor,0);
   const comissaoTotal = comissaoBaseTotal * META.comissaoPercent;
   const comissaoPorProc = PROCS.map(p=>{
-    const itens=compareceu.filter(a=>a.proc===p);
-    const base=itens.reduce((s,a)=>s+a.valor,0);
-    return {proc:p, qtd:itens.length, base, comissao:base*META.comissaoPercent};
+    const s=procStats(p);
+    return {proc:p, qtd:s.qtd, base:s.receita, comissao:s.receita*META.comissaoPercent};
   }).filter(x=>x.qtd>0).sort((a,b)=>b.comissao-a.comissao);
 
   // ---- base de pacientes (consolida atendimentos por pessoa) ----
@@ -871,7 +923,7 @@ async function carregarTudo(){
     CAT_RECEITA = (cat.data||[]).filter(c=>c.tipo==='receita').map(c=>c.nome);
     CAT_DESPESA = (cat.data||[]).filter(c=>c.tipo==='despesa').map(c=>c.nome);
     CAIXA = (lanc.data||[]).map(l=>({id:l.id,data:l.data,tipo:l.tipo,categoria:l.categoria,desc:l.descricao,valor:+l.valor,carteira:l.carteira_id,carteiraDest:l.carteira_dest}));
-    DATA.atendimentos = (atend.data||[]).map(a=>({id:a.id,data:a.data,paciente:a.paciente,proc:a.procedimento,func:a.funcionario,canal:a.canal,valor:+a.valor,custo:+a.custo,pag:a.pagamento,agenda:a.agenda}));
+    DATA.atendimentos = (atend.data||[]).map(a=>({id:a.id,data:a.data,paciente:a.paciente,proc:a.procedimento,func:a.funcionario,canal:a.canal,valor:+a.valor,custo:+a.custo,pag:a.pagamento,agenda:a.agenda,itens:[]}));
     CAPTACAO = (capt.data||[]).map(c=>({id:c.id,data:c.data,plataforma:c.plataforma,seguidores:c.seguidores,leads:c.leads,agendadas:c.agendadas,investido:+c.investido,gasto:+c.gasto,campanhas:c.campanhas}));
     METAS = (met.data||[]).map(m=>({id:m.id,funcId:m.func_id,escopo:m.escopo,tipo:m.tipo,periodo:m.periodo,faixas:m.faixas}));
     DATA.conformidade = (conf.data||[]).map(c=>({id:c.id,item:c.item,resp:c.responsavel,status:c.status}));
@@ -884,6 +936,25 @@ async function carregarTudo(){
     CONTAS = (contasR.data||[]).map(c=>({id:c.id,tipo:c.tipo,descricao:c.descricao,categoria:c.categoria,natureza:c.natureza,valorParcela:+c.valor_parcela,numParcelas:c.num_parcelas,carteira:c.carteira_id,parcelas:c.parcelas||[]}));
     ESTOQUE = (estR.data||[]).map(e=>({id:e.id,produto:e.produto,unidade:e.unidade,quantidade:+e.quantidade,minimo:+e.minimo,custoUnit:+e.custo_unit}));
     EST_MOV = (movR.data||[]).map(m=>({id:m.id,produtoId:m.produto_id,data:m.data,tipo:m.tipo,quantidade:+m.quantidade,obs:m.obs}));
+    // ---- itens de atendimento (múltiplos procedimentos por sessão) ----
+    try {
+      const itensR = await sb.from('atendimento_itens').select('*').order('criado_em');
+      const porAtend = {};
+      (itensR.data||[]).forEach(it=>{
+        (porAtend[it.atendimento_id] = porAtend[it.atendimento_id] || []).push(
+          {id:it.id,proc:it.procedimento,valor:+it.valor,custo:+it.custo,func:it.funcionario||''}
+        );
+      });
+      DATA.atendimentos.forEach(a=>{ a.itens = porAtend[a.id] || []; });
+    } catch(e){ /* tabela ainda não criada — segue sem itens, sem quebrar nada */ }
+    // ---- fichas técnicas (insumos por procedimento) ----
+    try {
+      const fichasR = await sb.from('fichas_tecnicas').select('*');
+      FICHAS = {};
+      (fichasR.data||[]).forEach(f=>{
+        (FICHAS[f.procedimento] = FICHAS[f.procedimento] || []).push({produtoId:f.produto_id, qtd:+f.quantidade});
+      });
+    } catch(e){ FICHAS = {}; }
     // leads e custos antigos (exemplo) não são usados na nuvem — zera para o painel refletir a realidade
     DATA.leads = [];
     DATA.custos = [];
@@ -1168,76 +1239,280 @@ function drawCharts(k){
 
 /* ============================ ATENDIMENTOS ============================ */
 function renderAtend(pg){
-  const rows=DATA.atendimentos;
+  const filtro=(window.__atendBusca||'').toLowerCase().trim();
+  let rows=DATA.atendimentos;
+  if(filtro){
+    rows=rows.filter(a=>{
+      const itensTxt=(a.itens||[]).map(it=>it.proc).join(' ');
+      return [a.paciente,a.proc,itensTxt,a.func,a.canal,a.data].join(' ').toLowerCase().includes(filtro);
+    });
+  }
+  const procCell=(a)=>{
+    if(a.itens && a.itens.length>1){
+      const tags=a.itens.map(it=>`<span style="display:inline-block;background:var(--cream);border:1px solid var(--gold-l);border-radius:6px;padding:1px 7px;font-size:11px;margin:1px 2px 1px 0">${it.proc}</span>`).join('');
+      return `<div style="display:flex;flex-wrap:wrap;gap:1px;justify-content:flex-end">${tags}</div>`;
+    }
+    return a.proc||'—';
+  };
   const body=rows.map(a=>`<tr>
-    <td>${fmtDate(a.data)}</td><td>${a.paciente}</td><td>${a.proc}</td>
-    <td style="font-size:12.5px">${a.func||'—'}</td>
-    <td>${a.canal}</td><td class="num">${BRL(a.valor)}</td>
-    <td class="ctr">${pagPill(a.pag)}</td><td class="ctr">${agPill(a.agenda)}</td>
-    <td class="ctr"><button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="editarAtend('${a.id}')">editar</button> <button class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="excluirAtend('${a.id}')">×</button></td>
+    <td data-label="Data">${fmtDate(a.data)}</td><td data-label="Paciente">${a.paciente}</td><td data-label="Procedimento">${procCell(a)}</td>
+    <td data-label="Realizado por" style="font-size:12.5px">${a.func||'—'}</td>
+    <td data-label="Canal">${a.canal}</td><td data-label="Valor" class="num">${BRL(a.valor)}</td>
+    <td data-label="Pagamento" class="ctr">${pagPill(a.pag)}</td><td data-label="Agenda" class="ctr">${agPill(a.agenda)}</td>
+    <td data-label="Ações" class="ctr"><button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="editarAtend('${a.id}')">editar</button> <button class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="excluirAtend('${a.id}')">×</button></td>
   </tr>`).join('');
   pg.innerHTML=`
     <div class="panel">
       <div class="toolbar">
-        <div><h3>Atendimentos do período</h3><div class="ph-sub">${rows.length} registros · receita ${BRL(rows.filter(a=>a.agenda==='Compareceu').reduce((s,a)=>s+a.valor,0))}</div></div>
-        <button class="btn" onclick="abrirAtendForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo atendimento</button>
+        <div><h3>Atendimentos do período</h3><div class="ph-sub">${rows.length} registro(s) · receita ${BRL(rows.filter(a=>a.agenda==='Compareceu').reduce((s,a)=>s+a.valor,0))}</div></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn ghost" onclick="abrirImportCSV()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Importar</button>
+          <button class="btn" onclick="abrirAtendForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo atendimento</button>
+        </div>
       </div>
       <div id="atendFormBox"></div>
+      <div id="importBox"></div>
+      <label class="tbl-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" placeholder="Buscar por paciente, procedimento, profissional…" value="${window.__atendBusca||''}" oninput="window.__atendBusca=this.value;clearTimeout(window.__atendBuscaT);window.__atendBuscaT=setTimeout(()=>go('atendimentos'),250)">
+      </label>
       <div style="font-size:12px;color:var(--grey);font-style:italic;margin-bottom:14px">
         Dica: registre cada atendimento com a <b>data real</b> em que aconteceu, mesmo que você lance vários de uma vez no fim da semana. Assim os relatórios diário, semanal e mensal ficam todos corretos.
       </div>
-      <table class="data">
+      <table class="data cardify">
         <thead><tr><th>Data</th><th>Paciente</th><th>Procedimento</th><th>Realizado por</th><th>Canal</th><th class="num">Valor</th><th class="ctr">Pagamento</th><th class="ctr">Agenda</th><th class="ctr">Ações</th></tr></thead>
-        <tbody>${body||'<tr><td colspan="9" style="text-align:center;color:var(--grey);padding:24px">Nenhum atendimento ainda.</td></tr>'}</tbody>
+        <tbody>${body||'<tr><td colspan="9" style="text-align:center;color:var(--grey);padding:24px">Nenhum atendimento encontrado.</td></tr>'}</tbody>
       </table>
     </div>`;
+}
+/* ---- importação de atendimentos por CSV / colar ---- */
+function abrirImportCSV(){
+  const fs='padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);width:100%';
+  document.getElementById('importBox').innerHTML=`
+    <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
+      <div style="font-weight:600;margin-bottom:6px">Importar atendimentos em lote</div>
+      <div style="font-size:12.5px;color:var(--grey);margin-bottom:12px">
+        Cole as linhas da sua outra plataforma. Uma por linha, com colunas separadas por <b>vírgula</b>, <b>ponto-e-vírgula</b> ou <b>tabulação</b>, nesta ordem:<br>
+        <code style="font-size:12px;color:var(--ink)">data; paciente; procedimento; valor; profissional(opcional); canal(opcional); pagamento(opcional); status(opcional)</code><br>
+        A data aceita <b>AAAA-MM-DD</b> ou <b>DD/MM/AAAA</b>. Linhas com cabeçalho ("data","paciente"…) são ignoradas.
+      </div>
+      <textarea id="csvText" rows="7" placeholder="2026-06-12; Maria Silva; Toxina Botulínica; 1200; Dra. Bruna Braga; WhatsApp; Pago; Compareceu" style="${fs};font-family:ui-monospace,monospace;font-size:12.5px;resize:vertical"></textarea>
+      <div id="csvPreview" style="margin-top:12px"></div>
+      <div style="display:flex;gap:10px;margin-top:12px">
+        <button class="btn ghost" onclick="previewCSV()">Pré-visualizar</button>
+        <button class="btn" onclick="confirmarImportCSV()">Importar</button>
+        <button class="btn ghost" onclick="document.getElementById('importBox').innerHTML=''">Cancelar</button>
+      </div>
+    </div>`;
+  document.getElementById('importBox').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function parseCSV(txt){
+  const linhas=txt.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const out=[];
+  linhas.forEach(l=>{
+    const c=l.split(/[;\t,]/).map(x=>x.trim());
+    if(c.length<3) return;
+    const prim=(c[0]||'').toLowerCase();
+    if(prim==='data'||prim.includes('paciente')) return; // cabeçalho
+    let data=c[0];
+    if(/^\d{2}\/\d{2}\/\d{4}$/.test(data)){ const[d,m,y]=data.split('/'); data=`${y}-${m}-${d}`; }
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(data)) return;
+    const valor=parseFloat((c[3]||'0').replace(/[^\d,.-]/g,'').replace(/\.(?=\d{3}(\D|$))/g,'').replace(',','.'))||0;
+    out.push({data,paciente:c[1]||'Sem nome',proc:c[2]||'Avaliação',valor,
+      func:c[4]||'',canal:c[5]||(CANAIS[0]||''),pag:c[6]||'Pago',agenda:c[7]||'Compareceu'});
+  });
+  return out;
+}
+function previewCSV(){
+  const regs=parseCSV(document.getElementById('csvText').value);
+  const box=document.getElementById('csvPreview');
+  if(!regs.length){ box.innerHTML='<div style="color:var(--red);font-size:13px">Nenhuma linha válida reconhecida. Confira o formato.</div>'; return; }
+  const linhas=regs.slice(0,8).map(r=>`<tr><td>${fmtDateFull(r.data)}</td><td>${r.paciente}</td><td>${r.proc}</td><td class="num">${BRL(r.valor)}</td><td>${r.func||'—'}</td></tr>`).join('');
+  box.innerHTML=`<div style="font-size:12.5px;color:var(--green);margin-bottom:6px">${regs.length} atendimento(s) reconhecido(s)${regs.length>8?' (mostrando 8)':''}:</div>
+    <table class="data"><thead><tr><th>Data</th><th>Paciente</th><th>Procedimento</th><th class="num">Valor</th><th>Profissional</th></tr></thead><tbody>${linhas}</tbody></table>`;
+}
+async function confirmarImportCSV(){
+  const regs=parseCSV(document.getElementById('csvText').value);
+  if(!regs.length){ toast('Nenhuma linha válida'); return; }
+  if(MODO_NUVEM){
+    for(const r of regs){
+      await sbInsert('atendimentos',{data:r.data,paciente:r.paciente,procedimento:r.proc,funcionario:r.func,canal:r.canal,valor:r.valor,custo:Math.round(r.valor*0.3),pagamento:r.pag,agenda:r.agenda});
+    }
+    await carregarTudo(); go('atendimentos'); toast(regs.length+' atendimento(s) importado(s)'); return;
+  }
+  regs.forEach(r=>DATA.atendimentos.unshift({id:Date.now()+Math.random(),...r,custo:Math.round(r.valor*0.3),itens:[]}));
+  go('atendimentos'); toast(regs.length+' atendimento(s) importado(s)');
 }
 function abrirAtendForm(){ editarAtend(0); }
 function editarAtend(id){
   const a = (id && id!=='0')? DATA.atendimentos.find(x=>x.id==id) : {id:0,data:new Date().toISOString().slice(0,10),paciente:'',func:'',proc:'',canal:'',valor:'',pag:'Pago',agenda:'Compareceu'};
   const fs='padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink)';
   const funcOpts=FUNCIONARIOS.filter(f=>f.atende&&f.ativo).map(f=>`<option ${f.nome===a.func?'selected':''}>${f.nome}</option>`).join('');
-  const procOpts=PROCS.concat('Avaliação').map(p=>`<option ${p===a.proc?'selected':''}>${p}</option>`).join('');
   const canalOpts=CANAIS.map(c=>`<option ${c===a.canal?'selected':''}>${c}</option>`).join('');
   const agOpts=['Compareceu','Agendado','No-show','Reagendado'].map(s=>`<option ${s===a.agenda?'selected':''}>${s}</option>`).join('');
   const pagOpts=['Pago','Parcial','Pendente'].map(s=>`<option ${s===a.pag?'selected':''}>${s}</option>`).join('');
+  // estado de trabalho dos itens (procedimentos executados na sessão)
+  __atendItens = (a.itens && a.itens.length)
+    ? a.itens.map(it=>({proc:it.proc,valor:+it.valor||0,custo:+it.custo||0,func:it.func||''}))
+    : [];
   document.getElementById('atendFormBox').innerHTML=`
     <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
         <div class="field"><label>Data do atendimento</label><input id="naData" type="date" value="${a.data}" style="${fs};width:100%"></div>
         <div class="field"><label>Paciente</label><input id="naPac" value="${a.paciente}" placeholder="Nome" style="${fs};width:100%"></div>
         <div class="field"><label>Realizado por</label><select id="naFunc" style="${fs};width:100%"><option value="">—</option>${funcOpts}</select></div>
-        <div class="field"><label>Procedimento</label><select id="naProc" style="${fs};width:100%">${procOpts}</select></div>
         <div class="field"><label>Canal</label><select id="naCanal" style="${fs};width:100%">${canalOpts}</select></div>
-        <div class="field"><label>Valor (R$)</label><input id="naValor" type="number" value="${a.valor}" style="${fs};width:100%"></div>
         <div class="field"><label>Pagamento</label><select id="naPag" style="${fs};width:100%">${pagOpts}</select></div>
         <div class="field"><label>Status</label><select id="naAg" style="${fs};width:100%">${agOpts}</select></div>
       </div>
+
+      <div style="border-top:1px solid var(--gold-l);padding-top:14px;margin-bottom:6px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <label style="font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:var(--grey);font-weight:600">Procedimentos executados</label>
+          <button type="button" class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="addAtendItem()">+ adicionar procedimento</button>
+        </div>
+        <div id="naItensBox"></div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:12px 0 16px;padding:12px 14px;background:var(--paper);border:1px solid var(--line);border-radius:10px">
+        <div class="field" style="margin:0">
+          <label>Valor total (R$)</label>
+          <input id="naValor" type="number" value="${a.valor}" style="${fs};width:150px" oninput="naValorManual=true">
+        </div>
+        <div style="font-size:12px;color:var(--grey);max-width:300px">
+          Com procedimentos na lista, o valor total e o custo são somados automaticamente. Sem itens, o sistema usa este campo manual (custo estimado em 30%), como antes.
+        </div>
+        <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink);cursor:pointer;white-space:nowrap">
+          <input type="checkbox" id="naBaixa" ${(!id||id==='0')?'checked':''} style="width:15px;height:15px;accent-color:var(--gold)">
+          Dar baixa no estoque (fichas técnicas)
+        </label>
+      </div>
+
       <div style="display:flex;gap:10px">
         <button class="btn" onclick="salvarAtend('${a.id}')">Salvar</button>
         <button class="btn ghost" onclick="document.getElementById('atendFormBox').innerHTML=''">Cancelar</button>
       </div>
     </div>`;
+  naValorManual=false;
+  renderAtendItens();
   document.getElementById('atendFormBox').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+/* ---- itens de atendimento (procedimentos múltiplos) ---- */
+let __atendItens = [];
+let naValorManual = false;
+function addAtendItem(){
+  __atendItens.push({proc:(PROCS[0]||''),valor:0,custo:0,func:''});
+  renderAtendItens();
+}
+function removeAtendItem(i){ __atendItens.splice(i,1); renderAtendItens(); }
+function updAtendItem(i,campo,val){
+  __atendItens[i][campo] = (campo==='valor'||campo==='custo') ? (+val||0) : val;
+  if(!naValorManual) syncValorTotal();
+}
+function syncValorTotal(){
+  if(!__atendItens.length) return;
+  const tot=__atendItens.reduce((s,it)=>s+(+it.valor||0),0);
+  const el=document.getElementById('naValor'); if(el) el.value=Math.round(tot);
+}
+function renderAtendItens(){
+  const box=document.getElementById('naItensBox'); if(!box) return;
+  const fsi='padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink);font-size:13px';
+  if(!__atendItens.length){
+    box.innerHTML=`<div style="font-size:12.5px;color:var(--grey);font-style:italic;padding:6px 2px">Nenhum procedimento adicionado. Use o campo de valor manual abaixo, ou clique em "+ adicionar procedimento" para detalhar a sessão.</div>`;
+    return;
+  }
+  const fo=(sel)=>FUNCIONARIOS.filter(f=>f.atende&&f.ativo).map(f=>`<option ${f.nome===sel?'selected':''}>${f.nome}</option>`).join('');
+  box.innerHTML=__atendItens.map((it,i)=>{
+    const po=PROCS.concat('Avaliação').map(p=>`<option ${p===it.proc?'selected':''}>${p}</option>`).join('');
+    return `<div style="display:grid;grid-template-columns:1.5fr 1.3fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px">
+      <div class="field" style="margin:0"><label>Procedimento</label><select onchange="updAtendItem(${i},'proc',this.value)" style="${fsi};width:100%">${po}</select></div>
+      <div class="field" style="margin:0"><label>Realizado por</label><select onchange="updAtendItem(${i},'func',this.value)" style="${fsi};width:100%"><option value="">—</option>${fo(it.func)}</select></div>
+      <div class="field" style="margin:0"><label>Valor (R$)</label><input type="number" value="${it.valor||''}" oninput="updAtendItem(${i},'valor',this.value)" style="${fsi};width:100%"></div>
+      <div class="field" style="margin:0"><label>Custo (R$)</label><input type="number" value="${it.custo||''}" oninput="updAtendItem(${i},'custo',this.value)" style="${fsi};width:100%"></div>
+      <button type="button" class="btn ghost" style="padding:7px 9px;font-size:12px" onclick="removeAtendItem(${i})" title="Remover">×</button>
+    </div>`;
+  }).join('');
+  if(!naValorManual) syncValorTotal();
 }
 async function salvarAtend(id){
   const v=i=>document.getElementById(i).value;
-  const valor=+v('naValor')||0;
+  const itens=(__atendItens||[]).filter(it=>it.proc);
+  // calcula custo de cada item: usa o custo manual digitado; se vazio, deriva da ficha técnica
+  const custoFicha=(proc)=>{
+    const f=FICHAS[proc]; if(!f||!f.length) return 0;
+    return f.reduce((s,ins)=>{const e=ESTOQUE.find(x=>x.id==ins.produtoId);return s+(e?ins.qtd*e.custoUnit:0);},0);
+  };
+  itens.forEach(it=>{ if(!(+it.custo>0)) it.custo=Math.round(custoFicha(it.proc)); });
+  let valor, custo, proc;
+  if(itens.length){
+    valor = itens.reduce((s,it)=>s+(+it.valor||0),0);
+    custo = itens.reduce((s,it)=>s+(+it.custo||0),0);
+    proc  = itens.length>1 ? itens[0].proc+' +'+(itens.length-1) : itens[0].proc;
+    // se ainda ficou tudo zero (sem ficha e sem custo manual), estima 30% como antes
+    if(custo===0 && valor>0) custo=Math.round(valor*0.3);
+  } else {
+    valor = +v('naValor')||0;
+    custo = Math.round(valor*0.3);
+    proc  = 'Avaliação';
+  }
   const reg={data:v('naData')||new Date().toISOString().slice(0,10),
     paciente:v('naPac')||'Sem nome',func:v('naFunc')||'',
-    proc:v('naProc'),canal:v('naCanal'),valor,custo:Math.round(valor*0.3),
+    proc,canal:v('naCanal'),valor,custo,
     pag:v('naPag')||'Pago',agenda:v('naAg')};
+  const darBaixa=(document.getElementById('naBaixa')||{}).checked && reg.agenda==='Compareceu';
+  // monta a lista de consumo de insumos a partir das fichas técnicas dos itens
+  const consumo={};
+  if(darBaixa){
+    itens.forEach(it=>{
+      (FICHAS[it.proc]||[]).forEach(ins=>{ consumo[ins.produtoId]=(consumo[ins.produtoId]||0)+ins.qtd; });
+    });
+  }
   if(MODO_NUVEM){
     const reg2={data:reg.data,paciente:reg.paciente,procedimento:reg.proc,funcionario:reg.func,canal:reg.canal,valor:reg.valor,custo:reg.custo,pagamento:reg.pag,agenda:reg.agenda};
-    if(id && id!=='0') await sbUpdate('atendimentos',id,reg2); else await sbInsert('atendimentos',reg2);
-    await carregarTudo(); go('atendimentos'); return;
+    let atendId=id;
+    if(id && id!=='0'){ await sbUpdate('atendimentos',id,reg2); }
+    else { const novo=await sbInsert('atendimentos',reg2); atendId=novo&&novo.id; }
+    // regrava os itens: apaga os antigos e insere os atuais
+    if(atendId){
+      try{
+        await sb.from('atendimento_itens').delete().eq('atendimento_id',atendId);
+        for(const it of itens){
+          await sbInsert('atendimento_itens',{atendimento_id:atendId,procedimento:it.proc,valor:+it.valor||0,custo:+it.custo||0,funcionario:it.func||''});
+        }
+      }catch(e){ console.warn('itens não gravados (tabela atendimento_itens ausente?)',e); }
+    }
+    // baixa de estoque conforme fichas técnicas
+    if(Object.keys(consumo).length){
+      try{
+        const { data:{ user } } = await sb.auth.getUser();
+        for(const pid in consumo){
+          const e=ESTOQUE.find(x=>x.id==pid); if(!e) continue;
+          const novaQtd=Math.max(0,e.quantidade-consumo[pid]);
+          await sb.from('estoque').update({quantidade:novaQtd}).eq('id',pid);
+          await sb.from('estoque_mov').insert({user_id:user.id,produto_id:pid,data:reg.data,tipo:'saida',quantidade:consumo[pid],obs:'Baixa automática — '+reg.proc+' ('+reg.paciente+')'});
+        }
+      }catch(e){ console.warn('baixa de estoque não aplicada',e); }
+    }
+    await carregarTudo(); go('atendimentos'); toast('Atendimento salvo'); return;
   }
-  if(id && id!=='0'){ const a=DATA.atendimentos.find(x=>x.id==id); Object.assign(a,reg); }
-  else { DATA.atendimentos.unshift({id:Date.now(),...reg}); }
-  go('atendimentos');
+  // baixa local
+  if(Object.keys(consumo).length){
+    const hoje=reg.data;
+    for(const pid in consumo){
+      const e=ESTOQUE.find(x=>x.id==pid); if(!e) continue;
+      e.quantidade=Math.max(0,e.quantidade-consumo[pid]);
+      EST_MOV.push({id:MOV_SEQ++,produtoId:pid,data:hoje,tipo:'saida',quantidade:consumo[pid],obs:'Baixa automática — '+reg.proc});
+    }
+  }
+  if(id && id!=='0'){ const a=DATA.atendimentos.find(x=>x.id==id); Object.assign(a,reg,{itens:itens.slice()}); }
+  else { DATA.atendimentos.unshift({id:Date.now(),...reg,itens:itens.slice()}); }
+  go('atendimentos'); toast('Atendimento salvo');
 }
 async function excluirAtend(id){
-  if(MODO_NUVEM){ await sbDelete('atendimentos',id); await carregarTudo(); }
+  if(MODO_NUVEM){
+    try{ await sb.from('atendimento_itens').delete().eq('atendimento_id',id); }catch(e){}
+    await sbDelete('atendimentos',id); await carregarTudo();
+  }
   else { DATA.atendimentos=DATA.atendimentos.filter(a=>a.id!=id); }
   go('atendimentos');
 }
@@ -3090,7 +3365,75 @@ function renderEstoque(pg){
       <h3>Últimas movimentações</h3><div class="ph-sub">Histórico de entradas e saídas</div>
       <table class="data"><thead><tr><th>Data</th><th>Produto</th><th class="ctr">Tipo</th><th class="num">Qtd</th><th>Obs</th></tr></thead>
       <tbody>${movs||'<tr><td colspan="5" style="text-align:center;color:var(--grey);padding:20px">Nenhuma movimentação ainda.</td></tr>'}</tbody></table>
+    </div>
+
+    <div class="panel" style="margin-top:18px">
+      <div class="toolbar"><div><h3>Fichas técnicas dos procedimentos</h3><div class="ph-sub">Defina os insumos consumidos em cada procedimento. Ao registrar um atendimento, o estoque baixa sozinho e o custo real é calculado.</div></div></div>
+      <div id="fichaMsg" style="font-size:12.5px;color:var(--grey);font-style:italic;margin-bottom:12px;${ESTOQUE.length?'display:none':''}">Cadastre produtos acima antes de montar as fichas técnicas.</div>
+      <div id="fichasBox">${ESTOQUE.length?renderFichasTabela():''}</div>
     </div>`;
+}
+function renderFichasTabela(){
+  return PROCS.map(p=>{
+    const itens=FICHAS[p]||[];
+    const resumo = itens.length
+      ? itens.map(it=>{const e=ESTOQUE.find(x=>x.id==it.produtoId);return e?`${it.qtd} ${e.unidade||''} de ${e.produto}`:null;}).filter(Boolean).join(' · ')
+      : '<span style="color:var(--grey);font-style:italic">sem ficha — custo estimado em 30%</span>';
+    const custo = itens.reduce((s,it)=>{const e=ESTOQUE.find(x=>x.id==it.produtoId);return s+(e?it.qtd*e.custoUnit:0);},0);
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)">
+      <div style="min-width:160px"><b>${p}</b></div>
+      <div style="flex:1;font-size:13px;color:var(--ink)">${resumo}</div>
+      <div style="font-size:13px;color:${custo?'var(--ink)':'var(--grey)'};white-space:nowrap">${custo?'custo real '+BRL(custo):''}</div>
+      <button class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="editarFicha('${p.replace(/'/g,"\\'")}')">editar ficha</button>
+    </div>`;
+  }).join('');
+}
+function editarFicha(proc){
+  const itens=(FICHAS[proc]||[]).map(it=>({produtoId:it.produtoId,qtd:it.qtd}));
+  __fichaProc=proc; __fichaItens=itens.length?itens:[{produtoId:(ESTOQUE[0]&&ESTOQUE[0].id)||'',qtd:1}];
+  renderFichaEditor();
+}
+let __fichaProc=null, __fichaItens=[];
+function addFichaItem(){ __fichaItens.push({produtoId:(ESTOQUE[0]&&ESTOQUE[0].id)||'',qtd:1}); renderFichaEditor(); }
+function removeFichaItem(i){ __fichaItens.splice(i,1); renderFichaEditor(); }
+function updFichaItem(i,campo,val){ __fichaItens[i][campo]= campo==='qtd'?(+val||0):val; }
+function renderFichaEditor(){
+  const box=document.getElementById('fichasBox'); if(!box) return;
+  const fs='padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink);font-size:13px';
+  const linhas=__fichaItens.map((it,i)=>{
+    const opts=ESTOQUE.map(e=>`<option value="${e.id}" ${e.id==it.produtoId?'selected':''}>${e.produto} (${e.unidade||'un'})</option>`).join('');
+    return `<div style="display:grid;grid-template-columns:2fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px">
+      <div class="field" style="margin:0"><label>Insumo</label><select onchange="updFichaItem(${i},'produtoId',this.value)" style="${fs};width:100%">${opts}</select></div>
+      <div class="field" style="margin:0"><label>Qtd consumida</label><input type="number" step="any" value="${it.qtd}" oninput="updFichaItem(${i},'qtd',this.value)" style="${fs};width:100%"></div>
+      <button class="btn ghost" style="padding:7px 9px;font-size:12px" onclick="removeFichaItem(${i})">×</button>
+    </div>`;
+  }).join('');
+  box.innerHTML=`<div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px">
+    <div style="font-weight:600;margin-bottom:12px">Ficha técnica — ${__fichaProc}</div>
+    ${linhas}
+    <div style="display:flex;gap:10px;margin-top:6px">
+      <button class="btn ghost" style="padding:5px 11px;font-size:12px" onclick="addFichaItem()">+ insumo</button>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button class="btn" onclick="salvarFicha()">Salvar ficha</button>
+      <button class="btn ghost" onclick="go('estoque')">Cancelar</button>
+    </div>
+  </div>`;
+  box.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+async function salvarFicha(){
+  const proc=__fichaProc;
+  const itens=__fichaItens.filter(it=>it.produtoId&&it.qtd>0);
+  if(MODO_NUVEM){
+    try{
+      await sb.from('fichas_tecnicas').delete().eq('procedimento',proc);
+      for(const it of itens){
+        await sbInsert('fichas_tecnicas',{procedimento:proc,produto_id:it.produtoId,quantidade:it.qtd});
+      }
+    }catch(e){ alert('Erro ao salvar ficha: '+e.message); }
+    await carregarTudo(); go('estoque'); toast('Ficha técnica salva'); return;
+  }
+  FICHAS[proc]=itens; go('estoque'); toast('Ficha técnica salva');
 }
 function abrirProdutoForm(){
   const fs='padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);width:100%';
