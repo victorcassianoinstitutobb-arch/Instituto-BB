@@ -695,10 +695,22 @@ let EST_MOV = [];
 let MOV_SEQ = 1;
 const UNIDADES = ['un','ml','frasco','caixa','ampola','seringa','kit'];
 
-/* ===== Fichas técnicas (insumos consumidos por procedimento) =====
-   FICHAS = { 'Toxina Botulínica':[{produtoId, qtd}], ... }
-   Usada para baixa automática de estoque e cálculo de custo real por item. */
-let FICHAS = {};
+/* ===== Fichas técnicas / consumo de insumos =====
+   O vínculo agora mora NO PRODUTO: cada produto do estoque tem uma lista
+   de "usos" = [{proc, ml}] indicando quais procedimentos consomem aquele
+   material e quantos ml em cada um (valor padrão, editável no atendimento).
+   insumosDoProc(proc) inverte isso: dado um procedimento, devolve os
+   produtos que o utilizam e os ml padrão. */
+let FICHAS = {}; // legado (mantido para compatibilidade de carga antiga)
+function insumosDoProc(proc){
+  const out=[];
+  ESTOQUE.forEach(e=>{
+    (e.usos||[]).forEach(u=>{
+      if(u.proc===proc) out.push({produtoId:e.id, produto:e.produto, unidade:e.unidade||'ml', ml:+u.ml||0, custoUnit:+e.custoUnit||0});
+    });
+  });
+  return out;
+}
 
 /* ===== Faturamento histórico (meses anteriores lançados manualmente) ===== */
 // permite registrar o faturamento/custo de meses que já passaram, sem precisar
@@ -934,7 +946,7 @@ async function carregarTudo(){
       sb.from('estoque_mov').select('*').order('data'),
     ]);
     CONTAS = (contasR.data||[]).map(c=>({id:c.id,tipo:c.tipo,descricao:c.descricao,categoria:c.categoria,natureza:c.natureza,valorParcela:+c.valor_parcela,numParcelas:c.num_parcelas,carteira:c.carteira_id,parcelas:c.parcelas||[]}));
-    ESTOQUE = (estR.data||[]).map(e=>({id:e.id,produto:e.produto,unidade:e.unidade,quantidade:+e.quantidade,minimo:+e.minimo,custoUnit:+e.custo_unit}));
+    ESTOQUE = (estR.data||[]).map(e=>({id:e.id,produto:e.produto,unidade:e.unidade,quantidade:+e.quantidade,minimo:+e.minimo,custoUnit:+e.custo_unit,usos:Array.isArray(e.usos)?e.usos:[]}));
     EST_MOV = (movR.data||[]).map(m=>({id:m.id,produtoId:m.produto_id,data:m.data,tipo:m.tipo,quantidade:+m.quantidade,obs:m.obs}));
     // ---- itens de atendimento (múltiplos procedimentos por sessão) ----
     try {
@@ -942,19 +954,11 @@ async function carregarTudo(){
       const porAtend = {};
       (itensR.data||[]).forEach(it=>{
         (porAtend[it.atendimento_id] = porAtend[it.atendimento_id] || []).push(
-          {id:it.id,proc:it.procedimento,valor:+it.valor,custo:+it.custo,func:it.funcionario||''}
+          {id:it.id,proc:it.procedimento,valor:+it.valor,custo:+it.custo,func:it.funcionario||'',ml:it.consumo_ml||null}
         );
       });
       DATA.atendimentos.forEach(a=>{ a.itens = porAtend[a.id] || []; });
     } catch(e){ /* tabela ainda não criada — segue sem itens, sem quebrar nada */ }
-    // ---- fichas técnicas (insumos por procedimento) ----
-    try {
-      const fichasR = await sb.from('fichas_tecnicas').select('*');
-      FICHAS = {};
-      (fichasR.data||[]).forEach(f=>{
-        (FICHAS[f.procedimento] = FICHAS[f.procedimento] || []).push({produtoId:f.produto_id, qtd:+f.quantidade});
-      });
-    } catch(e){ FICHAS = {}; }
     // leads e custos antigos (exemplo) não são usados na nuvem — zera para o painel refletir a realidade
     DATA.leads = [];
     DATA.custos = [];
@@ -1351,40 +1355,53 @@ function editarAtend(id){
   const canalOpts=CANAIS.map(c=>`<option ${c===a.canal?'selected':''}>${c}</option>`).join('');
   const agOpts=['Compareceu','Agendado','No-show','Reagendado'].map(s=>`<option ${s===a.agenda?'selected':''}>${s}</option>`).join('');
   const pagOpts=['Pago','Parcial','Pendente'].map(s=>`<option ${s===a.pag?'selected':''}>${s}</option>`).join('');
-  // estado de trabalho dos itens (procedimentos executados na sessão)
-  __atendItens = (a.itens && a.itens.length)
-    ? a.itens.map(it=>({proc:it.proc,valor:+it.valor||0,custo:+it.custo||0,func:it.func||''}))
+  // procedimento "principal": se houver itens, usa o 1º; senão o proc salvo
+  const procPrincipal = (a.itens && a.itens.length) ? a.itens[0].proc : (a.proc||'');
+  const procOpts=PROCS.concat('Avaliação').map(p=>`<option ${p===procPrincipal?'selected':''}>${p}</option>`).join('');
+  // estado de trabalho dos itens (procedimentos adicionais detalhados)
+  // modo "lista" liga quando o atendimento já tem mais de 1 procedimento
+  __atendItens = (a.itens && a.itens.length>1)
+    ? a.itens.map(it=>({proc:it.proc,valor:+it.valor||0,func:it.func||'',ml:it.ml||null}))
     : [];
+  __atendModoLista = __atendItens.length>0;
   document.getElementById('atendFormBox').innerHTML=`
     <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px">
         <div class="field"><label>Data do atendimento</label><input id="naData" type="date" value="${a.data}" style="${fs};width:100%"></div>
         <div class="field"><label>Paciente</label><input id="naPac" value="${a.paciente}" placeholder="Nome" style="${fs};width:100%"></div>
         <div class="field"><label>Realizado por</label><select id="naFunc" style="${fs};width:100%"><option value="">—</option>${funcOpts}</select></div>
         <div class="field"><label>Canal</label><select id="naCanal" style="${fs};width:100%">${canalOpts}</select></div>
+      </div>
+
+      <!-- LINHA SIMPLES: 1 procedimento + valor (modo rápido, padrão) -->
+      <div id="naSimples" style="display:${__atendModoLista?'none':'grid'};grid-template-columns:2fr 1fr 1fr 1fr;gap:12px;margin-bottom:6px">
+        <div class="field"><label>Procedimento</label><select id="naProc" style="${fs};width:100%">${procOpts}</select></div>
+        <div class="field"><label>Valor (R$)</label><input id="naValor" type="number" value="${a.valor}" placeholder="0" style="${fs};width:100%"></div>
         <div class="field"><label>Pagamento</label><select id="naPag" style="${fs};width:100%">${pagOpts}</select></div>
         <div class="field"><label>Status</label><select id="naAg" style="${fs};width:100%">${agOpts}</select></div>
       </div>
 
-      <div style="border-top:1px solid var(--gold-l);padding-top:14px;margin-bottom:6px">
+      <!-- MODO LISTA: vários procedimentos na mesma consulta -->
+      <div id="naLista" style="display:${__atendModoLista?'block':'none'}">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-          <label style="font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:var(--grey);font-weight:600">Procedimentos executados</label>
-          <button type="button" class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="addAtendItem()">+ adicionar procedimento</button>
+          <label style="font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:var(--grey);font-weight:600">Procedimentos da consulta</label>
+          <button type="button" class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="addAtendItem()">+ adicionar</button>
         </div>
         <div id="naItensBox"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">
+          <div class="field" style="margin:0"><label>Pagamento</label><select id="naPagL" style="${fs};width:100%">${pagOpts}</select></div>
+          <div class="field" style="margin:0"><label>Status</label><select id="naAgL" style="${fs};width:100%">${agOpts}</select></div>
+        </div>
       </div>
 
-      <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:12px 0 16px;padding:12px 14px;background:var(--paper);border:1px solid var(--line);border-radius:10px">
-        <div class="field" style="margin:0">
-          <label>Valor total (R$)</label>
-          <input id="naValor" type="number" value="${a.valor}" style="${fs};width:150px" oninput="naValorManual=true">
-        </div>
-        <div style="font-size:12px;color:var(--grey);max-width:300px">
-          Com procedimentos na lista, o valor total e o custo são somados automaticamente. Sem itens, o sistema usa este campo manual (custo estimado em 30%), como antes.
-        </div>
-        <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink);cursor:pointer;white-space:nowrap">
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:14px 0 16px;padding:11px 14px;background:var(--paper);border:1px solid var(--line);border-radius:10px">
+        <button type="button" id="naToggle" class="btn ghost" style="padding:6px 12px;font-size:12.5px" onclick="toggleModoLista()">
+          ${__atendModoLista?'↺ usar procedimento único':'+ vários procedimentos nesta consulta'}
+        </button>
+        <div id="naTotalBox" style="font-size:13px;color:var(--ink);${__atendModoLista?'':'display:none'}">Valor total: <b id="naTotalLbl">R$ 0</b></div>
+        <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink);cursor:pointer;white-space:nowrap;margin-left:auto">
           <input type="checkbox" id="naBaixa" ${(!id||id==='0')?'checked':''} style="width:15px;height:15px;accent-color:var(--gold)">
-          Dar baixa no estoque (fichas técnicas)
+          Dar baixa no estoque (ml)
         </label>
       </div>
 
@@ -1393,95 +1410,150 @@ function editarAtend(id){
         <button class="btn ghost" onclick="document.getElementById('atendFormBox').innerHTML=''">Cancelar</button>
       </div>
     </div>`;
-  naValorManual=false;
-  renderAtendItens();
+  if(__atendModoLista) renderAtendItens();
   document.getElementById('atendFormBox').scrollIntoView({behavior:'smooth',block:'nearest'});
 }
-/* ---- itens de atendimento (procedimentos múltiplos) ---- */
+/* ---- alternância entre procedimento único e lista de vários ---- */
 let __atendItens = [];
-let naValorManual = false;
+let __atendModoLista = false;
+function toggleModoLista(){
+  const simples=document.getElementById('naSimples');
+  const lista=document.getElementById('naLista');
+  const totalBox=document.getElementById('naTotalBox');
+  const btn=document.getElementById('naToggle');
+  if(!__atendModoLista){
+    // entrando no modo lista: semeia com o procedimento que já estava selecionado
+    const proc=(document.getElementById('naProc')||{}).value||PROCS[0]||'';
+    const valor=+(document.getElementById('naValor')||{}).value||0;
+    const pag=(document.getElementById('naPag')||{}).value;
+    const ag=(document.getElementById('naAg')||{}).value;
+    __atendItens=[{proc,valor,func:'',ml:null}];
+    __atendModoLista=true;
+    simples.style.display='none'; lista.style.display='block'; totalBox.style.display='';
+    btn.textContent='↺ usar procedimento único';
+    // transfere pagamento/status para os selects do modo lista
+    if(document.getElementById('naPagL')&&pag) document.getElementById('naPagL').value=pag;
+    if(document.getElementById('naAgL')&&ag) document.getElementById('naAgL').value=ag;
+    renderAtendItens();
+  } else {
+    // voltando ao modo simples: leva o 1º procedimento de volta
+    const first=__atendItens[0]||{proc:PROCS[0]||'',valor:0};
+    __atendModoLista=false;
+    simples.style.display='grid'; lista.style.display='none'; totalBox.style.display='none';
+    btn.textContent='+ vários procedimentos nesta consulta';
+    if(document.getElementById('naProc')) document.getElementById('naProc').value=first.proc;
+    if(document.getElementById('naValor')) document.getElementById('naValor').value=first.valor||'';
+  }
+}
 function addAtendItem(){
-  __atendItens.push({proc:(PROCS[0]||''),valor:0,custo:0,func:''});
+  __atendItens.push({proc:(PROCS[0]||''),valor:0,func:'',ml:null});
   renderAtendItens();
 }
 function removeAtendItem(i){ __atendItens.splice(i,1); renderAtendItens(); }
 function updAtendItem(i,campo,val){
-  __atendItens[i][campo] = (campo==='valor'||campo==='custo') ? (+val||0) : val;
-  if(!naValorManual) syncValorTotal();
+  __atendItens[i][campo] = (campo==='valor') ? (+val||0) : (campo==='ml' ? (val===''?null:+val) : val);
+  if(campo==='proc') __atendItens[i].ml=null; // troca de proc reseta ml para usar padrão do produto
+  atualizarTotalLista();
+  if(campo==='proc') renderAtendItens();
 }
-function syncValorTotal(){
-  if(!__atendItens.length) return;
-  const tot=__atendItens.reduce((s,it)=>s+(+it.valor||0),0);
-  const el=document.getElementById('naValor'); if(el) el.value=Math.round(tot);
+function atualizarTotalLista(){
+  const lbl=document.getElementById('naTotalLbl'); if(!lbl) return;
+  lbl.textContent=BRL(__atendItens.reduce((s,it)=>s+(+it.valor||0),0));
 }
 function renderAtendItens(){
   const box=document.getElementById('naItensBox'); if(!box) return;
   const fsi='padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink);font-size:13px';
   if(!__atendItens.length){
-    box.innerHTML=`<div style="font-size:12.5px;color:var(--grey);font-style:italic;padding:6px 2px">Nenhum procedimento adicionado. Use o campo de valor manual abaixo, ou clique em "+ adicionar procedimento" para detalhar a sessão.</div>`;
-    return;
+    box.innerHTML=`<div style="font-size:12.5px;color:var(--grey);font-style:italic;padding:6px 2px">Clique em "+ adicionar" para incluir procedimentos.</div>`;
+    atualizarTotalLista(); return;
   }
   const fo=(sel)=>FUNCIONARIOS.filter(f=>f.atende&&f.ativo).map(f=>`<option ${f.nome===sel?'selected':''}>${f.nome}</option>`).join('');
   box.innerHTML=__atendItens.map((it,i)=>{
     const po=PROCS.concat('Avaliação').map(p=>`<option ${p===it.proc?'selected':''}>${p}</option>`).join('');
-    return `<div style="display:grid;grid-template-columns:1.5fr 1.3fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px">
+    // mostra os insumos (ml) que esse procedimento consome, com base nos produtos do estoque
+    const insumos=insumosDoProc(it.proc);
+    let mlInfo='';
+    if(insumos.length){
+      mlInfo=`<div style="grid-column:1/-1;font-size:11.5px;color:var(--grey);margin-top:-2px;padding-left:2px">Consumo: ${insumos.map(ins=>{
+        const mlUsado = (it.ml && it.ml[ins.produtoId]!=null) ? it.ml[ins.produtoId] : ins.ml;
+        return `${ins.produto} <input type="number" step="any" value="${mlUsado}" oninput="updAtendItemMl(${i},'${ins.produtoId}',this.value)" style="width:64px;padding:2px 5px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);font-size:12px"> ${ins.unidade}`;
+      }).join(' · ')}</div>`;
+    }
+    return `<div style="display:grid;grid-template-columns:1.6fr 1.3fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px;${insumos.length?'padding-bottom:6px;border-bottom:1px dashed var(--line)':''}">
       <div class="field" style="margin:0"><label>Procedimento</label><select onchange="updAtendItem(${i},'proc',this.value)" style="${fsi};width:100%">${po}</select></div>
       <div class="field" style="margin:0"><label>Realizado por</label><select onchange="updAtendItem(${i},'func',this.value)" style="${fsi};width:100%"><option value="">—</option>${fo(it.func)}</select></div>
       <div class="field" style="margin:0"><label>Valor (R$)</label><input type="number" value="${it.valor||''}" oninput="updAtendItem(${i},'valor',this.value)" style="${fsi};width:100%"></div>
-      <div class="field" style="margin:0"><label>Custo (R$)</label><input type="number" value="${it.custo||''}" oninput="updAtendItem(${i},'custo',this.value)" style="${fsi};width:100%"></div>
       <button type="button" class="btn ghost" style="padding:7px 9px;font-size:12px" onclick="removeAtendItem(${i})" title="Remover">×</button>
+      ${mlInfo}
     </div>`;
   }).join('');
-  if(!naValorManual) syncValorTotal();
+  atualizarTotalLista();
+}
+function updAtendItemMl(i,produtoId,val){
+  if(!__atendItens[i].ml) __atendItens[i].ml={};
+  __atendItens[i].ml[produtoId] = (val===''?null:+val);
 }
 async function salvarAtend(id){
-  const v=i=>document.getElementById(i).value;
-  const itens=(__atendItens||[]).filter(it=>it.proc);
-  // calcula custo de cada item: usa o custo manual digitado; se vazio, deriva da ficha técnica
-  const custoFicha=(proc)=>{
-    const f=FICHAS[proc]; if(!f||!f.length) return 0;
-    return f.reduce((s,ins)=>{const e=ESTOQUE.find(x=>x.id==ins.produtoId);return s+(e?ins.qtd*e.custoUnit:0);},0);
+  const v=i=>{const el=document.getElementById(i);return el?el.value:'';};
+  // helper: custo de um procedimento = soma(ml usado × custo por ml do produto)
+  // mlOverride = mapa {produtoId: ml} digitado no atendimento; senão usa o padrão do produto
+  const consumoDoProc=(proc, mlOverride)=>{
+    return insumosDoProc(proc).map(ins=>{
+      const ml = (mlOverride && mlOverride[ins.produtoId]!=null) ? +mlOverride[ins.produtoId] : ins.ml;
+      return {produtoId:ins.produtoId, ml, custo:ml*ins.custoUnit};
+    });
   };
-  itens.forEach(it=>{ if(!(+it.custo>0)) it.custo=Math.round(custoFicha(it.proc)); });
-  let valor, custo, proc;
-  if(itens.length){
+  let itens, valor, custo, proc, pag, agenda;
+  if(__atendModoLista){
+    itens=(__atendItens||[]).filter(it=>it.proc);
+    // calcula custo de cada item pelo consumo de ml
+    itens.forEach(it=>{
+      const cons=consumoDoProc(it.proc, it.ml);
+      it.custo=Math.round(cons.reduce((s,c)=>s+c.custo,0));
+      it._consumo=cons; // guarda para a baixa
+    });
     valor = itens.reduce((s,it)=>s+(+it.valor||0),0);
     custo = itens.reduce((s,it)=>s+(+it.custo||0),0);
-    proc  = itens.length>1 ? itens[0].proc+' +'+(itens.length-1) : itens[0].proc;
-    // se ainda ficou tudo zero (sem ficha e sem custo manual), estima 30% como antes
+    proc  = itens.length ? (itens.length>1 ? itens[0].proc+' +'+(itens.length-1) : itens[0].proc) : 'Avaliação';
     if(custo===0 && valor>0) custo=Math.round(valor*0.3);
+    pag=v('naPagL')||'Pago'; agenda=v('naAgL')||'Compareceu';
   } else {
+    proc = v('naProc')||'Avaliação';
     valor = +v('naValor')||0;
-    custo = Math.round(valor*0.3);
-    proc  = 'Avaliação';
+    const cons=consumoDoProc(proc, null);
+    custo = Math.round(cons.reduce((s,c)=>s+c.custo,0)) || Math.round(valor*0.3);
+    pag=v('naPag')||'Pago'; agenda=v('naAg')||'Compareceu';
+    // representa como 1 item para gravar consumo/itens de forma uniforme
+    itens=[{proc,valor,func:v('naFunc')||'',custo,_consumo:cons}];
   }
   const reg={data:v('naData')||new Date().toISOString().slice(0,10),
     paciente:v('naPac')||'Sem nome',func:v('naFunc')||'',
-    proc,canal:v('naCanal'),valor,custo,
-    pag:v('naPag')||'Pago',agenda:v('naAg')};
+    proc,canal:v('naCanal'),valor,custo,pag,agenda};
   const darBaixa=(document.getElementById('naBaixa')||{}).checked && reg.agenda==='Compareceu';
-  // monta a lista de consumo de insumos a partir das fichas técnicas dos itens
+  // consolida consumo em ml por produto (somando se o mesmo produto aparece em vários procedimentos)
   const consumo={};
   if(darBaixa){
     itens.forEach(it=>{
-      (FICHAS[it.proc]||[]).forEach(ins=>{ consumo[ins.produtoId]=(consumo[ins.produtoId]||0)+ins.qtd; });
+      (it._consumo||[]).forEach(c=>{ if(c.ml>0) consumo[c.produtoId]=(consumo[c.produtoId]||0)+c.ml; });
     });
   }
+  // só grava itens detalhados quando há mais de um procedimento (modo lista)
+  const gravarItens = __atendModoLista && itens.length>1;
   if(MODO_NUVEM){
     const reg2={data:reg.data,paciente:reg.paciente,procedimento:reg.proc,funcionario:reg.func,canal:reg.canal,valor:reg.valor,custo:reg.custo,pagamento:reg.pag,agenda:reg.agenda};
     let atendId=id;
     if(id && id!=='0'){ await sbUpdate('atendimentos',id,reg2); }
     else { const novo=await sbInsert('atendimentos',reg2); atendId=novo&&novo.id; }
-    // regrava os itens: apaga os antigos e insere os atuais
     if(atendId){
       try{
         await sb.from('atendimento_itens').delete().eq('atendimento_id',atendId);
-        for(const it of itens){
-          await sbInsert('atendimento_itens',{atendimento_id:atendId,procedimento:it.proc,valor:+it.valor||0,custo:+it.custo||0,funcionario:it.func||''});
+        if(gravarItens){
+          for(const it of itens){
+            await sbInsert('atendimento_itens',{atendimento_id:atendId,procedimento:it.proc,valor:+it.valor||0,custo:+it.custo||0,funcionario:it.func||'',consumo_ml:it.ml||null});
+          }
         }
-      }catch(e){ console.warn('itens não gravados (tabela atendimento_itens ausente?)',e); }
+      }catch(e){ console.warn('itens não gravados',e); }
     }
-    // baixa de estoque conforme fichas técnicas
     if(Object.keys(consumo).length){
       try{
         const { data:{ user } } = await sb.auth.getUser();
@@ -1495,7 +1567,7 @@ async function salvarAtend(id){
     }
     await carregarTudo(); go('atendimentos'); toast('Atendimento salvo'); return;
   }
-  // baixa local
+  // ---- modo local ----
   if(Object.keys(consumo).length){
     const hoje=reg.data;
     for(const pid in consumo){
@@ -1504,8 +1576,9 @@ async function salvarAtend(id){
       EST_MOV.push({id:MOV_SEQ++,produtoId:pid,data:hoje,tipo:'saida',quantidade:consumo[pid],obs:'Baixa automática — '+reg.proc});
     }
   }
-  if(id && id!=='0'){ const a=DATA.atendimentos.find(x=>x.id==id); Object.assign(a,reg,{itens:itens.slice()}); }
-  else { DATA.atendimentos.unshift({id:Date.now(),...reg,itens:itens.slice()}); }
+  const itensSalvos = gravarItens ? itens.map(it=>({proc:it.proc,valor:it.valor,custo:it.custo,func:it.func,ml:it.ml||null})) : [];
+  if(id && id!=='0'){ const a=DATA.atendimentos.find(x=>x.id==id); Object.assign(a,reg,{itens:itensSalvos}); }
+  else { DATA.atendimentos.unshift({id:Date.now(),...reg,itens:itensSalvos}); }
   go('atendimentos'); toast('Atendimento salvo');
 }
 async function excluirAtend(id){
@@ -3323,16 +3396,18 @@ function renderEstoque(pg){
   const valorTotal=ESTOQUE.reduce((s,e)=>s+e.quantidade*e.custoUnit,0);
   const linhas=ESTOQUE.map(e=>{
     const alerta=e.minimo>0 && e.quantidade<=e.minimo;
+    const usos=(e.usos||[]).length;
     return `<tr>
-      <td><b>${e.produto}</b></td>
-      <td class="ctr">${e.quantidade} ${e.unidade||''}</td>
-      <td class="ctr" style="color:var(--grey)">${e.minimo||'—'}</td>
-      <td class="num">${e.custoUnit?BRL(e.custoUnit):'—'}</td>
-      <td class="num">${BRL(e.quantidade*e.custoUnit)}</td>
-      <td class="ctr">${alerta?'<span style="color:var(--red);font-size:12px;font-weight:600">⚠ repor</span>':'<span style="color:var(--green);font-size:12px">ok</span>'}</td>
-      <td class="ctr">
+      <td data-label="Produto"><b>${e.produto}</b>${usos?`<div style="font-size:11px;color:var(--grey);margin-top:2px">usado em ${usos} procedimento(s)</div>`:''}</td>
+      <td data-label="Quantidade" class="ctr">${e.quantidade} ${e.unidade||''}</td>
+      <td data-label="Mínimo" class="ctr" style="color:var(--grey)">${e.minimo||'—'}</td>
+      <td data-label="Custo/${e.unidade||'un'}" class="num">${e.custoUnit?BRL(e.custoUnit):'—'}</td>
+      <td data-label="Valor total" class="num">${BRL(e.quantidade*e.custoUnit)}</td>
+      <td data-label="Status" class="ctr">${alerta?'<span style="color:var(--red);font-size:12px;font-weight:600">⚠ repor</span>':'<span style="color:var(--green);font-size:12px">ok</span>'}</td>
+      <td data-label="Ações" class="ctr">
         <button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="movEstoque('${e.id}','entrada')">+ entrada</button>
         <button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="movEstoque('${e.id}','saida')">− saída</button>
+        <button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="editarProduto('${e.id}')">editar</button>
         <button class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="excluirProduto('${e.id}')">×</button>
       </td>
     </tr>`;
@@ -3350,117 +3425,123 @@ function renderEstoque(pg){
     </div>
 
     <div class="panel" style="margin-bottom:18px">
-      <div class="toolbar"><div><h3>Produtos</h3><div class="ph-sub">Controle de entrada e saída manual</div></div>
+      <div class="toolbar"><div><h3>Produtos</h3><div class="ph-sub">No cadastro de cada produto você define quais procedimentos o utilizam e quantos ml de cada</div></div>
         <button class="btn" onclick="abrirProdutoForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo produto</button>
       </div>
       <div id="produtoFormBox"></div>
       <div id="movFormBox"></div>
-      <table class="data">
-        <thead><tr><th>Produto</th><th class="ctr">Quantidade</th><th class="ctr">Mínimo</th><th class="num">Custo un.</th><th class="num">Valor total</th><th class="ctr">Status</th><th class="ctr">Movimentar</th></tr></thead>
+      <table class="data cardify">
+        <thead><tr><th>Produto</th><th class="ctr">Quantidade</th><th class="ctr">Mínimo</th><th class="num">Custo/un.</th><th class="num">Valor total</th><th class="ctr">Status</th><th class="ctr">Ações</th></tr></thead>
         <tbody>${linhas||'<tr><td colspan="7" style="text-align:center;color:var(--grey);padding:24px">Nenhum produto cadastrado.</td></tr>'}</tbody>
       </table>
+    </div>
+
+    <div class="panel" style="margin-bottom:18px">
+      <h3>Consumo por procedimento</h3><div class="ph-sub">Resumo do que cada procedimento gasta de material e o custo real correspondente</div>
+      <div style="margin-top:10px">${renderConsumoProc()}</div>
     </div>
 
     <div class="panel">
       <h3>Últimas movimentações</h3><div class="ph-sub">Histórico de entradas e saídas</div>
       <table class="data"><thead><tr><th>Data</th><th>Produto</th><th class="ctr">Tipo</th><th class="num">Qtd</th><th>Obs</th></tr></thead>
       <tbody>${movs||'<tr><td colspan="5" style="text-align:center;color:var(--grey);padding:20px">Nenhuma movimentação ainda.</td></tr>'}</tbody></table>
-    </div>
-
-    <div class="panel" style="margin-top:18px">
-      <div class="toolbar"><div><h3>Fichas técnicas dos procedimentos</h3><div class="ph-sub">Defina os insumos consumidos em cada procedimento. Ao registrar um atendimento, o estoque baixa sozinho e o custo real é calculado.</div></div></div>
-      <div id="fichaMsg" style="font-size:12.5px;color:var(--grey);font-style:italic;margin-bottom:12px;${ESTOQUE.length?'display:none':''}">Cadastre produtos acima antes de montar as fichas técnicas.</div>
-      <div id="fichasBox">${ESTOQUE.length?renderFichasTabela():''}</div>
     </div>`;
 }
-function renderFichasTabela(){
-  return PROCS.map(p=>{
-    const itens=FICHAS[p]||[];
-    const resumo = itens.length
-      ? itens.map(it=>{const e=ESTOQUE.find(x=>x.id==it.produtoId);return e?`${it.qtd} ${e.unidade||''} de ${e.produto}`:null;}).filter(Boolean).join(' · ')
-      : '<span style="color:var(--grey);font-style:italic">sem ficha — custo estimado em 30%</span>';
-    const custo = itens.reduce((s,it)=>{const e=ESTOQUE.find(x=>x.id==it.produtoId);return s+(e?it.qtd*e.custoUnit:0);},0);
-    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)">
-      <div style="min-width:160px"><b>${p}</b></div>
+function renderConsumoProc(){
+  const linhas=PROCS.map(p=>{
+    const ins=insumosDoProc(p);
+    if(!ins.length) return null;
+    const resumo=ins.map(x=>`${x.ml} ${x.unidade} de ${x.produto}`).join(' · ');
+    const custo=ins.reduce((s,x)=>s+x.ml*x.custoUnit,0);
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)">
+      <div style="min-width:150px"><b>${p}</b></div>
       <div style="flex:1;font-size:13px;color:var(--ink)">${resumo}</div>
-      <div style="font-size:13px;color:${custo?'var(--ink)':'var(--grey)'};white-space:nowrap">${custo?'custo real '+BRL(custo):''}</div>
-      <button class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="editarFicha('${p.replace(/'/g,"\\'")}')">editar ficha</button>
+      <div style="font-size:13px;white-space:nowrap">custo ${BRL(custo)}</div>
     </div>`;
-  }).join('');
+  }).filter(Boolean).join('');
+  return linhas||'<div style="font-size:12.5px;color:var(--grey);font-style:italic">Nenhum produto vinculado a procedimentos ainda. Edite um produto e marque em quais procedimentos ele é usado.</div>';
 }
-function editarFicha(proc){
-  const itens=(FICHAS[proc]||[]).map(it=>({produtoId:it.produtoId,qtd:it.qtd}));
-  __fichaProc=proc; __fichaItens=itens.length?itens:[{produtoId:(ESTOQUE[0]&&ESTOQUE[0].id)||'',qtd:1}];
-  renderFichaEditor();
+/* ---- cadastro / edição de produto, com vínculo a procedimentos (usos) ---- */
+let __prodEditId=null;      // id do produto em edição (null = novo)
+let __prodUsos=[];          // [{proc, ml}] enquanto edita
+function abrirProdutoForm(){ __prodEditId=null; __prodUsos=[]; renderProdutoForm({produto:'',unidade:'ml',quantidade:0,minimo:0,custoUnit:0,usos:[]}); }
+function editarProduto(id){
+  const e=ESTOQUE.find(x=>x.id==id); if(!e)return;
+  __prodEditId=id;
+  __prodUsos=(e.usos||[]).map(u=>({proc:u.proc,ml:+u.ml||0}));
+  renderProdutoForm(e);
 }
-let __fichaProc=null, __fichaItens=[];
-function addFichaItem(){ __fichaItens.push({produtoId:(ESTOQUE[0]&&ESTOQUE[0].id)||'',qtd:1}); renderFichaEditor(); }
-function removeFichaItem(i){ __fichaItens.splice(i,1); renderFichaEditor(); }
-function updFichaItem(i,campo,val){ __fichaItens[i][campo]= campo==='qtd'?(+val||0):val; }
-function renderFichaEditor(){
-  const box=document.getElementById('fichasBox'); if(!box) return;
-  const fs='padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink);font-size:13px';
-  const linhas=__fichaItens.map((it,i)=>{
-    const opts=ESTOQUE.map(e=>`<option value="${e.id}" ${e.id==it.produtoId?'selected':''}>${e.produto} (${e.unidade||'un'})</option>`).join('');
-    return `<div style="display:grid;grid-template-columns:2fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px">
-      <div class="field" style="margin:0"><label>Insumo</label><select onchange="updFichaItem(${i},'produtoId',this.value)" style="${fs};width:100%">${opts}</select></div>
-      <div class="field" style="margin:0"><label>Qtd consumida</label><input type="number" step="any" value="${it.qtd}" oninput="updFichaItem(${i},'qtd',this.value)" style="${fs};width:100%"></div>
-      <button class="btn ghost" style="padding:7px 9px;font-size:12px" onclick="removeFichaItem(${i})">×</button>
-    </div>`;
-  }).join('');
-  box.innerHTML=`<div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px">
-    <div style="font-weight:600;margin-bottom:12px">Ficha técnica — ${__fichaProc}</div>
-    ${linhas}
-    <div style="display:flex;gap:10px;margin-top:6px">
-      <button class="btn ghost" style="padding:5px 11px;font-size:12px" onclick="addFichaItem()">+ insumo</button>
-    </div>
-    <div style="display:flex;gap:10px;margin-top:14px">
-      <button class="btn" onclick="salvarFicha()">Salvar ficha</button>
-      <button class="btn ghost" onclick="go('estoque')">Cancelar</button>
-    </div>
-  </div>`;
-  box.scrollIntoView({behavior:'smooth',block:'nearest'});
-}
-async function salvarFicha(){
-  const proc=__fichaProc;
-  const itens=__fichaItens.filter(it=>it.produtoId&&it.qtd>0);
-  if(MODO_NUVEM){
-    try{
-      await sb.from('fichas_tecnicas').delete().eq('procedimento',proc);
-      for(const it of itens){
-        await sbInsert('fichas_tecnicas',{procedimento:proc,produto_id:it.produtoId,quantidade:it.qtd});
-      }
-    }catch(e){ alert('Erro ao salvar ficha: '+e.message); }
-    await carregarTudo(); go('estoque'); toast('Ficha técnica salva'); return;
-  }
-  FICHAS[proc]=itens; go('estoque'); toast('Ficha técnica salva');
-}
-function abrirProdutoForm(){
+function renderProdutoForm(e){
   const fs='padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);width:100%';
-  const uniOpts=UNIDADES.map(u=>`<option>${u}</option>`).join('');
+  const uniOpts=UNIDADES.map(u=>`<option ${u===(e.unidade||'ml')?'selected':''}>${u}</option>`).join('');
   document.getElementById('produtoFormBox').innerHTML=`
     <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
-      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:12px">
-        <div class="field" style="grid-column:span 2"><label>Produto</label><input id="pr_nome" placeholder="Ex: Toxina Botulínica 100U" style="${fs}"></div>
+      <div style="font-weight:600;margin-bottom:12px">${__prodEditId?'Editar produto':'Novo produto'}</div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px">
+        <div class="field" style="grid-column:span 2"><label>Produto</label><input id="pr_nome" value="${(e.produto||'').replace(/"/g,'&quot;')}" placeholder="Ex: Ácido Hialurônico 1ml" style="${fs}"></div>
         <div class="field"><label>Unidade</label><select id="pr_uni" style="${fs}">${uniOpts}</select></div>
-        <div class="field"><label>Qtd inicial</label><input type="number" id="pr_qtd" value="0" style="${fs}"></div>
-        <div class="field"><label>Estoque mínimo</label><input type="number" id="pr_min" value="0" style="${fs}"></div>
-        <div class="field"><label>Custo unitário (R$)</label><input type="number" id="pr_custo" value="0" style="${fs}"></div>
+        <div class="field"><label>Qtd em estoque</label><input type="number" step="any" id="pr_qtd" value="${e.quantidade||0}" style="${fs}"></div>
+        <div class="field"><label>Estoque mínimo</label><input type="number" step="any" id="pr_min" value="${e.minimo||0}" style="${fs}"></div>
       </div>
-      <div style="display:flex;gap:10px">
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:6px">
+        <div class="field" style="grid-column:span 2"><label>Custo por unidade (R$ / ${e.unidade||'ml'})</label><input type="number" step="any" id="pr_custo" value="${e.custoUnit||0}" style="${fs}"></div>
+        <div class="field" style="grid-column:span 3;display:flex;align-items:flex-end"><div style="font-size:12px;color:var(--grey)">A baixa de estoque e o custo de cada atendimento são calculados pela quantidade (em ${e.unidade||'ml'}) usada em cada procedimento, definida abaixo.</div></div>
+      </div>
+
+      <div style="border-top:1px solid var(--gold-l);padding-top:14px;margin-top:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <label style="font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:var(--grey);font-weight:600">Procedimentos que usam este material</label>
+          <button type="button" class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="addProdutoUso()">+ vincular procedimento</button>
+        </div>
+        <div id="prodUsosBox"></div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:16px">
         <button class="btn" onclick="salvarProduto()">Salvar produto</button>
-        <button class="btn ghost" onclick="document.getElementById('produtoFormBox').innerHTML=''">Cancelar</button>
+        <button class="btn ghost" onclick="document.getElementById('produtoFormBox').innerHTML='';__prodEditId=null">Cancelar</button>
       </div>
     </div>`;
+  renderProdutoUsos();
+  document.getElementById('produtoFormBox').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function addProdutoUso(){
+  // primeiro procedimento ainda não vinculado
+  const usados=__prodUsos.map(u=>u.proc);
+  const livre=PROCS.find(p=>!usados.includes(p))||PROCS[0]||'';
+  __prodUsos.push({proc:livre,ml:1}); renderProdutoUsos();
+}
+function removeProdutoUso(i){ __prodUsos.splice(i,1); renderProdutoUsos(); }
+function updProdutoUso(i,campo,val){ __prodUsos[i][campo]= campo==='ml'?(+val||0):val; }
+function renderProdutoUsos(){
+  const box=document.getElementById('prodUsosBox'); if(!box) return;
+  const uni=(document.getElementById('pr_uni')||{}).value||'ml';
+  const fs='padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink);font-size:13px';
+  if(!__prodUsos.length){
+    box.innerHTML=`<div style="font-size:12.5px;color:var(--grey);font-style:italic;padding:4px 2px">Nenhum procedimento vinculado. Este produto não dará baixa automática até você vincular ao menos um.</div>`;
+    return;
+  }
+  box.innerHTML=__prodUsos.map((u,i)=>{
+    const po=PROCS.map(p=>`<option ${p===u.proc?'selected':''}>${p}</option>`).join('');
+    return `<div style="display:grid;grid-template-columns:2fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px">
+      <div class="field" style="margin:0"><label>Procedimento</label><select onchange="updProdutoUso(${i},'proc',this.value)" style="${fs};width:100%">${po}</select></div>
+      <div class="field" style="margin:0"><label>Consumo padrão (${uni})</label><input type="number" step="any" value="${u.ml}" oninput="updProdutoUso(${i},'ml',this.value)" style="${fs};width:100%"></div>
+      <button type="button" class="btn ghost" style="padding:7px 9px;font-size:12px" onclick="removeProdutoUso(${i})">×</button>
+    </div>`;
+  }).join('');
 }
 async function salvarProduto(){
   const v=i=>document.getElementById(i).value;
-  const prod={produto:v('pr_nome')||'Produto',unidade:v('pr_uni'),quantidade:+v('pr_qtd')||0,minimo:+v('pr_min')||0,custoUnit:+v('pr_custo')||0};
+  const usos=__prodUsos.filter(u=>u.proc && u.ml>0);
+  const prod={produto:v('pr_nome')||'Produto',unidade:v('pr_uni'),quantidade:+v('pr_qtd')||0,minimo:+v('pr_min')||0,custoUnit:+v('pr_custo')||0,usos};
   if(MODO_NUVEM){
-    await sbInsert('estoque',{produto:prod.produto,unidade:prod.unidade,quantidade:prod.quantidade,minimo:prod.minimo,custo_unit:prod.custoUnit});
-    await carregarTudo(); go('estoque'); return;
+    const reg={produto:prod.produto,unidade:prod.unidade,quantidade:prod.quantidade,minimo:prod.minimo,custo_unit:prod.custoUnit,usos:usos};
+    if(__prodEditId) await sbUpdate('estoque',__prodEditId,reg);
+    else await sbInsert('estoque',reg);
+    __prodEditId=null; await carregarTudo(); go('estoque'); toast('Produto salvo'); return;
   }
-  prod.id=EST_SEQ++; ESTOQUE.push(prod); go('estoque');
+  if(__prodEditId){ const e=ESTOQUE.find(x=>x.id==__prodEditId); Object.assign(e,prod); }
+  else { prod.id=EST_SEQ++; ESTOQUE.push(prod); }
+  __prodEditId=null; go('estoque'); toast('Produto salvo');
 }
 async function excluirProduto(id){
   if(MODO_NUVEM){await sbDelete('estoque',id);await carregarTudo();}
