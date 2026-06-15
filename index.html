@@ -257,35 +257,6 @@ table.data tbody tr:hover{background:var(--cream)}
   font-family:inherit;font-weight:600;font-size:13.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;transition:.16s}
 .new-btn:hover{background:var(--gold-l)}
 .new-btn svg{width:16px;height:16px;stroke-width:2.5}
-
-/* ---------- Toast (feedback de ação) ---------- */
-#toastWrap{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:2000;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
-.toast{background:var(--black);color:var(--ivory);padding:11px 20px;border-radius:11px;font-size:13.5px;font-weight:500;
-  box-shadow:0 6px 24px rgba(0,0,0,.3);border:1px solid var(--gold-d);display:flex;align-items:center;gap:9px;
-  animation:toastIn .3s cubic-bezier(.22,1,.36,1);max-width:90vw}
-.toast svg{width:16px;height:16px;stroke:var(--gold);stroke-width:2.4;flex-shrink:0}
-.toast.out{animation:toastOut .3s ease forwards}
-@keyframes toastIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
-@keyframes toastOut{to{opacity:0;transform:translateY(10px)}}
-
-/* ---------- Busca em tabelas ---------- */
-.tbl-search{display:flex;align-items:center;gap:8px;background:var(--cream);border:1px solid var(--line);
-  border-radius:9px;padding:7px 12px;margin-bottom:14px;max-width:320px}
-.tbl-search svg{width:15px;height:15px;stroke:var(--grey);stroke-width:2;flex-shrink:0}
-.tbl-search input{border:none;background:none;outline:none;font-family:inherit;font-size:13.5px;color:var(--ink);width:100%}
-.tbl-search input::placeholder{color:var(--grey)}
-
-/* ---------- Tabelas → cards no mobile ---------- */
-@media(max-width:720px){
-  table.data.cardify thead{display:none}
-  table.data.cardify, table.data.cardify tbody, table.data.cardify tr, table.data.cardify td{display:block;width:100%}
-  table.data.cardify tr{background:var(--paper);border:1px solid var(--line);border-radius:12px;
-    padding:12px 14px;margin-bottom:11px;box-shadow:var(--shadow-sm)}
-  table.data.cardify td{border:none;padding:5px 0;text-align:left !important;display:flex;justify-content:space-between;gap:14px}
-  table.data.cardify td::before{content:attr(data-label);font-size:11px;letter-spacing:.6px;text-transform:uppercase;
-    color:var(--grey);font-weight:600;flex-shrink:0}
-  table.data.cardify td.num,table.data.cardify td.ctr{text-align:right}
-}
 </style>
 </head>
 <body>
@@ -394,14 +365,6 @@ table.data tbody tr:hover{background:var(--cream)}
    ============================================================ */
 
 const BRL = n => 'R$ ' + Math.round(n).toLocaleString('pt-BR');
-function toast(msg){
-  let wrap=document.getElementById('toastWrap');
-  if(!wrap){ wrap=document.createElement('div'); wrap.id='toastWrap'; document.body.appendChild(wrap); }
-  const el=document.createElement('div'); el.className='toast';
-  el.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg><span>'+msg+'</span>';
-  wrap.appendChild(el);
-  setTimeout(()=>{ el.classList.add('out'); setTimeout(()=>el.remove(),300); }, 2600);
-}
 const BRL2 = n => n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const PCT = n => (n*100).toFixed(1).replace('.',',') + '%';
 const PCT0 = n => Math.round(n*100) + '%';
@@ -695,23 +658,6 @@ let EST_MOV = [];
 let MOV_SEQ = 1;
 const UNIDADES = ['un','ml','frasco','caixa','ampola','seringa','kit'];
 
-/* ===== Fichas técnicas / consumo de insumos =====
-   O vínculo agora mora NO PRODUTO: cada produto do estoque tem uma lista
-   de "usos" = [{proc, ml}] indicando quais procedimentos consomem aquele
-   material e quantos ml em cada um (valor padrão, editável no atendimento).
-   insumosDoProc(proc) inverte isso: dado um procedimento, devolve os
-   produtos que o utilizam e os ml padrão. */
-let FICHAS = {}; // legado (mantido para compatibilidade de carga antiga)
-function insumosDoProc(proc){
-  const out=[];
-  ESTOQUE.forEach(e=>{
-    (e.usos||[]).forEach(u=>{
-      if(u.proc===proc) out.push({produtoId:e.id, produto:e.produto, unidade:e.unidade||'ml', ml:+u.ml||0, custoUnit:+e.custoUnit||0});
-    });
-  });
-  return out;
-}
-
 /* ===== Faturamento histórico (meses anteriores lançados manualmente) ===== */
 // permite registrar o faturamento/custo de meses que já passaram, sem precisar
 // lançar atendimento por atendimento. Alimenta o comparativo e a projeção.
@@ -747,23 +693,11 @@ function calc(){
     fechados:ld.filter(l=>l.canal===c&&l.fechou).length,
     receita:at.filter(a=>a.canal===c&&a.agenda==='Compareceu').reduce((s,a)=>s+a.valor,0),
   })).map(x=>({...x,conv:x.leads?x.fechados/x.leads:0}));
-  // ---- agregação por procedimento: usa os ITENS quando existem; senão, o proc único (modo legado) ----
-  // procStats(p) => {qtd, receita} considerando atendimentos comparecidos
-  const procStats = (p)=>{
-    let qtd=0, receita=0;
-    compareceu.forEach(a=>{
-      if(a.itens && a.itens.length){
-        a.itens.forEach(it=>{ if(it.proc===p){ qtd++; receita+=(+it.valor||0); } });
-      } else if(a.proc===p){
-        qtd++; receita+=(+a.valor||0);
-      }
-    });
-    return {qtd, receita};
-  };
-  const porProc = PROCS.map(p=>{
-    const s=procStats(p);
-    return {proc:p, qtd:s.qtd, receita:s.receita};
-  }).map(x=>({...x,share:faturamento?x.receita/faturamento:0})).filter(x=>x.qtd>0);
+  const porProc = PROCS.map(p=>({
+    proc:p,
+    qtd:compareceu.filter(a=>a.proc===p).length,
+    receita:compareceu.filter(a=>a.proc===p).reduce((s,a)=>s+a.valor,0),
+  })).map(x=>({...x,share:faturamento?x.receita/faturamento:0})).filter(x=>x.qtd>0);
   const cats = [...new Set(cs.map(c=>c.cat))];
   const porCat = cats.map(ca=>({cat:ca,valor:cs.filter(c=>c.cat===ca).reduce((s,c)=>s+c.valor,0)}))
     .sort((a,b)=>b.valor-a.valor);
@@ -787,10 +721,11 @@ function calc(){
   };
   const comandas = compareceu.filter(a=>a.valor>0).length;
   // ---- ranking de procedimentos por nº de atendimentos ----
-  const ranking = PROCS.map(p=>{
-    const s=procStats(p);
-    return {nome:p, qtd:s.qtd, receita:s.receita};
-  }).filter(x=>x.qtd>0).sort((a,b)=>b.qtd-a.qtd);
+  const ranking = PROCS.map(p=>({
+    nome:p,
+    qtd:compareceu.filter(a=>a.proc===p).length,
+    receita:compareceu.filter(a=>a.proc===p).reduce((s,a)=>s+a.valor,0)
+  })).filter(x=>x.qtd>0).sort((a,b)=>b.qtd-a.qtd);
   // ranking de pacientes por valor
   const rankPac = [...new Set(compareceu.map(a=>a.paciente))].map(nome=>({
     nome, valor:compareceu.filter(a=>a.paciente===nome).reduce((s,a)=>s+a.valor,0),
@@ -801,8 +736,9 @@ function calc(){
   const comissaoBaseTotal = compareceu.reduce((s,a)=>s+a.valor,0);
   const comissaoTotal = comissaoBaseTotal * META.comissaoPercent;
   const comissaoPorProc = PROCS.map(p=>{
-    const s=procStats(p);
-    return {proc:p, qtd:s.qtd, base:s.receita, comissao:s.receita*META.comissaoPercent};
+    const itens=compareceu.filter(a=>a.proc===p);
+    const base=itens.reduce((s,a)=>s+a.valor,0);
+    return {proc:p, qtd:itens.length, base, comissao:base*META.comissaoPercent};
   }).filter(x=>x.qtd>0).sort((a,b)=>b.comissao-a.comissao);
 
   // ---- base de pacientes (consolida atendimentos por pessoa) ----
@@ -935,7 +871,7 @@ async function carregarTudo(){
     CAT_RECEITA = (cat.data||[]).filter(c=>c.tipo==='receita').map(c=>c.nome);
     CAT_DESPESA = (cat.data||[]).filter(c=>c.tipo==='despesa').map(c=>c.nome);
     CAIXA = (lanc.data||[]).map(l=>({id:l.id,data:l.data,tipo:l.tipo,categoria:l.categoria,desc:l.descricao,valor:+l.valor,carteira:l.carteira_id,carteiraDest:l.carteira_dest}));
-    DATA.atendimentos = (atend.data||[]).map(a=>({id:a.id,data:a.data,paciente:a.paciente,proc:a.procedimento,func:a.funcionario,canal:a.canal,valor:+a.valor,custo:+a.custo,pag:a.pagamento,agenda:a.agenda,itens:[]}));
+    DATA.atendimentos = (atend.data||[]).map(a=>({id:a.id,data:a.data,paciente:a.paciente,proc:a.procedimento,func:a.funcionario,canal:a.canal,valor:+a.valor,custo:+a.custo,pag:a.pagamento,agenda:a.agenda}));
     CAPTACAO = (capt.data||[]).map(c=>({id:c.id,data:c.data,plataforma:c.plataforma,seguidores:c.seguidores,leads:c.leads,agendadas:c.agendadas,investido:+c.investido,gasto:+c.gasto,campanhas:c.campanhas}));
     METAS = (met.data||[]).map(m=>({id:m.id,funcId:m.func_id,escopo:m.escopo,tipo:m.tipo,periodo:m.periodo,faixas:m.faixas}));
     DATA.conformidade = (conf.data||[]).map(c=>({id:c.id,item:c.item,resp:c.responsavel,status:c.status}));
@@ -946,19 +882,8 @@ async function carregarTudo(){
       sb.from('estoque_mov').select('*').order('data'),
     ]);
     CONTAS = (contasR.data||[]).map(c=>({id:c.id,tipo:c.tipo,descricao:c.descricao,categoria:c.categoria,natureza:c.natureza,valorParcela:+c.valor_parcela,numParcelas:c.num_parcelas,carteira:c.carteira_id,parcelas:c.parcelas||[]}));
-    ESTOQUE = (estR.data||[]).map(e=>({id:e.id,produto:e.produto,unidade:e.unidade,quantidade:+e.quantidade,minimo:+e.minimo,custoUnit:+e.custo_unit,usos:Array.isArray(e.usos)?e.usos:[]}));
+    ESTOQUE = (estR.data||[]).map(e=>({id:e.id,produto:e.produto,unidade:e.unidade,quantidade:+e.quantidade,minimo:+e.minimo,custoUnit:+e.custo_unit}));
     EST_MOV = (movR.data||[]).map(m=>({id:m.id,produtoId:m.produto_id,data:m.data,tipo:m.tipo,quantidade:+m.quantidade,obs:m.obs}));
-    // ---- itens de atendimento (múltiplos procedimentos por sessão) ----
-    try {
-      const itensR = await sb.from('atendimento_itens').select('*').order('criado_em');
-      const porAtend = {};
-      (itensR.data||[]).forEach(it=>{
-        (porAtend[it.atendimento_id] = porAtend[it.atendimento_id] || []).push(
-          {id:it.id,proc:it.procedimento,valor:+it.valor,custo:+it.custo,func:it.funcionario||'',ml:it.consumo_ml||null}
-        );
-      });
-      DATA.atendimentos.forEach(a=>{ a.itens = porAtend[a.id] || []; });
-    } catch(e){ /* tabela ainda não criada — segue sem itens, sem quebrar nada */ }
     // leads e custos antigos (exemplo) não são usados na nuvem — zera para o painel refletir a realidade
     DATA.leads = [];
     DATA.custos = [];
@@ -1243,349 +1168,76 @@ function drawCharts(k){
 
 /* ============================ ATENDIMENTOS ============================ */
 function renderAtend(pg){
-  const filtro=(window.__atendBusca||'').toLowerCase().trim();
-  let rows=DATA.atendimentos;
-  if(filtro){
-    rows=rows.filter(a=>{
-      const itensTxt=(a.itens||[]).map(it=>it.proc).join(' ');
-      return [a.paciente,a.proc,itensTxt,a.func,a.canal,a.data].join(' ').toLowerCase().includes(filtro);
-    });
-  }
-  const procCell=(a)=>{
-    if(a.itens && a.itens.length>1){
-      const tags=a.itens.map(it=>`<span style="display:inline-block;background:var(--cream);border:1px solid var(--gold-l);border-radius:6px;padding:1px 7px;font-size:11px;margin:1px 2px 1px 0">${it.proc}</span>`).join('');
-      return `<div style="display:flex;flex-wrap:wrap;gap:1px;justify-content:flex-end">${tags}</div>`;
-    }
-    return a.proc||'—';
-  };
+  const rows=DATA.atendimentos;
   const body=rows.map(a=>`<tr>
-    <td data-label="Data">${fmtDate(a.data)}</td><td data-label="Paciente">${a.paciente}</td><td data-label="Procedimento">${procCell(a)}</td>
-    <td data-label="Realizado por" style="font-size:12.5px">${a.func||'—'}</td>
-    <td data-label="Canal">${a.canal}</td><td data-label="Valor" class="num">${BRL(a.valor)}</td>
-    <td data-label="Pagamento" class="ctr">${pagPill(a.pag)}</td><td data-label="Agenda" class="ctr">${agPill(a.agenda)}</td>
-    <td data-label="Ações" class="ctr"><button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="editarAtend('${a.id}')">editar</button> <button class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="excluirAtend('${a.id}')">×</button></td>
+    <td>${fmtDate(a.data)}</td><td>${a.paciente}</td><td>${a.proc}</td>
+    <td style="font-size:12.5px">${a.func||'—'}</td>
+    <td>${a.canal}</td><td class="num">${BRL(a.valor)}</td>
+    <td class="ctr">${pagPill(a.pag)}</td><td class="ctr">${agPill(a.agenda)}</td>
+    <td class="ctr"><button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="editarAtend('${a.id}')">editar</button> <button class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="excluirAtend('${a.id}')">×</button></td>
   </tr>`).join('');
   pg.innerHTML=`
     <div class="panel">
       <div class="toolbar">
-        <div><h3>Atendimentos do período</h3><div class="ph-sub">${rows.length} registro(s) · receita ${BRL(rows.filter(a=>a.agenda==='Compareceu').reduce((s,a)=>s+a.valor,0))}</div></div>
-        <div style="display:flex;gap:8px">
-          <button class="btn ghost" onclick="abrirImportCSV()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Importar</button>
-          <button class="btn" onclick="abrirAtendForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo atendimento</button>
-        </div>
+        <div><h3>Atendimentos do período</h3><div class="ph-sub">${rows.length} registros · receita ${BRL(rows.filter(a=>a.agenda==='Compareceu').reduce((s,a)=>s+a.valor,0))}</div></div>
+        <button class="btn" onclick="abrirAtendForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo atendimento</button>
       </div>
       <div id="atendFormBox"></div>
-      <div id="importBox"></div>
-      <label class="tbl-search">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" placeholder="Buscar por paciente, procedimento, profissional…" value="${window.__atendBusca||''}" oninput="window.__atendBusca=this.value;clearTimeout(window.__atendBuscaT);window.__atendBuscaT=setTimeout(()=>go('atendimentos'),250)">
-      </label>
       <div style="font-size:12px;color:var(--grey);font-style:italic;margin-bottom:14px">
         Dica: registre cada atendimento com a <b>data real</b> em que aconteceu, mesmo que você lance vários de uma vez no fim da semana. Assim os relatórios diário, semanal e mensal ficam todos corretos.
       </div>
-      <table class="data cardify">
+      <table class="data">
         <thead><tr><th>Data</th><th>Paciente</th><th>Procedimento</th><th>Realizado por</th><th>Canal</th><th class="num">Valor</th><th class="ctr">Pagamento</th><th class="ctr">Agenda</th><th class="ctr">Ações</th></tr></thead>
-        <tbody>${body||'<tr><td colspan="9" style="text-align:center;color:var(--grey);padding:24px">Nenhum atendimento encontrado.</td></tr>'}</tbody>
+        <tbody>${body||'<tr><td colspan="9" style="text-align:center;color:var(--grey);padding:24px">Nenhum atendimento ainda.</td></tr>'}</tbody>
       </table>
     </div>`;
-}
-/* ---- importação de atendimentos por CSV / colar ---- */
-function abrirImportCSV(){
-  const fs='padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);width:100%';
-  document.getElementById('importBox').innerHTML=`
-    <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
-      <div style="font-weight:600;margin-bottom:6px">Importar atendimentos em lote</div>
-      <div style="font-size:12.5px;color:var(--grey);margin-bottom:12px">
-        Cole as linhas da sua outra plataforma. Uma por linha, com colunas separadas por <b>vírgula</b>, <b>ponto-e-vírgula</b> ou <b>tabulação</b>, nesta ordem:<br>
-        <code style="font-size:12px;color:var(--ink)">data; paciente; procedimento; valor; profissional(opcional); canal(opcional); pagamento(opcional); status(opcional)</code><br>
-        A data aceita <b>AAAA-MM-DD</b> ou <b>DD/MM/AAAA</b>. Linhas com cabeçalho ("data","paciente"…) são ignoradas.
-      </div>
-      <textarea id="csvText" rows="7" placeholder="2026-06-12; Maria Silva; Toxina Botulínica; 1200; Dra. Bruna Braga; WhatsApp; Pago; Compareceu" style="${fs};font-family:ui-monospace,monospace;font-size:12.5px;resize:vertical"></textarea>
-      <div id="csvPreview" style="margin-top:12px"></div>
-      <div style="display:flex;gap:10px;margin-top:12px">
-        <button class="btn ghost" onclick="previewCSV()">Pré-visualizar</button>
-        <button class="btn" onclick="confirmarImportCSV()">Importar</button>
-        <button class="btn ghost" onclick="document.getElementById('importBox').innerHTML=''">Cancelar</button>
-      </div>
-    </div>`;
-  document.getElementById('importBox').scrollIntoView({behavior:'smooth',block:'nearest'});
-}
-function parseCSV(txt){
-  const linhas=txt.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
-  const out=[];
-  linhas.forEach(l=>{
-    const c=l.split(/[;\t,]/).map(x=>x.trim());
-    if(c.length<3) return;
-    const prim=(c[0]||'').toLowerCase();
-    if(prim==='data'||prim.includes('paciente')) return; // cabeçalho
-    let data=c[0];
-    if(/^\d{2}\/\d{2}\/\d{4}$/.test(data)){ const[d,m,y]=data.split('/'); data=`${y}-${m}-${d}`; }
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(data)) return;
-    const valor=parseFloat((c[3]||'0').replace(/[^\d,.-]/g,'').replace(/\.(?=\d{3}(\D|$))/g,'').replace(',','.'))||0;
-    out.push({data,paciente:c[1]||'Sem nome',proc:c[2]||'Avaliação',valor,
-      func:c[4]||'',canal:c[5]||(CANAIS[0]||''),pag:c[6]||'Pago',agenda:c[7]||'Compareceu'});
-  });
-  return out;
-}
-function previewCSV(){
-  const regs=parseCSV(document.getElementById('csvText').value);
-  const box=document.getElementById('csvPreview');
-  if(!regs.length){ box.innerHTML='<div style="color:var(--red);font-size:13px">Nenhuma linha válida reconhecida. Confira o formato.</div>'; return; }
-  const linhas=regs.slice(0,8).map(r=>`<tr><td>${fmtDateFull(r.data)}</td><td>${r.paciente}</td><td>${r.proc}</td><td class="num">${BRL(r.valor)}</td><td>${r.func||'—'}</td></tr>`).join('');
-  box.innerHTML=`<div style="font-size:12.5px;color:var(--green);margin-bottom:6px">${regs.length} atendimento(s) reconhecido(s)${regs.length>8?' (mostrando 8)':''}:</div>
-    <table class="data"><thead><tr><th>Data</th><th>Paciente</th><th>Procedimento</th><th class="num">Valor</th><th>Profissional</th></tr></thead><tbody>${linhas}</tbody></table>`;
-}
-async function confirmarImportCSV(){
-  const regs=parseCSV(document.getElementById('csvText').value);
-  if(!regs.length){ toast('Nenhuma linha válida'); return; }
-  if(MODO_NUVEM){
-    for(const r of regs){
-      await sbInsert('atendimentos',{data:r.data,paciente:r.paciente,procedimento:r.proc,funcionario:r.func,canal:r.canal,valor:r.valor,custo:Math.round(r.valor*0.3),pagamento:r.pag,agenda:r.agenda});
-    }
-    await carregarTudo(); go('atendimentos'); toast(regs.length+' atendimento(s) importado(s)'); return;
-  }
-  regs.forEach(r=>DATA.atendimentos.unshift({id:Date.now()+Math.random(),...r,custo:Math.round(r.valor*0.3),itens:[]}));
-  go('atendimentos'); toast(regs.length+' atendimento(s) importado(s)');
 }
 function abrirAtendForm(){ editarAtend(0); }
 function editarAtend(id){
   const a = (id && id!=='0')? DATA.atendimentos.find(x=>x.id==id) : {id:0,data:new Date().toISOString().slice(0,10),paciente:'',func:'',proc:'',canal:'',valor:'',pag:'Pago',agenda:'Compareceu'};
   const fs='padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink)';
   const funcOpts=FUNCIONARIOS.filter(f=>f.atende&&f.ativo).map(f=>`<option ${f.nome===a.func?'selected':''}>${f.nome}</option>`).join('');
+  const procOpts=PROCS.concat('Avaliação').map(p=>`<option ${p===a.proc?'selected':''}>${p}</option>`).join('');
   const canalOpts=CANAIS.map(c=>`<option ${c===a.canal?'selected':''}>${c}</option>`).join('');
   const agOpts=['Compareceu','Agendado','No-show','Reagendado'].map(s=>`<option ${s===a.agenda?'selected':''}>${s}</option>`).join('');
   const pagOpts=['Pago','Parcial','Pendente'].map(s=>`<option ${s===a.pag?'selected':''}>${s}</option>`).join('');
-  // procedimento "principal": se houver itens, usa o 1º; senão o proc salvo
-  const procPrincipal = (a.itens && a.itens.length) ? a.itens[0].proc : (a.proc||'');
-  const procOpts=PROCS.concat('Avaliação').map(p=>`<option ${p===procPrincipal?'selected':''}>${p}</option>`).join('');
-  // estado de trabalho dos itens (procedimentos adicionais detalhados)
-  // modo "lista" liga quando o atendimento já tem mais de 1 procedimento
-  __atendItens = (a.itens && a.itens.length>1)
-    ? a.itens.map(it=>({proc:it.proc,valor:+it.valor||0,func:it.func||'',ml:it.ml||null}))
-    : [];
-  __atendModoLista = __atendItens.length>0;
   document.getElementById('atendFormBox').innerHTML=`
     <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px">
         <div class="field"><label>Data do atendimento</label><input id="naData" type="date" value="${a.data}" style="${fs};width:100%"></div>
         <div class="field"><label>Paciente</label><input id="naPac" value="${a.paciente}" placeholder="Nome" style="${fs};width:100%"></div>
         <div class="field"><label>Realizado por</label><select id="naFunc" style="${fs};width:100%"><option value="">—</option>${funcOpts}</select></div>
-        <div class="field"><label>Canal</label><select id="naCanal" style="${fs};width:100%">${canalOpts}</select></div>
-      </div>
-
-      <!-- LINHA SIMPLES: 1 procedimento + valor (modo rápido, padrão) -->
-      <div id="naSimples" style="display:${__atendModoLista?'none':'grid'};grid-template-columns:2fr 1fr 1fr 1fr;gap:12px;margin-bottom:6px">
         <div class="field"><label>Procedimento</label><select id="naProc" style="${fs};width:100%">${procOpts}</select></div>
-        <div class="field"><label>Valor (R$)</label><input id="naValor" type="number" value="${a.valor}" placeholder="0" style="${fs};width:100%"></div>
+        <div class="field"><label>Canal</label><select id="naCanal" style="${fs};width:100%">${canalOpts}</select></div>
+        <div class="field"><label>Valor (R$)</label><input id="naValor" type="number" value="${a.valor}" style="${fs};width:100%"></div>
         <div class="field"><label>Pagamento</label><select id="naPag" style="${fs};width:100%">${pagOpts}</select></div>
         <div class="field"><label>Status</label><select id="naAg" style="${fs};width:100%">${agOpts}</select></div>
       </div>
-
-      <!-- MODO LISTA: vários procedimentos na mesma consulta -->
-      <div id="naLista" style="display:${__atendModoLista?'block':'none'}">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-          <label style="font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:var(--grey);font-weight:600">Procedimentos da consulta</label>
-          <button type="button" class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="addAtendItem()">+ adicionar</button>
-        </div>
-        <div id="naItensBox"></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">
-          <div class="field" style="margin:0"><label>Pagamento</label><select id="naPagL" style="${fs};width:100%">${pagOpts}</select></div>
-          <div class="field" style="margin:0"><label>Status</label><select id="naAgL" style="${fs};width:100%">${agOpts}</select></div>
-        </div>
-      </div>
-
-      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:14px 0 16px;padding:11px 14px;background:var(--paper);border:1px solid var(--line);border-radius:10px">
-        <button type="button" id="naToggle" class="btn ghost" style="padding:6px 12px;font-size:12.5px" onclick="toggleModoLista()">
-          ${__atendModoLista?'↺ usar procedimento único':'+ vários procedimentos nesta consulta'}
-        </button>
-        <div id="naTotalBox" style="font-size:13px;color:var(--ink);${__atendModoLista?'':'display:none'}">Valor total: <b id="naTotalLbl">R$ 0</b></div>
-        <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink);cursor:pointer;white-space:nowrap;margin-left:auto">
-          <input type="checkbox" id="naBaixa" ${(!id||id==='0')?'checked':''} style="width:15px;height:15px;accent-color:var(--gold)">
-          Dar baixa no estoque (ml)
-        </label>
-      </div>
-
       <div style="display:flex;gap:10px">
         <button class="btn" onclick="salvarAtend('${a.id}')">Salvar</button>
         <button class="btn ghost" onclick="document.getElementById('atendFormBox').innerHTML=''">Cancelar</button>
       </div>
     </div>`;
-  if(__atendModoLista) renderAtendItens();
   document.getElementById('atendFormBox').scrollIntoView({behavior:'smooth',block:'nearest'});
 }
-/* ---- alternância entre procedimento único e lista de vários ---- */
-let __atendItens = [];
-let __atendModoLista = false;
-function toggleModoLista(){
-  const simples=document.getElementById('naSimples');
-  const lista=document.getElementById('naLista');
-  const totalBox=document.getElementById('naTotalBox');
-  const btn=document.getElementById('naToggle');
-  if(!__atendModoLista){
-    // entrando no modo lista: semeia com o procedimento que já estava selecionado
-    const proc=(document.getElementById('naProc')||{}).value||PROCS[0]||'';
-    const valor=+(document.getElementById('naValor')||{}).value||0;
-    const pag=(document.getElementById('naPag')||{}).value;
-    const ag=(document.getElementById('naAg')||{}).value;
-    __atendItens=[{proc,valor,func:'',ml:null}];
-    __atendModoLista=true;
-    simples.style.display='none'; lista.style.display='block'; totalBox.style.display='';
-    btn.textContent='↺ usar procedimento único';
-    // transfere pagamento/status para os selects do modo lista
-    if(document.getElementById('naPagL')&&pag) document.getElementById('naPagL').value=pag;
-    if(document.getElementById('naAgL')&&ag) document.getElementById('naAgL').value=ag;
-    renderAtendItens();
-  } else {
-    // voltando ao modo simples: leva o 1º procedimento de volta
-    const first=__atendItens[0]||{proc:PROCS[0]||'',valor:0};
-    __atendModoLista=false;
-    simples.style.display='grid'; lista.style.display='none'; totalBox.style.display='none';
-    btn.textContent='+ vários procedimentos nesta consulta';
-    if(document.getElementById('naProc')) document.getElementById('naProc').value=first.proc;
-    if(document.getElementById('naValor')) document.getElementById('naValor').value=first.valor||'';
-  }
-}
-function addAtendItem(){
-  __atendItens.push({proc:(PROCS[0]||''),valor:0,func:'',ml:null});
-  renderAtendItens();
-}
-function removeAtendItem(i){ __atendItens.splice(i,1); renderAtendItens(); }
-function updAtendItem(i,campo,val){
-  __atendItens[i][campo] = (campo==='valor') ? (+val||0) : (campo==='ml' ? (val===''?null:+val) : val);
-  if(campo==='proc') __atendItens[i].ml=null; // troca de proc reseta ml para usar padrão do produto
-  atualizarTotalLista();
-  if(campo==='proc') renderAtendItens();
-}
-function atualizarTotalLista(){
-  const lbl=document.getElementById('naTotalLbl'); if(!lbl) return;
-  lbl.textContent=BRL(__atendItens.reduce((s,it)=>s+(+it.valor||0),0));
-}
-function renderAtendItens(){
-  const box=document.getElementById('naItensBox'); if(!box) return;
-  const fsi='padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink);font-size:13px';
-  if(!__atendItens.length){
-    box.innerHTML=`<div style="font-size:12.5px;color:var(--grey);font-style:italic;padding:6px 2px">Clique em "+ adicionar" para incluir procedimentos.</div>`;
-    atualizarTotalLista(); return;
-  }
-  const fo=(sel)=>FUNCIONARIOS.filter(f=>f.atende&&f.ativo).map(f=>`<option ${f.nome===sel?'selected':''}>${f.nome}</option>`).join('');
-  box.innerHTML=__atendItens.map((it,i)=>{
-    const po=PROCS.concat('Avaliação').map(p=>`<option ${p===it.proc?'selected':''}>${p}</option>`).join('');
-    // mostra os insumos (ml) que esse procedimento consome, com base nos produtos do estoque
-    const insumos=insumosDoProc(it.proc);
-    let mlInfo='';
-    if(insumos.length){
-      mlInfo=`<div style="grid-column:1/-1;font-size:11.5px;color:var(--grey);margin-top:-2px;padding-left:2px">Consumo: ${insumos.map(ins=>{
-        const mlUsado = (it.ml && it.ml[ins.produtoId]!=null) ? it.ml[ins.produtoId] : ins.ml;
-        return `${ins.produto} <input type="number" step="any" value="${mlUsado}" oninput="updAtendItemMl(${i},'${ins.produtoId}',this.value)" style="width:64px;padding:2px 5px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);font-size:12px"> ${ins.unidade}`;
-      }).join(' · ')}</div>`;
-    }
-    return `<div style="display:grid;grid-template-columns:1.6fr 1.3fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px;${insumos.length?'padding-bottom:6px;border-bottom:1px dashed var(--line)':''}">
-      <div class="field" style="margin:0"><label>Procedimento</label><select onchange="updAtendItem(${i},'proc',this.value)" style="${fsi};width:100%">${po}</select></div>
-      <div class="field" style="margin:0"><label>Realizado por</label><select onchange="updAtendItem(${i},'func',this.value)" style="${fsi};width:100%"><option value="">—</option>${fo(it.func)}</select></div>
-      <div class="field" style="margin:0"><label>Valor (R$)</label><input type="number" value="${it.valor||''}" oninput="updAtendItem(${i},'valor',this.value)" style="${fsi};width:100%"></div>
-      <button type="button" class="btn ghost" style="padding:7px 9px;font-size:12px" onclick="removeAtendItem(${i})" title="Remover">×</button>
-      ${mlInfo}
-    </div>`;
-  }).join('');
-  atualizarTotalLista();
-}
-function updAtendItemMl(i,produtoId,val){
-  if(!__atendItens[i].ml) __atendItens[i].ml={};
-  __atendItens[i].ml[produtoId] = (val===''?null:+val);
-}
 async function salvarAtend(id){
-  const v=i=>{const el=document.getElementById(i);return el?el.value:'';};
-  // helper: custo de um procedimento = soma(ml usado × custo por ml do produto)
-  // mlOverride = mapa {produtoId: ml} digitado no atendimento; senão usa o padrão do produto
-  const consumoDoProc=(proc, mlOverride)=>{
-    return insumosDoProc(proc).map(ins=>{
-      const ml = (mlOverride && mlOverride[ins.produtoId]!=null) ? +mlOverride[ins.produtoId] : ins.ml;
-      return {produtoId:ins.produtoId, ml, custo:ml*ins.custoUnit};
-    });
-  };
-  let itens, valor, custo, proc, pag, agenda;
-  if(__atendModoLista){
-    itens=(__atendItens||[]).filter(it=>it.proc);
-    // calcula custo de cada item pelo consumo de ml
-    itens.forEach(it=>{
-      const cons=consumoDoProc(it.proc, it.ml);
-      it.custo=Math.round(cons.reduce((s,c)=>s+c.custo,0));
-      it._consumo=cons; // guarda para a baixa
-    });
-    valor = itens.reduce((s,it)=>s+(+it.valor||0),0);
-    custo = itens.reduce((s,it)=>s+(+it.custo||0),0);
-    proc  = itens.length ? (itens.length>1 ? itens[0].proc+' +'+(itens.length-1) : itens[0].proc) : 'Avaliação';
-    if(custo===0 && valor>0) custo=Math.round(valor*0.3);
-    pag=v('naPagL')||'Pago'; agenda=v('naAgL')||'Compareceu';
-  } else {
-    proc = v('naProc')||'Avaliação';
-    valor = +v('naValor')||0;
-    const cons=consumoDoProc(proc, null);
-    custo = Math.round(cons.reduce((s,c)=>s+c.custo,0)) || Math.round(valor*0.3);
-    pag=v('naPag')||'Pago'; agenda=v('naAg')||'Compareceu';
-    // representa como 1 item para gravar consumo/itens de forma uniforme
-    itens=[{proc,valor,func:v('naFunc')||'',custo,_consumo:cons}];
-  }
+  const v=i=>document.getElementById(i).value;
+  const valor=+v('naValor')||0;
   const reg={data:v('naData')||new Date().toISOString().slice(0,10),
     paciente:v('naPac')||'Sem nome',func:v('naFunc')||'',
-    proc,canal:v('naCanal'),valor,custo,pag,agenda};
-  const darBaixa=(document.getElementById('naBaixa')||{}).checked && reg.agenda==='Compareceu';
-  // consolida consumo em ml por produto (somando se o mesmo produto aparece em vários procedimentos)
-  const consumo={};
-  if(darBaixa){
-    itens.forEach(it=>{
-      (it._consumo||[]).forEach(c=>{ if(c.ml>0) consumo[c.produtoId]=(consumo[c.produtoId]||0)+c.ml; });
-    });
-  }
-  // só grava itens detalhados quando há mais de um procedimento (modo lista)
-  const gravarItens = __atendModoLista && itens.length>1;
+    proc:v('naProc'),canal:v('naCanal'),valor,custo:Math.round(valor*0.3),
+    pag:v('naPag')||'Pago',agenda:v('naAg')};
   if(MODO_NUVEM){
     const reg2={data:reg.data,paciente:reg.paciente,procedimento:reg.proc,funcionario:reg.func,canal:reg.canal,valor:reg.valor,custo:reg.custo,pagamento:reg.pag,agenda:reg.agenda};
-    let atendId=id;
-    if(id && id!=='0'){ await sbUpdate('atendimentos',id,reg2); }
-    else { const novo=await sbInsert('atendimentos',reg2); atendId=novo&&novo.id; }
-    if(atendId){
-      try{
-        await sb.from('atendimento_itens').delete().eq('atendimento_id',atendId);
-        if(gravarItens){
-          for(const it of itens){
-            await sbInsert('atendimento_itens',{atendimento_id:atendId,procedimento:it.proc,valor:+it.valor||0,custo:+it.custo||0,funcionario:it.func||'',consumo_ml:it.ml||null});
-          }
-        }
-      }catch(e){ console.warn('itens não gravados',e); }
-    }
-    if(Object.keys(consumo).length){
-      try{
-        const { data:{ user } } = await sb.auth.getUser();
-        for(const pid in consumo){
-          const e=ESTOQUE.find(x=>x.id==pid); if(!e) continue;
-          const novaQtd=Math.max(0,e.quantidade-consumo[pid]);
-          await sb.from('estoque').update({quantidade:novaQtd}).eq('id',pid);
-          await sb.from('estoque_mov').insert({user_id:user.id,produto_id:pid,data:reg.data,tipo:'saida',quantidade:consumo[pid],obs:'Baixa automática — '+reg.proc+' ('+reg.paciente+')'});
-        }
-      }catch(e){ console.warn('baixa de estoque não aplicada',e); }
-    }
-    await carregarTudo(); go('atendimentos'); toast('Atendimento salvo'); return;
+    if(id && id!=='0') await sbUpdate('atendimentos',id,reg2); else await sbInsert('atendimentos',reg2);
+    await carregarTudo(); go('atendimentos'); return;
   }
-  // ---- modo local ----
-  if(Object.keys(consumo).length){
-    const hoje=reg.data;
-    for(const pid in consumo){
-      const e=ESTOQUE.find(x=>x.id==pid); if(!e) continue;
-      e.quantidade=Math.max(0,e.quantidade-consumo[pid]);
-      EST_MOV.push({id:MOV_SEQ++,produtoId:pid,data:hoje,tipo:'saida',quantidade:consumo[pid],obs:'Baixa automática — '+reg.proc});
-    }
-  }
-  const itensSalvos = gravarItens ? itens.map(it=>({proc:it.proc,valor:it.valor,custo:it.custo,func:it.func,ml:it.ml||null})) : [];
-  if(id && id!=='0'){ const a=DATA.atendimentos.find(x=>x.id==id); Object.assign(a,reg,{itens:itensSalvos}); }
-  else { DATA.atendimentos.unshift({id:Date.now(),...reg,itens:itensSalvos}); }
-  go('atendimentos'); toast('Atendimento salvo');
+  if(id && id!=='0'){ const a=DATA.atendimentos.find(x=>x.id==id); Object.assign(a,reg); }
+  else { DATA.atendimentos.unshift({id:Date.now(),...reg}); }
+  go('atendimentos');
 }
 async function excluirAtend(id){
-  if(MODO_NUVEM){
-    try{ await sb.from('atendimento_itens').delete().eq('atendimento_id',id); }catch(e){}
-    await sbDelete('atendimentos',id); await carregarTudo();
-  }
+  if(MODO_NUVEM){ await sbDelete('atendimentos',id); await carregarTudo(); }
   else { DATA.atendimentos=DATA.atendimentos.filter(a=>a.id!=id); }
   go('atendimentos');
 }
@@ -2520,13 +2172,41 @@ function calcCaixa(){
 
 function renderCaixa(pg){
   const c=calcCaixa();
-  const mov=[...CAIXA].sort((a,b)=>a.data.localeCompare(b.data));
-  // saldo corrente acumulado (geral)
-  let acc=CARTEIRAS.reduce((s,w)=>s+w.saldoInicial,0);
+  const filtro=window.__caixaFiltro||'todas';
+  const todas = filtro==='todas';
+  // movimentos do período (filtrados por carteira quando aplicável)
+  // numa transferência, a carteira aparece tanto como origem quanto destino
+  const movFull=[...CAIXA].sort((a,b)=>a.data.localeCompare(b.data));
+  const mov = todas ? movFull : movFull.filter(m=>String(m.carteira)===String(filtro)||String(m.carteiraDest)===String(filtro));
+  // resumo da carteira selecionada (entradas e saídas que tocam aquela carteira)
+  let rDespesa=0,rReceita=0,rAporte=0,rRetirada=0,rEntraTransf=0,rSaiTransf=0;
+  if(!todas){
+    movFull.forEach(m=>{
+      const t=TIPOS_LANC[m.tipo];
+      if(m.tipo==='transferencia'){
+        if(String(m.carteira)===String(filtro)) rSaiTransf+=m.valor;
+        if(String(m.carteiraDest)===String(filtro)) rEntraTransf+=m.valor;
+      } else if(String(m.carteira)===String(filtro)){
+        if(m.tipo==='despesa') rDespesa+=m.valor;
+        else if(m.tipo==='receita') rReceita+=m.valor;
+        else if(m.tipo==='aporte') rAporte+=m.valor;
+        else if(m.tipo==='retirada') rRetirada+=m.valor;
+      }
+    });
+  }
+  // saldo corrente acumulado: geral em "todas"; por carteira quando filtrado
+  let acc = todas ? CARTEIRAS.reduce((s,w)=>s+w.saldoInicial,0)
+                  : ((CARTEIRAS.find(w=>String(w.id)===String(filtro))||{}).saldoInicial||0);
   const body=mov.map(m=>{
     const t=TIPOS_LANC[m.tipo];
-    if(m.tipo==='transferencia'){/* neutro no total */}
-    else acc+=t.sinal*m.valor;
+    if(m.tipo==='transferencia'){
+      if(todas){/* neutro no total geral */}
+      else if(String(m.carteiraDest)===String(filtro)) acc+=m.valor;   // entrou nesta carteira
+      else if(String(m.carteira)===String(filtro)) acc-=m.valor;       // saiu desta carteira
+    } else {
+      // em "todas", soma tudo; filtrado, só conta o que afeta a carteira escolhida (sempre m.carteira)
+      acc+=t.sinal*m.valor;
+    }
     const valTxt = m.tipo==='transferencia'
       ? `<span style="color:var(--grey)">${BRL(m.valor)} →</span>`
       : `<span style="color:${t.cor};font-weight:600">${t.sinal>0?'+':'−'}${BRL(m.valor)}</span>`;
@@ -2534,16 +2214,30 @@ function renderCaixa(pg){
       ? `${cartNome(m.carteira)} → ${cartNome(m.carteiraDest)}`
       : cartNome(m.carteira);
     return `<tr>
-      <td>${fmtDate(m.data)}</td>
-      <td class="ctr"><span class="pill" style="background:${tipoBg(m.tipo)};color:${t.cor}">${t.label}</span></td>
-      <td>${m.categoria}</td>
-      <td>${m.desc}</td>
-      <td style="font-size:12px;color:var(--grey)">${cartTxt}</td>
-      <td class="num">${valTxt}</td>
-      <td class="num" style="font-weight:600;color:${acc>=0?'var(--ink)':'var(--red)'}">${BRL(acc)}</td>
-      <td class="ctr"><button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="editarLanc('${m.id}')">editar</button> <button class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="excluirCaixa('${m.id}')">×</button></td>
+      <td data-label="Data">${fmtDate(m.data)}</td>
+      <td data-label="Tipo" class="ctr"><span class="pill" style="background:${tipoBg(m.tipo)};color:${t.cor}">${t.label}</span></td>
+      <td data-label="Categoria">${m.categoria}</td>
+      <td data-label="Descrição">${m.desc}</td>
+      <td data-label="Carteira" style="font-size:12px;color:var(--grey)">${cartTxt}</td>
+      <td data-label="Valor" class="num">${valTxt}</td>
+      <td data-label="Saldo" class="num" style="font-weight:600;color:${acc>=0?'var(--ink)':'var(--red)'}">${BRL(acc)}</td>
+      <td data-label="Ações" class="ctr"><button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="editarLanc('${m.id}')">editar</button> <button class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="excluirCaixa('${m.id}')">×</button></td>
     </tr>`;
   }).join('');
+  // seletor de carteira + (quando filtrado) faixa de resumo da carteira
+  const cartOpts=`<option value="todas" ${todas?'selected':''}>Todas as carteiras</option>`+
+    CARTEIRAS.map(w=>`<option value="${w.id}" ${String(w.id)===String(filtro)?'selected':''}>${w.nome}</option>`).join('');
+  const seletor=`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+    <span style="font-size:12.5px;color:var(--grey)">Ver carteira:</span>
+    <select onchange="window.__caixaFiltro=this.value;go('caixa')" style="padding:7px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);font-size:13px">${cartOpts}</select>
+    ${todas?'':`<div style="display:flex;gap:16px;flex-wrap:wrap;margin-left:auto;font-size:12.5px">
+      <span style="color:var(--green)">Receitas <b>+${BRL(rReceita)}</b></span>
+      ${rAporte?`<span style="color:var(--sage)">Aportes <b>+${BRL(rAporte)}</b></span>`:''}
+      <span style="color:var(--red)">Despesas <b>−${BRL(rDespesa)}</b></span>
+      ${rRetirada?`<span style="color:var(--amber)">Retiradas <b>−${BRL(rRetirada)}</b></span>`:''}
+      ${(rEntraTransf||rSaiTransf)?`<span style="color:var(--grey)">Transf. +${BRL(rEntraTransf)} / −${BRL(rSaiTransf)}</span>`:''}
+    </div>`}
+  </div>`;
 
   // cards de saldo por carteira
   const cartCards=CARTEIRAS.map((w,i)=>`
@@ -2552,6 +2246,22 @@ function renderCaixa(pg){
       <div class="tc-val" style="color:${c.saldos[w.id]>=0?'var(--gold)':'var(--red)'}">${BRL(c.saldos[w.id])}</div>
       <div class="tc-sub">saldo atual · iniciou com ${BRL(w.saldoInicial)}</div>
     </div>`).join('');
+
+  // categorias conforme o filtro: em "todas" usa o cálculo global; filtrado, recalcula só da carteira
+  let despCatArr, recCatArr, totDesp, totRec;
+  if(todas){
+    despCatArr=c.catDespesaArr; recCatArr=c.catReceitaArr; totDesp=c.despesa; totRec=c.receita;
+  } else {
+    const pd={}, pr={};
+    movFull.forEach(m=>{
+      if(String(m.carteira)!==String(filtro)) return;
+      if(m.tipo==='despesa'){ pd[m.categoria]=(pd[m.categoria]||0)+m.valor; }
+      else if(m.tipo==='receita'){ pr[m.categoria]=(pr[m.categoria]||0)+m.valor; }
+    });
+    despCatArr=Object.entries(pd).map(([cat,v])=>({cat,valor:v})).sort((a,b)=>b.valor-a.valor);
+    recCatArr=Object.entries(pr).map(([cat,v])=>({cat,valor:v})).sort((a,b)=>b.valor-a.valor);
+    totDesp=rDespesa; totRec=rReceita;
+  }
 
   pg.innerHTML=`
     <div class="trend-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
@@ -2602,20 +2312,20 @@ function renderCaixa(pg){
 
     <div class="row two-eq" style="margin-bottom:18px">
       <div class="panel">
-        <h3>Despesas por categoria</h3><div class="ph-sub">Total gasto em cada categoria no período</div>
-        ${c.catDespesaArr.length?c.catDespesaArr.map(x=>{
-          const w=c.despesa?x.valor/c.despesa*100:0;
+        <h3>Despesas por categoria</h3><div class="ph-sub">${todas?'Total gasto em cada categoria no período':'Apenas da carteira: '+cartNome(filtro)}</div>
+        ${despCatArr.length?despCatArr.map(x=>{
+          const w=totDesp?x.valor/totDesp*100:0;
           return `<div style="margin-bottom:12px">
-            <div style="display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:5px"><span>${x.cat}</span><span><b>${BRL(x.valor)}</b> <span style="color:var(--grey);font-size:12px">${PCT0(x.valor/c.despesa)}</span></span></div>
+            <div style="display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:5px"><span>${x.cat}</span><span><b>${BRL(x.valor)}</b> <span style="color:var(--grey);font-size:12px">${totDesp?PCT0(x.valor/totDesp):'0%'}</span></span></div>
             <div class="bar"><i style="width:${w}%;background:var(--red)"></i></div></div>`;
         }).join(''):'<div style="color:var(--grey);font-size:13px">Nenhuma despesa lançada.</div>'}
       </div>
       <div class="panel">
-        <h3>Receitas por categoria</h3><div class="ph-sub">Total recebido em cada categoria</div>
-        ${c.catReceitaArr.length?c.catReceitaArr.map(x=>{
-          const w=c.receita?x.valor/c.receita*100:0;
+        <h3>Receitas por categoria</h3><div class="ph-sub">${todas?'Total recebido em cada categoria':'Apenas da carteira: '+cartNome(filtro)}</div>
+        ${recCatArr.length?recCatArr.map(x=>{
+          const w=totRec?x.valor/totRec*100:0;
           return `<div style="margin-bottom:12px">
-            <div style="display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:5px"><span>${x.cat}</span><span><b>${BRL(x.valor)}</b> <span style="color:var(--grey);font-size:12px">${PCT0(x.valor/c.receita)}</span></span></div>
+            <div style="display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:5px"><span>${x.cat}</span><span><b>${BRL(x.valor)}</b> <span style="color:var(--grey);font-size:12px">${totRec?PCT0(x.valor/totRec):'0%'}</span></span></div>
             <div class="bar"><i style="width:${w}%;background:var(--green)"></i></div></div>`;
         }).join(''):'<div style="color:var(--grey);font-size:13px">Nenhuma receita lançada.</div>'}
       </div>
@@ -2626,9 +2336,10 @@ function renderCaixa(pg){
         <button class="btn" onclick="abrirLancForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo lançamento</button>
       </div>
       <div id="lancFormBox"></div>
-      <table class="data">
+      ${seletor}
+      <table class="data cardify">
         <thead><tr><th>Data</th><th class="ctr">Tipo</th><th>Categoria</th><th>Descrição</th><th>Carteira</th><th class="num">Valor</th><th class="num">Saldo</th><th class="ctr">Ações</th></tr></thead>
-        <tbody>${body}</tbody>
+        <tbody>${body||'<tr><td colspan="8" style="text-align:center;color:var(--grey);padding:24px">Nenhum lançamento nesta carteira.</td></tr>'}</tbody>
       </table>
     </div>`;
 }
@@ -3396,18 +3107,16 @@ function renderEstoque(pg){
   const valorTotal=ESTOQUE.reduce((s,e)=>s+e.quantidade*e.custoUnit,0);
   const linhas=ESTOQUE.map(e=>{
     const alerta=e.minimo>0 && e.quantidade<=e.minimo;
-    const usos=(e.usos||[]).length;
     return `<tr>
-      <td data-label="Produto"><b>${e.produto}</b>${usos?`<div style="font-size:11px;color:var(--grey);margin-top:2px">usado em ${usos} procedimento(s)</div>`:''}</td>
-      <td data-label="Quantidade" class="ctr">${e.quantidade} ${e.unidade||''}</td>
-      <td data-label="Mínimo" class="ctr" style="color:var(--grey)">${e.minimo||'—'}</td>
-      <td data-label="Custo/${e.unidade||'un'}" class="num">${e.custoUnit?BRL(e.custoUnit):'—'}</td>
-      <td data-label="Valor total" class="num">${BRL(e.quantidade*e.custoUnit)}</td>
-      <td data-label="Status" class="ctr">${alerta?'<span style="color:var(--red);font-size:12px;font-weight:600">⚠ repor</span>':'<span style="color:var(--green);font-size:12px">ok</span>'}</td>
-      <td data-label="Ações" class="ctr">
+      <td><b>${e.produto}</b></td>
+      <td class="ctr">${e.quantidade} ${e.unidade||''}</td>
+      <td class="ctr" style="color:var(--grey)">${e.minimo||'—'}</td>
+      <td class="num">${e.custoUnit?BRL(e.custoUnit):'—'}</td>
+      <td class="num">${BRL(e.quantidade*e.custoUnit)}</td>
+      <td class="ctr">${alerta?'<span style="color:var(--red);font-size:12px;font-weight:600">⚠ repor</span>':'<span style="color:var(--green);font-size:12px">ok</span>'}</td>
+      <td class="ctr">
         <button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="movEstoque('${e.id}','entrada')">+ entrada</button>
         <button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="movEstoque('${e.id}','saida')">− saída</button>
-        <button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="editarProduto('${e.id}')">editar</button>
         <button class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="excluirProduto('${e.id}')">×</button>
       </td>
     </tr>`;
@@ -3425,20 +3134,15 @@ function renderEstoque(pg){
     </div>
 
     <div class="panel" style="margin-bottom:18px">
-      <div class="toolbar"><div><h3>Produtos</h3><div class="ph-sub">No cadastro de cada produto você define quais procedimentos o utilizam e quantos ml de cada</div></div>
+      <div class="toolbar"><div><h3>Produtos</h3><div class="ph-sub">Controle de entrada e saída manual</div></div>
         <button class="btn" onclick="abrirProdutoForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo produto</button>
       </div>
       <div id="produtoFormBox"></div>
       <div id="movFormBox"></div>
-      <table class="data cardify">
-        <thead><tr><th>Produto</th><th class="ctr">Quantidade</th><th class="ctr">Mínimo</th><th class="num">Custo/un.</th><th class="num">Valor total</th><th class="ctr">Status</th><th class="ctr">Ações</th></tr></thead>
+      <table class="data">
+        <thead><tr><th>Produto</th><th class="ctr">Quantidade</th><th class="ctr">Mínimo</th><th class="num">Custo un.</th><th class="num">Valor total</th><th class="ctr">Status</th><th class="ctr">Movimentar</th></tr></thead>
         <tbody>${linhas||'<tr><td colspan="7" style="text-align:center;color:var(--grey);padding:24px">Nenhum produto cadastrado.</td></tr>'}</tbody>
       </table>
-    </div>
-
-    <div class="panel" style="margin-bottom:18px">
-      <h3>Consumo por procedimento</h3><div class="ph-sub">Resumo do que cada procedimento gasta de material e o custo real correspondente</div>
-      <div style="margin-top:10px">${renderConsumoProc()}</div>
     </div>
 
     <div class="panel">
@@ -3447,101 +3151,32 @@ function renderEstoque(pg){
       <tbody>${movs||'<tr><td colspan="5" style="text-align:center;color:var(--grey);padding:20px">Nenhuma movimentação ainda.</td></tr>'}</tbody></table>
     </div>`;
 }
-function renderConsumoProc(){
-  const linhas=PROCS.map(p=>{
-    const ins=insumosDoProc(p);
-    if(!ins.length) return null;
-    const resumo=ins.map(x=>`${x.ml} ${x.unidade} de ${x.produto}`).join(' · ');
-    const custo=ins.reduce((s,x)=>s+x.ml*x.custoUnit,0);
-    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)">
-      <div style="min-width:150px"><b>${p}</b></div>
-      <div style="flex:1;font-size:13px;color:var(--ink)">${resumo}</div>
-      <div style="font-size:13px;white-space:nowrap">custo ${BRL(custo)}</div>
-    </div>`;
-  }).filter(Boolean).join('');
-  return linhas||'<div style="font-size:12.5px;color:var(--grey);font-style:italic">Nenhum produto vinculado a procedimentos ainda. Edite um produto e marque em quais procedimentos ele é usado.</div>';
-}
-/* ---- cadastro / edição de produto, com vínculo a procedimentos (usos) ---- */
-let __prodEditId=null;      // id do produto em edição (null = novo)
-let __prodUsos=[];          // [{proc, ml}] enquanto edita
-function abrirProdutoForm(){ __prodEditId=null; __prodUsos=[]; renderProdutoForm({produto:'',unidade:'ml',quantidade:0,minimo:0,custoUnit:0,usos:[]}); }
-function editarProduto(id){
-  const e=ESTOQUE.find(x=>x.id==id); if(!e)return;
-  __prodEditId=id;
-  __prodUsos=(e.usos||[]).map(u=>({proc:u.proc,ml:+u.ml||0}));
-  renderProdutoForm(e);
-}
-function renderProdutoForm(e){
+function abrirProdutoForm(){
   const fs='padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);width:100%';
-  const uniOpts=UNIDADES.map(u=>`<option ${u===(e.unidade||'ml')?'selected':''}>${u}</option>`).join('');
+  const uniOpts=UNIDADES.map(u=>`<option>${u}</option>`).join('');
   document.getElementById('produtoFormBox').innerHTML=`
     <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
-      <div style="font-weight:600;margin-bottom:12px">${__prodEditId?'Editar produto':'Novo produto'}</div>
-      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px">
-        <div class="field" style="grid-column:span 2"><label>Produto</label><input id="pr_nome" value="${(e.produto||'').replace(/"/g,'&quot;')}" placeholder="Ex: Ácido Hialurônico 1ml" style="${fs}"></div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:12px">
+        <div class="field" style="grid-column:span 2"><label>Produto</label><input id="pr_nome" placeholder="Ex: Toxina Botulínica 100U" style="${fs}"></div>
         <div class="field"><label>Unidade</label><select id="pr_uni" style="${fs}">${uniOpts}</select></div>
-        <div class="field"><label>Qtd em estoque</label><input type="number" step="any" id="pr_qtd" value="${e.quantidade||0}" style="${fs}"></div>
-        <div class="field"><label>Estoque mínimo</label><input type="number" step="any" id="pr_min" value="${e.minimo||0}" style="${fs}"></div>
+        <div class="field"><label>Qtd inicial</label><input type="number" id="pr_qtd" value="0" style="${fs}"></div>
+        <div class="field"><label>Estoque mínimo</label><input type="number" id="pr_min" value="0" style="${fs}"></div>
+        <div class="field"><label>Custo unitário (R$)</label><input type="number" id="pr_custo" value="0" style="${fs}"></div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:6px">
-        <div class="field" style="grid-column:span 2"><label>Custo por unidade (R$ / ${e.unidade||'ml'})</label><input type="number" step="any" id="pr_custo" value="${e.custoUnit||0}" style="${fs}"></div>
-        <div class="field" style="grid-column:span 3;display:flex;align-items:flex-end"><div style="font-size:12px;color:var(--grey)">A baixa de estoque e o custo de cada atendimento são calculados pela quantidade (em ${e.unidade||'ml'}) usada em cada procedimento, definida abaixo.</div></div>
-      </div>
-
-      <div style="border-top:1px solid var(--gold-l);padding-top:14px;margin-top:10px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-          <label style="font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:var(--grey);font-weight:600">Procedimentos que usam este material</label>
-          <button type="button" class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="addProdutoUso()">+ vincular procedimento</button>
-        </div>
-        <div id="prodUsosBox"></div>
-      </div>
-
-      <div style="display:flex;gap:10px;margin-top:16px">
+      <div style="display:flex;gap:10px">
         <button class="btn" onclick="salvarProduto()">Salvar produto</button>
-        <button class="btn ghost" onclick="document.getElementById('produtoFormBox').innerHTML='';__prodEditId=null">Cancelar</button>
+        <button class="btn ghost" onclick="document.getElementById('produtoFormBox').innerHTML=''">Cancelar</button>
       </div>
     </div>`;
-  renderProdutoUsos();
-  document.getElementById('produtoFormBox').scrollIntoView({behavior:'smooth',block:'nearest'});
-}
-function addProdutoUso(){
-  // primeiro procedimento ainda não vinculado
-  const usados=__prodUsos.map(u=>u.proc);
-  const livre=PROCS.find(p=>!usados.includes(p))||PROCS[0]||'';
-  __prodUsos.push({proc:livre,ml:1}); renderProdutoUsos();
-}
-function removeProdutoUso(i){ __prodUsos.splice(i,1); renderProdutoUsos(); }
-function updProdutoUso(i,campo,val){ __prodUsos[i][campo]= campo==='ml'?(+val||0):val; }
-function renderProdutoUsos(){
-  const box=document.getElementById('prodUsosBox'); if(!box) return;
-  const uni=(document.getElementById('pr_uni')||{}).value||'ml';
-  const fs='padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink);font-size:13px';
-  if(!__prodUsos.length){
-    box.innerHTML=`<div style="font-size:12.5px;color:var(--grey);font-style:italic;padding:4px 2px">Nenhum procedimento vinculado. Este produto não dará baixa automática até você vincular ao menos um.</div>`;
-    return;
-  }
-  box.innerHTML=__prodUsos.map((u,i)=>{
-    const po=PROCS.map(p=>`<option ${p===u.proc?'selected':''}>${p}</option>`).join('');
-    return `<div style="display:grid;grid-template-columns:2fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px">
-      <div class="field" style="margin:0"><label>Procedimento</label><select onchange="updProdutoUso(${i},'proc',this.value)" style="${fs};width:100%">${po}</select></div>
-      <div class="field" style="margin:0"><label>Consumo padrão (${uni})</label><input type="number" step="any" value="${u.ml}" oninput="updProdutoUso(${i},'ml',this.value)" style="${fs};width:100%"></div>
-      <button type="button" class="btn ghost" style="padding:7px 9px;font-size:12px" onclick="removeProdutoUso(${i})">×</button>
-    </div>`;
-  }).join('');
 }
 async function salvarProduto(){
   const v=i=>document.getElementById(i).value;
-  const usos=__prodUsos.filter(u=>u.proc && u.ml>0);
-  const prod={produto:v('pr_nome')||'Produto',unidade:v('pr_uni'),quantidade:+v('pr_qtd')||0,minimo:+v('pr_min')||0,custoUnit:+v('pr_custo')||0,usos};
+  const prod={produto:v('pr_nome')||'Produto',unidade:v('pr_uni'),quantidade:+v('pr_qtd')||0,minimo:+v('pr_min')||0,custoUnit:+v('pr_custo')||0};
   if(MODO_NUVEM){
-    const reg={produto:prod.produto,unidade:prod.unidade,quantidade:prod.quantidade,minimo:prod.minimo,custo_unit:prod.custoUnit,usos:usos};
-    if(__prodEditId) await sbUpdate('estoque',__prodEditId,reg);
-    else await sbInsert('estoque',reg);
-    __prodEditId=null; await carregarTudo(); go('estoque'); toast('Produto salvo'); return;
+    await sbInsert('estoque',{produto:prod.produto,unidade:prod.unidade,quantidade:prod.quantidade,minimo:prod.minimo,custo_unit:prod.custoUnit});
+    await carregarTudo(); go('estoque'); return;
   }
-  if(__prodEditId){ const e=ESTOQUE.find(x=>x.id==__prodEditId); Object.assign(e,prod); }
-  else { prod.id=EST_SEQ++; ESTOQUE.push(prod); }
-  __prodEditId=null; go('estoque'); toast('Produto salvo');
+  prod.id=EST_SEQ++; ESTOQUE.push(prod); go('estoque');
 }
 async function excluirProduto(id){
   if(MODO_NUVEM){await sbDelete('estoque',id);await carregarTudo();}
