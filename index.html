@@ -2636,6 +2636,7 @@ function verCategoria(tipo, cat){
   </div>`;
   box.scrollIntoView({behavior:'smooth',block:'start'});
 }
+function tipoBg(t){return {receita:'var(--green-bg)',aporte:'var(--sage-bg)',despesa:'var(--red-bg)',retirada:'var(--amber-bg)',transferencia:'var(--grey-l)'}[t]||'var(--grey-l)';}
 
 function abrirLancForm(){ editarLanc(0); }
 function editarLanc(id){
