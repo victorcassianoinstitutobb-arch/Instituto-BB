@@ -757,6 +757,24 @@ function calc(){
   const totalPacientes=pacientes.length;
   const pacRecorrentes=pacientes.filter(p=>p.recorrente).length;
   const txRecompra= totalPacientes? pacRecorrentes/totalPacientes : 0;
+  // ---- recebimentos por modalidade (+ parcelas no crédito) ----
+  // agora itera sobre cada PARTE de pagamento (suporta pagamento dividido)
+  const recMap={};
+  let semReceb=0;
+  compareceu.forEach(a=>{
+    const ps=pagamentosDe(a);
+    if(!ps.length){ if(a.valor>0) semReceb+=a.valor; return; }
+    ps.forEach(p=>{
+      if(!p.forma) return;
+      const chave = ehCredito(p.forma) && (+p.parcelas>1) ? `${p.forma} ${p.parcelas}x` : p.forma;
+      if(!recMap[chave]) recMap[chave]={label:chave, modalidade:p.forma, parcelas:(+p.parcelas||1), valor:0, qtd:0, credito:ehCredito(p.forma)};
+      recMap[chave].valor += (+p.valor||0);
+      recMap[chave].qtd += 1;
+    });
+  });
+  const recebimentos = Object.values(recMap).sort((a,b)=>b.valor-a.valor);
+  const recebTotal = recebimentos.reduce((s,r)=>s+r.valor,0);
+
   const ltv = totalPacientes? pacientes.reduce((s,p)=>s+p.valorTotal,0)/totalPacientes : 0;
 
   // ---- documentos ----
@@ -783,6 +801,7 @@ function calc(){
     serieReceita,comp,comandas,ranking,rankPac,nLeads:ld.length,
     comissaoTotal,comissaoBaseTotal,comissaoPorProc,comissaoPercent:META.comissaoPercent,
     pacientes,totalPacientes,pacRecorrentes,txRecompra,ltv,
+    recebimentos,recebTotal,semReceb,
     docPend,docVencer,docOk,docTotal:DOCS.length,evolucao};
   window.__lastCalc = out;
   return out;
@@ -871,7 +890,7 @@ async function carregarTudo(){
     CAT_RECEITA = (cat.data||[]).filter(c=>c.tipo==='receita').map(c=>c.nome);
     CAT_DESPESA = (cat.data||[]).filter(c=>c.tipo==='despesa').map(c=>c.nome);
     CAIXA = (lanc.data||[]).map(l=>({id:l.id,data:l.data,tipo:l.tipo,categoria:l.categoria,desc:l.descricao,valor:+l.valor,carteira:l.carteira_id,carteiraDest:l.carteira_dest}));
-    DATA.atendimentos = (atend.data||[]).map(a=>({id:a.id,data:a.data,paciente:a.paciente,proc:a.procedimento,func:a.funcionario,canal:a.canal,valor:+a.valor,custo:+a.custo,pag:a.pagamento,agenda:a.agenda}));
+    DATA.atendimentos = (atend.data||[]).map(a=>({id:a.id,data:a.data,paciente:a.paciente,proc:a.procedimento,func:a.funcionario,canal:a.canal,valor:+a.valor,custo:+a.custo,pag:a.pagamento,agenda:a.agenda,recebimento:a.recebimento||'',parcelas:+a.parcelas||1,pagamentos:Array.isArray(a.pagamentos)?a.pagamentos:null}));
     CAPTACAO = (capt.data||[]).map(c=>({id:c.id,data:c.data,plataforma:c.plataforma,seguidores:c.seguidores,leads:c.leads,agendadas:c.agendadas,investido:+c.investido,gasto:+c.gasto,campanhas:c.campanhas}));
     METAS = (met.data||[]).map(m=>({id:m.id,funcId:m.func_id,escopo:m.escopo,tipo:m.tipo,periodo:m.periodo,faixas:m.faixas}));
     DATA.conformidade = (conf.data||[]).map(c=>({id:c.id,item:c.item,resp:c.responsavel,status:c.status}));
@@ -1167,12 +1186,37 @@ function drawCharts(k){
 }
 
 /* ============================ ATENDIMENTOS ============================ */
+// Formas de recebimento (modalidade de como o dinheiro entrou)
+const RECEBIMENTOS = ['Pix CPF','Pix CNPJ','Crédito CPF','Crédito CNPJ','Dinheiro'];
+const ehCredito = r => (r||'').indexOf('Crédito')===0;
+// rótulo de uma forma isolada (ex: "Crédito CPF 10x")
+function formaLabel(forma, parcelas){
+  if(!forma) return '—';
+  return ehCredito(forma) && parcelas>1 ? `${forma} ${parcelas}x` : forma;
+}
+// normaliza os pagamentos de um atendimento numa lista [{forma,valor,parcelas}]
+// aceita tanto o formato novo (a.pagamentos) quanto o antigo (a.recebimento/a.parcelas)
+function pagamentosDe(a){
+  if(Array.isArray(a.pagamentos) && a.pagamentos.length){
+    return a.pagamentos.map(p=>({forma:p.forma||'',valor:+p.valor||0,parcelas:ehCredito(p.forma)?(+p.parcelas||1):1}));
+  }
+  if(a.recebimento) return [{forma:a.recebimento,valor:+a.valor||0,parcelas:ehCredito(a.recebimento)?(+a.parcelas||1):1}];
+  return [];
+}
+// rótulo curto para a tabela: uma forma → "Crédito CPF 10x"; várias → "Dividido (2)"
+function recebLabel(a){
+  const ps=pagamentosDe(a);
+  if(!ps.length) return '—';
+  if(ps.length===1) return formaLabel(ps[0].forma, ps[0].parcelas);
+  return `Dividido (${ps.length})`;
+}
 function renderAtend(pg){
   const rows=DATA.atendimentos;
   const body=rows.map(a=>`<tr>
     <td>${fmtDate(a.data)}</td><td>${a.paciente}</td><td>${a.proc}</td>
     <td style="font-size:12.5px">${a.func||'—'}</td>
     <td>${a.canal}</td><td class="num">${BRL(a.valor)}</td>
+    <td style="font-size:12px" title="${pagamentosDe(a).map(p=>formaLabel(p.forma,p.parcelas)+': '+BRL(p.valor)).join(' · ')}">${recebLabel(a)}</td>
     <td class="ctr">${pagPill(a.pag)}</td><td class="ctr">${agPill(a.agenda)}</td>
     <td class="ctr"><button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="editarAtend('${a.id}')">editar</button> <button class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="excluirAtend('${a.id}')">×</button></td>
   </tr>`).join('');
@@ -1187,8 +1231,8 @@ function renderAtend(pg){
         Dica: registre cada atendimento com a <b>data real</b> em que aconteceu, mesmo que você lance vários de uma vez no fim da semana. Assim os relatórios diário, semanal e mensal ficam todos corretos.
       </div>
       <table class="data">
-        <thead><tr><th>Data</th><th>Paciente</th><th>Procedimento</th><th>Realizado por</th><th>Canal</th><th class="num">Valor</th><th class="ctr">Pagamento</th><th class="ctr">Agenda</th><th class="ctr">Ações</th></tr></thead>
-        <tbody>${body||'<tr><td colspan="9" style="text-align:center;color:var(--grey);padding:24px">Nenhum atendimento ainda.</td></tr>'}</tbody>
+        <thead><tr><th>Data</th><th>Paciente</th><th>Procedimento</th><th>Realizado por</th><th>Canal</th><th class="num">Valor</th><th>Recebimento</th><th class="ctr">Pagamento</th><th class="ctr">Agenda</th><th class="ctr">Ações</th></tr></thead>
+        <tbody>${body||'<tr><td colspan="10" style="text-align:center;color:var(--grey);padding:24px">Nenhum atendimento ainda.</td></tr>'}</tbody>
       </table>
     </div>`;
 }
@@ -1201,34 +1245,131 @@ function editarAtend(id){
   const canalOpts=CANAIS.map(c=>`<option ${c===a.canal?'selected':''}>${c}</option>`).join('');
   const agOpts=['Compareceu','Agendado','No-show','Reagendado'].map(s=>`<option ${s===a.agenda?'selected':''}>${s}</option>`).join('');
   const pagOpts=['Pago','Parcial','Pendente'].map(s=>`<option ${s===a.pag?'selected':''}>${s}</option>`).join('');
+  // estado de trabalho dos pagamentos
+  const ps=pagamentosDe(a);
+  __atendPagamentos = ps.length ? ps.map(p=>({forma:p.forma,valor:p.valor,parcelas:p.parcelas})) : [];
+  __atendPagDividido = __atendPagamentos.length>1;
   document.getElementById('atendFormBox').innerHTML=`
     <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px">
         <div class="field"><label>Data do atendimento</label><input id="naData" type="date" value="${a.data}" style="${fs};width:100%"></div>
         <div class="field"><label>Paciente</label><input id="naPac" value="${a.paciente}" placeholder="Nome" style="${fs};width:100%"></div>
         <div class="field"><label>Realizado por</label><select id="naFunc" style="${fs};width:100%"><option value="">—</option>${funcOpts}</select></div>
         <div class="field"><label>Procedimento</label><select id="naProc" style="${fs};width:100%">${procOpts}</select></div>
         <div class="field"><label>Canal</label><select id="naCanal" style="${fs};width:100%">${canalOpts}</select></div>
-        <div class="field"><label>Valor (R$)</label><input id="naValor" type="number" value="${a.valor}" style="${fs};width:100%"></div>
+        <div class="field"><label>Valor (R$)</label><input id="naValor" type="number" value="${a.valor}" oninput="atendValorMudou()" style="${fs};width:100%"></div>
         <div class="field"><label>Pagamento</label><select id="naPag" style="${fs};width:100%">${pagOpts}</select></div>
         <div class="field"><label>Status</label><select id="naAg" style="${fs};width:100%">${agOpts}</select></div>
       </div>
-      <div style="display:flex;gap:10px">
+
+      <div style="border-top:1px solid var(--gold-l);padding-top:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <label style="font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:var(--grey);font-weight:600">Forma de recebimento</label>
+          <button type="button" id="naDividirBtn" class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="toggleDividirPag()">${__atendPagDividido?'↺ pagamento único':'+ dividir pagamento'}</button>
+        </div>
+        <div id="naPagBox"></div>
+        <div id="naPagAviso" style="font-size:12.5px;margin-top:8px"></div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:16px">
         <button class="btn" onclick="salvarAtend('${a.id}')">Salvar</button>
         <button class="btn ghost" onclick="document.getElementById('atendFormBox').innerHTML=''">Cancelar</button>
       </div>
     </div>`;
+  renderPagamentos();
   document.getElementById('atendFormBox').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+/* ---- pagamentos do atendimento (uma ou várias formas) ---- */
+let __atendPagamentos = [];
+let __atendPagDividido = false;
+function toggleDividirPag(){
+  if(!__atendPagDividido){
+    // entra no modo dividido: garante ao menos a forma atual + uma nova linha
+    if(!__atendPagamentos.length) __atendPagamentos=[{forma:RECEBIMENTOS[0],valor:0,parcelas:1}];
+    if(__atendPagamentos.length<2) __atendPagamentos.push({forma:'',valor:0,parcelas:1});
+    __atendPagDividido=true;
+  } else {
+    // volta ao modo único: mantém só a primeira forma (com o valor total)
+    __atendPagamentos = __atendPagamentos.length ? [__atendPagamentos[0]] : [];
+    __atendPagDividido=false;
+  }
+  document.getElementById('naDividirBtn').textContent = __atendPagDividido?'↺ pagamento único':'+ dividir pagamento';
+  renderPagamentos();
+}
+function addPagamento(){ __atendPagamentos.push({forma:'',valor:0,parcelas:1}); renderPagamentos(); }
+function removePagamento(i){ __atendPagamentos.splice(i,1); if(__atendPagamentos.length<2)__atendPagDividido=false; document.getElementById('naDividirBtn').textContent=__atendPagDividido?'↺ pagamento único':'+ dividir pagamento'; renderPagamentos(); }
+function updPagamento(i,campo,val){
+  __atendPagamentos[i][campo] = campo==='valor' ? (+val||0) : (campo==='parcelas'?(+val||1):val);
+  if(campo==='forma'){ if(!ehCredito(val)) __atendPagamentos[i].parcelas=1; renderPagamentos(); }
+  else atualizaAvisoPag();
+}
+function atendValorMudou(){
+  // no modo único, espelha o valor total na única forma
+  if(!__atendPagDividido && __atendPagamentos.length===1){
+    __atendPagamentos[0].valor = +(document.getElementById('naValor')||{}).value||0;
+  }
+  atualizaAvisoPag();
+}
+function valorTotalAtend(){ return +(document.getElementById('naValor')||{}).value||0; }
+function atualizaAvisoPag(){
+  const av=document.getElementById('naPagAviso'); if(!av) return;
+  if(!__atendPagDividido){ av.innerHTML=''; return; }
+  const soma=__atendPagamentos.reduce((s,p)=>s+(+p.valor||0),0);
+  const total=valorTotalAtend();
+  if(Math.abs(soma-total)<0.5){ av.innerHTML=`<span style="color:var(--green)">✓ Soma das formas: ${BRL(soma)} — confere com o valor total.</span>`; }
+  else { const dif=total-soma;
+    av.innerHTML=`<span style="color:var(--amber)">⚠ Soma das formas ${BRL(soma)} ≠ valor total ${BRL(total)} (faltam ${BRL(dif)}). Você pode salvar mesmo assim.</span>`; }
+}
+function renderPagamentos(){
+  const box=document.getElementById('naPagBox'); if(!box) return;
+  const fs='padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink);font-size:13px';
+  const formaSel=(sel)=>`<option value="">—</option>`+RECEBIMENTOS.map(r=>`<option ${r===sel?'selected':''}>${r}</option>`).join('');
+  const parcSel=(sel)=>Array.from({length:18},(_,i)=>i+1).map(n=>`<option value="${n}" ${(+sel||1)===n?'selected':''}>${n}x</option>`).join('');
+  if(!__atendPagDividido){
+    // modo único: 1 forma + (parcelas se crédito). Valor vem do campo Valor total.
+    const p=__atendPagamentos[0]||{forma:'',valor:0,parcelas:1};
+    if(!__atendPagamentos.length) __atendPagamentos=[p];
+    const mostraParc=ehCredito(p.forma);
+    box.innerHTML=`<div style="display:grid;grid-template-columns:2fr 1fr;gap:10px">
+      <div class="field" style="margin:0"><label>Como recebeu</label><select onchange="updPagamento(0,'forma',this.value)" style="${fs};width:100%">${formaSel(p.forma)}</select></div>
+      <div class="field" style="margin:0;${mostraParc?'':'visibility:hidden'}"><label>Parcelas</label><select onchange="updPagamento(0,'parcelas',this.value)" style="${fs};width:100%">${parcSel(p.parcelas)}</select></div>
+    </div>`;
+    atualizaAvisoPag();
+    return;
+  }
+  // modo dividido: várias linhas com valor por forma
+  box.innerHTML=__atendPagamentos.map((p,i)=>{
+    const mostraParc=ehCredito(p.forma);
+    return `<div style="display:grid;grid-template-columns:1.6fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px">
+      <div class="field" style="margin:0"><label>Como recebeu</label><select onchange="updPagamento(${i},'forma',this.value)" style="${fs};width:100%">${formaSel(p.forma)}</select></div>
+      <div class="field" style="margin:0"><label>Valor (R$)</label><input type="number" value="${p.valor||''}" oninput="updPagamento(${i},'valor',this.value)" style="${fs};width:100%"></div>
+      <div class="field" style="margin:0;${mostraParc?'':'visibility:hidden'}"><label>Parcelas</label><select onchange="updPagamento(${i},'parcelas',this.value)" style="${fs};width:100%">${parcSel(p.parcelas)}</select></div>
+      <button type="button" class="btn ghost" style="padding:7px 9px;font-size:12px" onclick="removePagamento(${i})" title="Remover">×</button>
+    </div>`;
+  }).join('') + `<button type="button" class="btn ghost" style="padding:4px 10px;font-size:12px;margin-top:2px" onclick="addPagamento()">+ adicionar forma</button>`;
+  atualizaAvisoPag();
 }
 async function salvarAtend(id){
   const v=i=>document.getElementById(i).value;
   const valor=+v('naValor')||0;
+  // monta a lista de pagamentos
+  let pagamentos;
+  if(__atendPagDividido){
+    pagamentos=(__atendPagamentos||[]).filter(p=>p.forma && p.valor>0)
+      .map(p=>({forma:p.forma,valor:+p.valor||0,parcelas:ehCredito(p.forma)?(+p.parcelas||1):1}));
+  } else {
+    const p=__atendPagamentos[0];
+    pagamentos = (p && p.forma) ? [{forma:p.forma,valor:valor,parcelas:ehCredito(p.forma)?(+p.parcelas||1):1}] : [];
+  }
+  // campos de compatibilidade: forma "principal" = a de maior valor
+  const principal = pagamentos.slice().sort((a,b)=>b.valor-a.valor)[0] || {forma:'',parcelas:1};
   const reg={data:v('naData')||new Date().toISOString().slice(0,10),
     paciente:v('naPac')||'Sem nome',func:v('naFunc')||'',
     proc:v('naProc'),canal:v('naCanal'),valor,custo:Math.round(valor*0.3),
-    pag:v('naPag')||'Pago',agenda:v('naAg')};
+    pag:v('naPag')||'Pago',agenda:v('naAg'),
+    recebimento:principal.forma,parcelas:principal.parcelas,pagamentos};
   if(MODO_NUVEM){
-    const reg2={data:reg.data,paciente:reg.paciente,procedimento:reg.proc,funcionario:reg.func,canal:reg.canal,valor:reg.valor,custo:reg.custo,pagamento:reg.pag,agenda:reg.agenda};
+    const reg2={data:reg.data,paciente:reg.paciente,procedimento:reg.proc,funcionario:reg.func,canal:reg.canal,valor:reg.valor,custo:reg.custo,pagamento:reg.pag,agenda:reg.agenda,recebimento:reg.recebimento,parcelas:reg.parcelas,pagamentos:reg.pagamentos};
     if(id && id!=='0') await sbUpdate('atendimentos',id,reg2); else await sbInsert('atendimentos',reg2);
     await carregarTudo(); go('atendimentos'); return;
   }
@@ -1945,6 +2086,25 @@ function calcIndicadores(ini,fim){
   const cac= totalPac? investido/totalPac : 0;
   return {txRecompra, ltv, cac, totalPac, recorrentes, faturamento:comp.reduce((s,a)=>s+a.valor,0), nAtend:comp.length};
 }
+// recebimentos por modalidade (+parcelas) dentro de um período
+function recebimentosPeriodo(ini,fim){
+  const comp = DATA.atendimentos.filter(a=>a.agenda==='Compareceu' && a.data>=ini && a.data<=fim);
+  const map={};
+  let semReceb=0;
+  comp.forEach(a=>{
+    const ps=pagamentosDe(a);
+    if(!ps.length){ if(a.valor>0) semReceb+=a.valor; return; }
+    ps.forEach(p=>{
+      if(!p.forma) return;
+      const chave = ehCredito(p.forma) && (+p.parcelas>1) ? `${p.forma} ${p.parcelas}x` : p.forma;
+      if(!map[chave]) map[chave]={label:chave, modalidade:p.forma, parcelas:(+p.parcelas||1), valor:0, qtd:0, credito:ehCredito(p.forma)};
+      map[chave].valor += (+p.valor||0); map[chave].qtd += 1;
+    });
+  });
+  const lista = Object.values(map).sort((a,b)=>b.valor-a.valor);
+  const total = lista.reduce((s,r)=>s+r.valor,0);
+  return {lista, total, semReceb};
+}
 
 // agrupa a série diária de atendimentos em dia / semana / mês / ano
 function agruparSerie(grao){
@@ -2007,8 +2167,32 @@ function renderAnalise(pg){
         <div id="legA" class="legend"></div>
         <div class="chart-wrap"><canvas id="chConc"></canvas></div>
       </div>
+    </div>
+    <div class="panel" style="margin-top:18px">
+      <h3>Recebimentos por modalidade</h3><div class="ph-sub">Como as vendas foram recebidas em: <b style="color:var(--gold)">${per.label}</b></div>
+      ${recebimentosBlock(recebimentosPeriodo(per.ini, per.fim))}
     </div>`;
   drawAnaliseCharts(k, serie);
+}
+function recebimentosBlock(r){
+  if(!r.lista.length && !r.semReceb){
+    return `<div style="color:var(--grey);font-size:13px;padding:8px 0">Nenhum recebimento registrado neste período. Informe a forma de recebimento ao cadastrar os atendimentos para ver o detalhamento aqui.</div>`;
+  }
+  const corDe = m => m.indexOf('Pix')===0 ? 'var(--green)' : m.indexOf('Crédito')===0 ? 'var(--gold)' : 'var(--sage)';
+  const linhas=r.lista.map(x=>{
+    const w=r.total?x.valor/r.total*100:0;
+    const det = x.credito && x.parcelas>1 ? ` · ${x.qtd} venda(s) em ${x.parcelas}x` : ` · ${x.qtd} venda(s)`;
+    return `<div style="margin-bottom:13px">
+      <div style="display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:5px">
+        <span><b>${x.label}</b><span style="color:var(--grey);font-size:12px">${det}</span></span>
+        <span><b>${BRL(x.valor)}</b> <span style="color:var(--grey);font-size:12px">${r.total?PCT0(x.valor/r.total):'0%'}</span></span>
+      </div>
+      <div class="bar"><i style="width:${w}%;background:${corDe(x.modalidade)}"></i></div>
+    </div>`;
+  }).join('');
+  const totalLinha=`<div class="dre-line total" style="margin-top:6px"><span>Total recebido</span><span class="amt pos">${BRL(r.total)}</span></div>`;
+  const semR = r.semReceb ? `<div style="margin-top:10px;font-size:12px;color:var(--amber)">⚠ ${BRL(r.semReceb)} em vendas sem forma de recebimento informada.</div>` : '';
+  return linhas + totalLinha + semR;
 }
 function projecaoBlock(k){
   const ev=k.evolucao||[];
@@ -3528,4 +3712,3 @@ function renderCheckup(pg){
 </script>
 </body>
 </html>
-
