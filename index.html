@@ -434,6 +434,18 @@ function mesSelecionadoTopo(){
   if(m && meses[m[1]]) return m[2]+'-'+meses[m[1]];
   return null; // "Acumulado" ou desconhecido
 }
+// intervalo [ini,fim] do período selecionado no topo. Mês → aquele mês; Acumulado → ano todo.
+function periodoSelecionadoIntervalo(){
+  const el=document.getElementById('periodSel');
+  const txt = el ? ((el.value||(el.options[el.selectedIndex]&&el.options[el.selectedIndex].text)||'').trim()) : '';
+  // "Acumulado 2026" → ano inteiro
+  const mAcum = txt.toLowerCase().match(/acumulado\s+(\d{4})/);
+  if(mAcum){ const y=mAcum[1]; return {ini:y+'-01-01', fim:y+'-12-31', acumulado:true}; }
+  const ym = mesSelecionadoTopo();
+  if(ym){ return {ini:ym+'-01', fim:ym+'-31', acumulado:false}; }
+  // sem seletor reconhecível → não filtra (mostra tudo)
+  return null;
+}
 // metas de um mês específico (array; cria vazio se não existir)
 function metasDoMes(ym){ if(!METAS_POR_MES[ym]) METAS_POR_MES[ym]=[]; return METAS_POR_MES[ym]; }
 // rótulo amigável do mês (ex: "Junho 2026")
@@ -803,7 +815,12 @@ let HIST_SEQ = 1;
 
 /* ---------- calc engine ---------- */
 function calc(){
-  const at = DATA.atendimentos, ld = DATA.leads, cs = DATA.custos;
+  // filtra os dados pelo período selecionado no topo (mês ou acumulado do ano)
+  const _per = (typeof periodoSelecionadoIntervalo==='function') ? periodoSelecionadoIntervalo() : null;
+  const _dentro = (d)=> !_per || (d && d>=_per.ini && d<=_per.fim);
+  const at = DATA.atendimentos.filter(a=>_dentro(a.data));
+  const ld = DATA.leads.filter(l=>_dentro(l.data));
+  const cs = DATA.custos.filter(c=>_dentro(c.data));
   const compareceu = at.filter(a=>a.agenda==='Compareceu');
   const faturamento = compareceu.reduce((s,a)=>s+a.valor,0);
   const pagantes = compareceu.filter(a=>a.valor>0).length;
@@ -848,8 +865,18 @@ function calc(){
     valor:compareceu.filter(a=>a.data===d).reduce((s,a)=>s+a.valor,0),
     atend:compareceu.filter(a=>a.data===d).length
   }));
-  // ---- comparação vs período anterior (simulado a partir de PREV) ----
-  const prev = DATA.periodoAnterior || {faturamento:faturamento*0.8,nAtend:Math.round(nAtend*0.85),leads:ld.length*0.9,comandas:Math.round(nAtend*0.8)};
+  // ---- comparação vs período anterior ----
+  // quando há um mês selecionado, compara com o mês imediatamente anterior (dados reais)
+  let prev;
+  const _ymSel = (typeof mesSelecionadoTopo==='function') ? mesSelecionadoTopo() : null;
+  if(_per && !_per.acumulado && _ymSel){
+    const ant = mesAnterior(_ymSel);
+    const aAnt = DATA.atendimentos.filter(a=>a.agenda==='Compareceu' && a.data.slice(0,7)===ant);
+    const lAnt = DATA.leads.filter(l=>l.data && l.data.slice(0,7)===ant);
+    prev = {faturamento:aAnt.reduce((s,a)=>s+a.valor,0), nAtend:aAnt.length, leads:lAnt.length, comandas:aAnt.filter(a=>a.valor>0).length};
+  } else {
+    prev = DATA.periodoAnterior || {faturamento:faturamento*0.8,nAtend:Math.round(nAtend*0.85),leads:ld.length*0.9,comandas:Math.round(nAtend*0.8)};
+  }
   const vs = (atual,ant)=> ant? (atual-ant)/ant : 0;
   const comp = {
     faturamento: vs(faturamento,prev.faturamento),
@@ -920,10 +947,10 @@ function calc(){
   const docVencer = DOCS.filter(d=>d.status==='A vencer').length;
   const docOk = DOCS.filter(d=>d.status==='Arquivado'||d.status==='Vigente').length;
 
-  // ---- evolução mensal: calculada a partir dos atendimentos reais ----
+  // ---- evolução mensal: visão multi-mês, sempre sobre TODOS os atendimentos ----
   const mesesNomes=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
   const porMes={};
-  compareceu.forEach(a=>{
+  DATA.atendimentos.filter(a=>a.agenda==='Compareceu').forEach(a=>{
     const ym=a.data.slice(0,7); // AAAA-MM
     if(!porMes[ym]) porMes[ym]={ym, fat:0, custo:0};
     porMes[ym].fat += a.valor;
