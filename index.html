@@ -415,10 +415,24 @@ let META = {
   conversao:0, imposto:0.06, horasMes:176, duracaoMedia:1.0,
   comissaoPercent:0.30, comissaoBase:'bruto', profissionalPadrao:'Dra. Bruna Braga'
 };
-// Metas livres criadas pelo usuário. Cada meta:
+// Metas da clínica, organizadas POR MÊS. Cada meta:
 //   {id, nome, tipo, alvo, filtroTipo:'todos'|'procedimento'|'canal', filtroValor}
 // O "realizado" é calculado pelo app a partir de calc() — o usuário não digita.
-let METAS_LIVRES = [];
+// METAS_POR_MES = { '2026-06': [meta, ...], '2026-05': [...] }
+let METAS_POR_MES = {};
+let METAS_LIVRES = [];          // metas do mês atualmente selecionado na tela (ponteiro)
+let metaMesSel = null;          // 'AAAA-MM' do mês sendo visto/editado nas Configurações
+// retorna a chave de mês atual (AAAA-MM)
+function mesHoje(){ return new Date().toISOString().slice(0,7); }
+// metas de um mês específico (array; cria vazio se não existir)
+function metasDoMes(ym){ if(!METAS_POR_MES[ym]) METAS_POR_MES[ym]=[]; return METAS_POR_MES[ym]; }
+// rótulo amigável do mês (ex: "Junho 2026")
+function rotuloMes(ym){
+  const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const [a,m]=ym.split('-'); return meses[+m-1]+' '+a;
+}
+// mês imediatamente anterior
+function mesAnterior(ym){ const [a,m]=ym.split('-').map(Number); const d=new Date(a,m-1,1); d.setMonth(d.getMonth()-1); return d.toISOString().slice(0,7); }
 // tipos de indicador disponíveis para uma meta
 const META_TIPOS = {
   faturamento:   {label:'Faturamento',        unidade:'R$', fmt:v=>BRL(v),  filtravel:['procedimento','canal']},
@@ -458,6 +472,34 @@ function contaLeadsCanal(canal){
   // leads por canal a partir da captação (plataforma) — soma o campo leads
   try{ return (CAPTACAO||[]).filter(c=>c.plataforma===canal).reduce((s,c)=>s+(+c.leads||0),0); }
   catch(e){ return 0; }
+}
+// calcula os indicadores necessários para as metas, restritos a um mês (AAAA-MM)
+function kDoMes(ym){
+  const ini=ym+'-01';
+  const fim=ym+'-31';
+  const comp=DATA.atendimentos.filter(a=>a.agenda==='Compareceu' && a.data>=ini && a.data<=fim);
+  const faturamento=comp.reduce((s,a)=>s+(+a.valor||0),0);
+  const custo=comp.reduce((s,a)=>s+(+a.custo||0),0);
+  const nAtend=comp.length;
+  const ticket=nAtend?faturamento/nAtend:0;
+  const totAgenda=DATA.atendimentos.filter(a=>a.data>=ini&&a.data<=fim).length;
+  const txComp=totAgenda?nAtend/totAgenda:0;
+  const porProc=(PROCS||[]).map(p=>({proc:p,
+    qtd:comp.filter(a=>a.proc===p).length,
+    receita:comp.filter(a=>a.proc===p).reduce((s,a)=>s+a.valor,0)}));
+  const porCanal=(CANAIS||[]).map(c=>({canal:c,
+    qtd:comp.filter(a=>a.canal===c).length,
+    receita:comp.filter(a=>a.canal===c).reduce((s,a)=>s+a.valor,0)}));
+  // leads e conversão do mês a partir da captação
+  const capt=(CAPTACAO||[]).filter(c=>c.data>=ini && c.data<=fim);
+  const nLeads=capt.reduce((s,c)=>s+(+c.leads||0),0);
+  const nAgend=capt.reduce((s,c)=>s+(+c.agendadas||0),0);
+  const txConv=nLeads?nAgend/nLeads:0;
+  const imposto=faturamento*(META.imposto||0);
+  const lucro=faturamento-custo-imposto;
+  const horas=nAtend*(META.duracaoMedia||1);
+  const txOcup=META.horasMes?horas/META.horasMes:0;
+  return {faturamento,ticket,nAtend,txComp,txConv,txOcup,nLeads,lucro,porProc,porCanal,_ym:ym};
 }
 
 // Documentos arquivados (no app real -> Supabase Storage; aqui = registro/organização)
@@ -1004,9 +1046,17 @@ async function carregarTudo(){
         META.comparecimento=row.valores.comparecimento||0; META.conversao=row.valores.conversao||0; META.ocupacao=row.valores.ocupacao||0;
       }
       if(row.chave==='horas_mes' && row.valores && row.valores.horas){ META.horasMes=row.valores.horas; }
-      if(row.chave==='metas_livres' && Array.isArray(row.valores)){ METAS_LIVRES=row.valores; }
+      if(row.chave==='metas_livres' && Array.isArray(row.valores) && row.valores.length){
+        // formato ANTIGO (array único) → migra para o mês atual
+        METAS_POR_MES[mesHoje()] = row.valores;
+      }
+      if(row.chave==='metas_por_mes' && row.valores && typeof row.valores==='object' && !Array.isArray(row.valores)){
+        METAS_POR_MES = row.valores;
+      }
       if(row.chave==='historico' && Array.isArray(row.valores)){ HISTORICO=row.valores; }
     });
+    // ponteiro do mês atual
+    METAS_LIVRES = metasDoMes(mesHoje());
     window.__lastCalc=null;
   } catch(e){ console.error('Erro ao carregar dados:', e); }
 }
@@ -1169,21 +1219,22 @@ function renderPainel(pg){
 }
 
 function metasBlock(k){
-  const lista=(METAS_LIVRES||[]).filter(m=>m.alvo>0 && (m.nome||'').trim());
+  const ym=mesHoje();
+  const lista=(metasDoMes(ym)||[]).filter(m=>m.alvo>0 && (m.nome||'').trim());
   if(!lista.length){
     return `<div style="color:var(--grey);font-size:13px;line-height:1.6;padding:6px 0">
-      Você ainda não criou metas.<br>
+      Você ainda não criou metas para ${rotuloMes(ym)}.<br>
       Crie as metas da clínica em <b>Controle → Configurações → Metas da clínica</b>. Você escolhe o que acompanhar e o app calcula o realizado sozinho.
     </div>`;
   }
+  const kMes=kDoMes(ym); // realizado do mês corrente, para casar com as metas do mês
   return lista.map(m=>{
     const T=META_TIPOS[m.tipo]||META_TIPOS.faturamento;
-    const r=valorMetaLivre(m,k);
+    const r=valorMetaLivre(m,kMes);
     const alvo=m.alvo||0;
     const p=alvo?r/alvo:0, w=Math.min(p,1.15)/1.15*100;
     const cls=p>=1?'hit':(p<0.7?'low':'');
     const col=p>=1?'var(--green)':p<0.7?'var(--red)':'var(--gold-d)';
-    // sufixo do filtro (ex: "· Botox" ou "· WhatsApp")
     const suf = (m.filtroTipo && m.filtroTipo!=='todos' && m.filtroValor) ? ` <span style="color:var(--grey);font-size:11px;font-weight:400">· ${m.filtroValor}</span>` : '';
     return `<div class="meta-row"><div class="mr-top"><span class="mr-name">${m.nome}${suf}</span>
       <span class="mr-vals"><b>${T.fmt(r)}</b> / ${T.fmt(alvo)}<span class="mr-pct" style="color:${col}">${PCT0(p)}</span></span></div>
@@ -3006,12 +3057,29 @@ function renderConfig(pg){
     </div>`;
   }).join('');
   const fsm='padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink)';
-  // ---- metas da clínica (criadas pelo usuário, acompanhadas pelo app) ----
-  const kCalc = calc();
-  const linhasML=METAS_LIVRES.map((m,i)=>{
+  // ---- metas da clínica POR MÊS ----
+  if(!metaMesSel) metaMesSel = mesHoje();
+  const metasMes = metasDoMes(metaMesSel);
+  const kCalc = kDoMes(metaMesSel);
+  // meses que têm metas + o mês atual + o selecionado, ordenados desc
+  const mesesComMetas = Object.keys(METAS_POR_MES).filter(ym=>(METAS_POR_MES[ym]||[]).length);
+  const setMeses = new Set([...mesesComMetas, mesHoje(), metaMesSel]);
+  const mesesLista = [...setMeses].sort((a,b)=>b.localeCompare(a));
+  const mesOpts = mesesLista.map(ym=>`<option value="${ym}" ${ym===metaMesSel?'selected':''}>${rotuloMes(ym)}${ym===mesHoje()?' (mês atual)':''}${(METAS_POR_MES[ym]||[]).length?'':' — vazio'}</option>`).join('');
+  const mesAnt = mesAnterior(metaMesSel);
+  const temMesAnterior = (METAS_POR_MES[mesAnt]||[]).length>0;
+  // faixa de ação quando o mês está vazio
+  const vazioMsg = (!metasMes.length) ? `
+    <div style="background:var(--cream);border:1px dashed var(--gold-l);border-radius:12px;padding:16px;margin-bottom:14px">
+      <div style="font-size:13.5px;margin-bottom:10px">Você ainda não definiu metas para <b>${rotuloMes(metaMesSel)}</b>. Como quer começar?</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        ${temMesAnterior?`<button class="btn" onclick="copiarMetasMesAnterior()">Copiar metas de ${rotuloMes(mesAnt)}</button>`:''}
+        <button class="btn ghost" onclick="addMetaLivre()">Começar do zero</button>
+      </div>
+    </div>` : '';
+  const linhasML=metasMes.map((m,i)=>{
     const T=META_TIPOS[m.tipo]||META_TIPOS.faturamento;
     const tipoOpts=Object.entries(META_TIPOS).map(([k,v])=>`<option value="${k}" ${k===m.tipo?'selected':''}>${v.label}</option>`).join('');
-    // opções de filtro conforme o tipo
     let filtroUI='';
     if(T.filtravel && T.filtravel.length){
       const ftOpts=`<option value="todos" ${(!m.filtroTipo||m.filtroTipo==='todos')?'selected':''}>Toda a clínica</option>`+
@@ -3025,7 +3093,7 @@ function renderConfig(pg){
       filtroUI=`<div class="field" style="margin:0"><label>Aplicar a</label><input value="Toda a clínica" disabled style="${fsm};width:100%;opacity:.6"></div><div></div>`;
     }
     const realizado=valorMetaLivre(m,kCalc);
-    const alvoNum = T.pct ? (m.alvo||0) : (m.alvo||0);
+    const alvoNum = m.alvo||0;
     const alvoInput = T.pct
       ? `<input type="number" value="${m.alvo?Math.round(m.alvo*100):''}" oninput="updMetaLivre(${i},'alvoPct',this.value)" placeholder="ex: 90" style="${fsm};width:100%">`
       : `<input type="number" value="${m.alvo||''}" oninput="updMetaLivre(${i},'alvo',this.value)" placeholder="ex: 20000" style="${fsm};width:100%">`;
@@ -3040,16 +3108,23 @@ function renderConfig(pg){
         ${filtroUI}
         <button class="btn ghost" style="padding:8px 10px;font-size:12px" onclick="removeMetaLivre(${i})" title="Remover meta">remover</button>
       </div>
-      <div style="margin-top:10px;font-size:12.5px;color:var(--grey)">Realizado agora: <b style="color:var(--ink)">${T.fmt(realizado)}</b>${alvoNum>0?` · ${PCT0(prog)} da meta`:' · defina o alvo'}</div>
+      <div style="margin-top:10px;font-size:12.5px;color:var(--grey)">Realizado em ${rotuloMes(metaMesSel)}: <b style="color:var(--ink)">${T.fmt(realizado)}</b>${alvoNum>0?` · ${PCT0(prog)} da meta`:' · defina o alvo'}</div>
     </div>`;
   }).join('');
+  const ehMesAtual = metaMesSel===mesHoje();
   const metasLivres=`<div class="panel" style="margin-bottom:18px">
-    <div class="panel-head"><div><h3>Metas da clínica</h3><div class="ph-sub">Crie quantas metas quiser. Escolha o que acompanhar (faturamento, leads, etc.) e o app calcula o realizado sozinho. Pode ter várias do mesmo tipo — toda a clínica ou filtradas por procedimento/canal.</div></div></div>
-    <div id="metasLivresBox">${linhasML||'<div style="font-size:13px;color:var(--grey);font-style:italic;margin-bottom:10px">Nenhuma meta criada ainda. Clique em "+ nova meta" para começar.</div>'}</div>
-    <div style="display:flex;gap:10px;margin-top:6px">
-      <button class="btn ghost" style="padding:6px 12px;font-size:13px" onclick="addMetaLivre()">+ nova meta</button>
-      <button class="btn" onclick="salvarMetasLivres()">Salvar metas</button>
+    <div class="panel-head"><div><h3>Metas da clínica</h3><div class="ph-sub">Metas por mês. Escolha o que acompanhar e o app calcula o realizado sozinho. Cada mês tem seu conjunto — selecione o mês para ver ou criar.</div></div></div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <span style="font-size:12.5px;color:var(--grey)">Mês das metas:</span>
+      <select onchange="metaMesSel=this.value;go('config')" style="padding:8px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);font-size:13px">${mesOpts}</select>
+      ${ehMesAtual?'<span style="font-size:12px;color:var(--gold-d)">● acompanhando agora</span>':'<span style="font-size:12px;color:var(--grey)">consulta de outro mês</span>'}
     </div>
+    ${vazioMsg}
+    <div id="metasLivresBox">${linhasML}</div>
+    ${metasMes.length?`<div style="display:flex;gap:10px;margin-top:6px">
+      <button class="btn ghost" style="padding:6px 12px;font-size:13px" onclick="addMetaLivre()">+ nova meta</button>
+      <button class="btn" onclick="salvarMetasLivres()">Salvar metas de ${rotuloMes(metaMesSel)}</button>
+    </div>`:''}
   </div>`;
   pg.innerHTML=`
     <div class="panel" style="margin-bottom:18px">
@@ -3059,38 +3134,45 @@ function renderConfig(pg){
     ${metasLivres}
     ${blocos}`;
 }
-// ---- metas da clínica (livres, acompanhadas pelo app) ----
-function addMetaLivre(){ METAS_LIVRES.push({id:Date.now()+Math.random(),nome:'',tipo:'faturamento',alvo:0,filtroTipo:'todos',filtroValor:''}); go('config'); setTimeout(()=>{const b=document.getElementById('metasLivresBox');if(b)b.scrollIntoView({behavior:'smooth',block:'end'});},50); }
-function removeMetaLivre(i){ METAS_LIVRES.splice(i,1); go('config'); }
+// ---- metas da clínica (por mês, acompanhadas pelo app) ----
+function metasMesSel(){ return metasDoMes(metaMesSel||mesHoje()); }
+function addMetaLivre(){ metasMesSel().push({id:Date.now()+Math.random(),nome:'',tipo:'faturamento',alvo:0,filtroTipo:'todos',filtroValor:''}); go('config'); setTimeout(()=>{const b=document.getElementById('metasLivresBox');if(b)b.scrollIntoView({behavior:'smooth',block:'end'});},50); }
+function removeMetaLivre(i){ metasMesSel().splice(i,1); go('config'); }
+function copiarMetasMesAnterior(){
+  const ant=mesAnterior(metaMesSel);
+  const base=METAS_POR_MES[ant]||[];
+  METAS_POR_MES[metaMesSel] = base.map(m=>({id:Date.now()+Math.random(),nome:m.nome,tipo:m.tipo,alvo:m.alvo,filtroTipo:m.filtroTipo||'todos',filtroValor:m.filtroValor||''}));
+  go('config'); toast('Metas copiadas de '+rotuloMes(ant));
+}
 function updMetaLivre(i,campo,val){
-  if(!METAS_LIVRES[i])return;
-  if(campo==='nome'||campo==='filtroValor'){ METAS_LIVRES[i][campo]=val; }
-  else if(campo==='alvo'){ METAS_LIVRES[i].alvo=+val||0; }
-  else if(campo==='alvoPct'){ METAS_LIVRES[i].alvo=(+val||0)/100; }
+  const arr=metasMesSel(); if(!arr[i])return;
+  if(campo==='nome'||campo==='filtroValor'){ arr[i][campo]=val; }
+  else if(campo==='alvo'){ arr[i].alvo=+val||0; }
+  else if(campo==='alvoPct'){ arr[i].alvo=(+val||0)/100; }
   else if(campo==='tipo'){
-    METAS_LIVRES[i].tipo=val;
-    // ao trocar de tipo, reseta filtro se o novo tipo não for filtrável
-    const T=META_TIPOS[val]; if(!T||!T.filtravel||!T.filtravel.length){ METAS_LIVRES[i].filtroTipo='todos'; METAS_LIVRES[i].filtroValor=''; }
+    arr[i].tipo=val;
+    const T=META_TIPOS[val]; if(!T||!T.filtravel||!T.filtravel.length){ arr[i].filtroTipo='todos'; arr[i].filtroValor=''; }
     go('config');
   }
   else if(campo==='filtroTipo'){
-    METAS_LIVRES[i].filtroTipo=val;
-    // ao escolher um filtro, sugere o primeiro valor disponível
-    if(val==='procedimento') METAS_LIVRES[i].filtroValor=PROCS[0]||'';
-    else if(val==='canal') METAS_LIVRES[i].filtroValor=CANAIS[0]||'';
-    else METAS_LIVRES[i].filtroValor='';
+    arr[i].filtroTipo=val;
+    if(val==='procedimento') arr[i].filtroValor=PROCS[0]||'';
+    else if(val==='canal') arr[i].filtroValor=CANAIS[0]||'';
+    else arr[i].filtroValor='';
     go('config');
   }
 }
 async function salvarMetasLivres(){
-  // remove metas sem nome
-  METAS_LIVRES = METAS_LIVRES.filter(m=>(m.nome||'').trim());
+  // remove metas sem nome no mês selecionado
+  METAS_POR_MES[metaMesSel] = metasMesSel().filter(m=>(m.nome||'').trim());
+  // mantém o ponteiro do mês atual sincronizado
+  METAS_LIVRES = metasDoMes(mesHoje());
   if(MODO_NUVEM){
     const { data:{ user } } = await sb.auth.getUser();
-    await sb.from('configuracoes').upsert({user_id:user.id,chave:'metas_livres',valores:METAS_LIVRES},{onConflict:'user_id,chave'});
+    await sb.from('configuracoes').upsert({user_id:user.id,chave:'metas_por_mes',valores:METAS_POR_MES},{onConflict:'user_id,chave'});
   }
   window.__lastCalc=null;
-  go('config'); toast('Metas salvas');
+  go('config'); toast('Metas de '+rotuloMes(metaMesSel)+' salvas');
 }
 async function addConfigItem(chave){
   const inp=document.getElementById('cfg_'+chave);
