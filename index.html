@@ -424,6 +424,16 @@ let METAS_LIVRES = [];          // metas do mês atualmente selecionado na tela 
 let metaMesSel = null;          // 'AAAA-MM' do mês sendo visto/editado nas Configurações
 // retorna a chave de mês atual (AAAA-MM)
 function mesHoje(){ return new Date().toISOString().slice(0,7); }
+// lê o seletor de período do topo (ex: "Maio 2026") e converte para 'AAAA-MM'.
+// retorna null quando é "Acumulado" (ou não há mês reconhecível).
+function mesSelecionadoTopo(){
+  const el=document.getElementById('periodSel'); if(!el) return mesHoje();
+  const txt=(el.value||el.options[el.selectedIndex]&&el.options[el.selectedIndex].text||'').trim();
+  const meses={'janeiro':'01','fevereiro':'02','março':'03','marco':'03','abril':'04','maio':'05','junho':'06','julho':'07','agosto':'08','setembro':'09','outubro':'10','novembro':'11','dezembro':'12'};
+  const m=txt.toLowerCase().match(/([a-zç]+)\s+(\d{4})/);
+  if(m && meses[m[1]]) return m[2]+'-'+meses[m[1]];
+  return null; // "Acumulado" ou desconhecido
+}
 // metas de um mês específico (array; cria vazio se não existir)
 function metasDoMes(ym){ if(!METAS_POR_MES[ym]) METAS_POR_MES[ym]=[]; return METAS_POR_MES[ym]; }
 // rótulo amigável do mês (ex: "Junho 2026")
@@ -1183,7 +1193,7 @@ function renderPainel(pg){
 
     <div class="row two">
       <div class="panel">
-        <div class="panel-head"><div><h3>Metas do mês</h3><div class="ph-sub">Realizado x objetivo</div></div></div>
+        <div class="panel-head"><div><h3>Metas de ${rotuloMes(mesSelecionadoTopo()||mesHoje())}</h3><div class="ph-sub">Realizado x objetivo</div></div></div>
         ${metasBlock(k)}
       </div>
       <div class="panel">
@@ -1219,15 +1229,15 @@ function renderPainel(pg){
 }
 
 function metasBlock(k){
-  const ym=mesHoje();
+  const ym = mesSelecionadoTopo() || mesHoje();
   const lista=(metasDoMes(ym)||[]).filter(m=>m.alvo>0 && (m.nome||'').trim());
   if(!lista.length){
     return `<div style="color:var(--grey);font-size:13px;line-height:1.6;padding:6px 0">
-      Você ainda não criou metas para ${rotuloMes(ym)}.<br>
-      Crie as metas da clínica em <b>Controle → Configurações → Metas da clínica</b>. Você escolhe o que acompanhar e o app calcula o realizado sozinho.
+      Nenhuma meta definida para ${rotuloMes(ym)}.<br>
+      Crie as metas deste mês em <b>Controle → Configurações → Metas da clínica</b> (selecione ${rotuloMes(ym)} no seletor de mês das metas).
     </div>`;
   }
-  const kMes=kDoMes(ym); // realizado do mês corrente, para casar com as metas do mês
+  const kMes=kDoMes(ym); // realizado do mês selecionado, para casar com as metas do mês
   return lista.map(m=>{
     const T=META_TIPOS[m.tipo]||META_TIPOS.faturamento;
     const r=valorMetaLivre(m,kMes);
