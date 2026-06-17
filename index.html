@@ -415,8 +415,50 @@ let META = {
   conversao:0, imposto:0.06, horasMes:176, duracaoMedia:1.0,
   comissaoPercent:0.30, comissaoBase:'bruto', profissionalPadrao:'Dra. Bruna Braga'
 };
-// Metas livres criadas pelo usuário: [{id, nome, alvo, atual}] — do mês atual, exibidas no Painel
+// Metas livres criadas pelo usuário. Cada meta:
+//   {id, nome, tipo, alvo, filtroTipo:'todos'|'procedimento'|'canal', filtroValor}
+// O "realizado" é calculado pelo app a partir de calc() — o usuário não digita.
 let METAS_LIVRES = [];
+// tipos de indicador disponíveis para uma meta
+const META_TIPOS = {
+  faturamento:   {label:'Faturamento',        unidade:'R$', fmt:v=>BRL(v),  filtravel:['procedimento','canal']},
+  atendimentos:  {label:'Nº de atendimentos', unidade:'',   fmt:v=>Math.round(v)+'',  filtravel:['procedimento','canal']},
+  ticket:        {label:'Ticket médio',       unidade:'R$', fmt:v=>BRL(v),  filtravel:[]},
+  leads:         {label:'Leads captados',     unidade:'',   fmt:v=>Math.round(v)+'',  filtravel:['canal']},
+  comparecimento:{label:'Comparecimento (%)', unidade:'%',  fmt:v=>PCT0(v), filtravel:[], pct:true},
+  conversao:     {label:'Conversão de leads (%)',unidade:'%',fmt:v=>PCT0(v), filtravel:[], pct:true},
+  ocupacao:      {label:'Ocupação (%)',       unidade:'%',  fmt:v=>PCT0(v), filtravel:[], pct:true},
+  lucro:         {label:'Lucro do período',   unidade:'R$', fmt:v=>BRL(v),  filtravel:[]}
+};
+// calcula o valor REALIZADO de uma meta a partir do resultado de calc()
+function valorMetaLivre(m, k){
+  const ft=m.filtroTipo||'todos';
+  const fv=m.filtroValor;
+  switch(m.tipo){
+    case 'faturamento':
+      if(ft==='procedimento'){ const p=(k.porProc||[]).find(x=>x.proc===fv); return p?p.receita:0; }
+      if(ft==='canal'){ const c=(k.porCanal||[]).find(x=>x.canal===fv); return c?c.receita:0; }
+      return k.faturamento;
+    case 'atendimentos':
+      if(ft==='procedimento'){ const p=(k.porProc||[]).find(x=>x.proc===fv); return p?p.qtd:0; }
+      if(ft==='canal'){ const c=(k.porCanal||[]).find(x=>x.canal===fv); return c?(c.qtd||c.atend||0):0; }
+      return k.nAtend;
+    case 'ticket':        return k.ticket;
+    case 'leads':
+      if(ft==='canal'){ return contaLeadsCanal(fv); }
+      return k.nLeads;
+    case 'comparecimento':return k.txComp;
+    case 'conversao':     return k.txConv;
+    case 'ocupacao':      return k.txOcup;
+    case 'lucro':         return k.lucro;
+    default: return 0;
+  }
+}
+function contaLeadsCanal(canal){
+  // leads por canal a partir da captação (plataforma) — soma o campo leads
+  try{ return (CAPTACAO||[]).filter(c=>c.plataforma===canal).reduce((s,c)=>s+(+c.leads||0),0); }
+  catch(e){ return 0; }
+}
 
 // Documentos arquivados (no app real -> Supabase Storage; aqui = registro/organização)
 const DOCS = [
@@ -735,6 +777,7 @@ function calc(){
     leads:ld.filter(l=>l.canal===c).length,
     fechados:ld.filter(l=>l.canal===c&&l.fechou).length,
     receita:at.filter(a=>a.canal===c&&a.agenda==='Compareceu').reduce((s,a)=>s+a.valor,0),
+    qtd:at.filter(a=>a.canal===c&&a.agenda==='Compareceu').length,
   })).map(x=>({...x,conv:x.leads?x.fechados/x.leads:0}));
   const porProc = PROCS.map(p=>({
     proc:p,
@@ -1126,34 +1169,26 @@ function renderPainel(pg){
 }
 
 function metasBlock(k){
-  const metas=[
-    {n:'Faturamento',r:k.faturamento,m:META.faturamento,f:BRL},
-    {n:'Ticket médio',r:k.ticket,m:META.ticket,f:BRL},
-    {n:'Comparecimento',r:k.txComp,m:META.comparecimento,f:PCT},
-    {n:'Conversão de leads',r:k.txConv,m:META.conversao,f:PCT},
-    {n:'Ocupação',r:k.txOcup,m:META.ocupacao,f:PCT},
-  ];
-  const algumaMeta = metas.some(x=>x.m>0);
-  const temLivres = (METAS_LIVRES||[]).some(m=>m.alvo>0);
-  if(!algumaMeta && !temLivres){
+  const lista=(METAS_LIVRES||[]).filter(m=>m.alvo>0 && (m.nome||'').trim());
+  if(!lista.length){
     return `<div style="color:var(--grey);font-size:13px;line-height:1.6;padding:6px 0">
-      Você ainda não definiu metas.<br>
-      Defina as metas gerais ou crie as suas próprias em <b>Controle → Configurações</b> para acompanhar o realizado x objetivo aqui.
+      Você ainda não criou metas.<br>
+      Crie as metas da clínica em <b>Controle → Configurações → Metas da clínica</b>. Você escolhe o que acompanhar e o app calcula o realizado sozinho.
     </div>`;
   }
-  const linhaMeta=(nome,r,m,fmt)=>{
-    const p=m?r/m:0, w=Math.min(p,1.15)/1.15*100;
+  return lista.map(m=>{
+    const T=META_TIPOS[m.tipo]||META_TIPOS.faturamento;
+    const r=valorMetaLivre(m,k);
+    const alvo=m.alvo||0;
+    const p=alvo?r/alvo:0, w=Math.min(p,1.15)/1.15*100;
     const cls=p>=1?'hit':(p<0.7?'low':'');
     const col=p>=1?'var(--green)':p<0.7?'var(--red)':'var(--gold-d)';
-    return `<div class="meta-row"><div class="mr-top"><span class="mr-name">${nome}</span>
-      <span class="mr-vals"><b>${fmt(r)}</b> / ${fmt(m)}<span class="mr-pct" style="color:${col}">${PCT0(p)}</span></span></div>
+    // sufixo do filtro (ex: "· Botox" ou "· WhatsApp")
+    const suf = (m.filtroTipo && m.filtroTipo!=='todos' && m.filtroValor) ? ` <span style="color:var(--grey);font-size:11px;font-weight:400">· ${m.filtroValor}</span>` : '';
+    return `<div class="meta-row"><div class="mr-top"><span class="mr-name">${m.nome}${suf}</span>
+      <span class="mr-vals"><b>${T.fmt(r)}</b> / ${T.fmt(alvo)}<span class="mr-pct" style="color:${col}">${PCT0(p)}</span></span></div>
       <div class="bar"><i class="${cls}" data-w="${w}"></i></div></div>`;
-  };
-  const gerais = metas.filter(x=>x.m>0).map(x=>linhaMeta(x.n,x.r,x.m,x.f)).join('');
-  // metas livres: valor atingido é o informado manualmente (formato moeda por padrão)
-  const livres = (METAS_LIVRES||[]).filter(m=>m.alvo>0).map(m=>linhaMeta(m.nome, +m.atual||0, +m.alvo||0, BRL)).join('');
-  const sep = (gerais && livres) ? '<div style="border-top:1px dashed var(--line);margin:12px 0 4px;padding-top:8px;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--grey)">Minhas metas</div>' : '';
-  return gerais + sep + livres;
+  }).join('');
 }
 
 
@@ -2970,33 +3005,50 @@ function renderConfig(pg){
       </div>
     </div>`;
   }).join('');
-  const fs='padding:9px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);width:130px';
-  const metasGerais=`<div class="panel" style="margin-bottom:18px">
-    <div class="panel-head"><div><h3>Metas gerais da clínica</h3><div class="ph-sub">Objetivos do mês mostrados no Painel (deixe 0 para não exibir)</div></div></div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px">
-      <div class="field"><label>Faturamento (R$)</label><input type="number" id="mg_fat" value="${META.faturamento||''}" placeholder="ex: 60000" style="${fs}"></div>
-      <div class="field"><label>Ticket médio (R$)</label><input type="number" id="mg_ticket" value="${META.ticket||''}" placeholder="ex: 800" style="${fs}"></div>
-      <div class="field"><label>Comparecimento (%)</label><input type="number" id="mg_comp" value="${META.comparecimento?Math.round(META.comparecimento*100):''}" placeholder="ex: 90" style="${fs}"></div>
-      <div class="field"><label>Conversão de leads (%)</label><input type="number" id="mg_conv" value="${META.conversao?Math.round(META.conversao*100):''}" placeholder="ex: 30" style="${fs}"></div>
-      <div class="field"><label>Ocupação (%)</label><input type="number" id="mg_ocup" value="${META.ocupacao?Math.round(META.ocupacao*100):''}" placeholder="ex: 75" style="${fs}"></div>
-    </div>
-    <div style="margin-top:16px"><button class="btn" onclick="salvarMetasGerais()">Salvar metas gerais</button></div>
-  </div>`;
-  // ---- metas livres (criadas pelo usuário) ----
   const fsm='padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink)';
-  const linhasML=METAS_LIVRES.map((m,i)=>`
-    <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:10px;align-items:end;margin-bottom:10px">
-      <div class="field" style="margin:0"><label>Nome da meta</label><input value="${(m.nome||'').replace(/"/g,'&quot;')}" oninput="updMetaLivre(${i},'nome',this.value)" placeholder="ex: Faturamento Botox" style="${fsm};width:100%"></div>
-      <div class="field" style="margin:0"><label>Meta (alvo)</label><input type="number" value="${m.alvo||''}" oninput="updMetaLivre(${i},'alvo',this.value)" placeholder="ex: 20000" style="${fsm};width:100%"></div>
-      <div class="field" style="margin:0"><label>Atingido</label><input type="number" value="${m.atual||''}" oninput="updMetaLivre(${i},'atual',this.value)" placeholder="0" style="${fsm};width:100%"></div>
-      <button class="btn ghost" style="padding:8px 10px;font-size:12px" onclick="removeMetaLivre(${i})" title="Remover">×</button>
-    </div>`).join('');
+  // ---- metas da clínica (criadas pelo usuário, acompanhadas pelo app) ----
+  const kCalc = calc();
+  const linhasML=METAS_LIVRES.map((m,i)=>{
+    const T=META_TIPOS[m.tipo]||META_TIPOS.faturamento;
+    const tipoOpts=Object.entries(META_TIPOS).map(([k,v])=>`<option value="${k}" ${k===m.tipo?'selected':''}>${v.label}</option>`).join('');
+    // opções de filtro conforme o tipo
+    let filtroUI='';
+    if(T.filtravel && T.filtravel.length){
+      const ftOpts=`<option value="todos" ${(!m.filtroTipo||m.filtroTipo==='todos')?'selected':''}>Toda a clínica</option>`+
+        T.filtravel.map(f=>`<option value="${f}" ${m.filtroTipo===f?'selected':''}>${f==='procedimento'?'Por procedimento':'Por canal'}</option>`).join('');
+      let valOpts='';
+      if(m.filtroTipo==='procedimento'){ valOpts=`<select onchange="updMetaLivre(${i},'filtroValor',this.value)" style="${fsm};width:100%">`+PROCS.map(p=>`<option ${p===m.filtroValor?'selected':''}>${p}</option>`).join('')+`</select>`; }
+      else if(m.filtroTipo==='canal'){ valOpts=`<select onchange="updMetaLivre(${i},'filtroValor',this.value)" style="${fsm};width:100%">`+CANAIS.map(c=>`<option ${c===m.filtroValor?'selected':''}>${c}</option>`).join('')+`</select>`; }
+      filtroUI=`<div class="field" style="margin:0"><label>Aplicar a</label><select onchange="updMetaLivre(${i},'filtroTipo',this.value)" style="${fsm};width:100%">${ftOpts}</select></div>
+        <div class="field" style="margin:0">${valOpts?`<label>Qual</label>${valOpts}`:''}</div>`;
+    } else {
+      filtroUI=`<div class="field" style="margin:0"><label>Aplicar a</label><input value="Toda a clínica" disabled style="${fsm};width:100%;opacity:.6"></div><div></div>`;
+    }
+    const realizado=valorMetaLivre(m,kCalc);
+    const alvoNum = T.pct ? (m.alvo||0) : (m.alvo||0);
+    const alvoInput = T.pct
+      ? `<input type="number" value="${m.alvo?Math.round(m.alvo*100):''}" oninput="updMetaLivre(${i},'alvoPct',this.value)" placeholder="ex: 90" style="${fsm};width:100%">`
+      : `<input type="number" value="${m.alvo||''}" oninput="updMetaLivre(${i},'alvo',this.value)" placeholder="ex: 20000" style="${fsm};width:100%">`;
+    const prog = alvoNum>0 ? realizado/alvoNum : 0;
+    return `<div style="border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;background:var(--paper)">
+      <div style="display:grid;grid-template-columns:1.6fr 1.2fr 1fr;gap:10px;align-items:end;margin-bottom:10px">
+        <div class="field" style="margin:0"><label>Nome da meta</label><input value="${(m.nome||'').replace(/"/g,'&quot;')}" oninput="updMetaLivre(${i},'nome',this.value)" placeholder="ex: Faturamento Botox" style="${fsm};width:100%"></div>
+        <div class="field" style="margin:0"><label>O que acompanhar</label><select onchange="updMetaLivre(${i},'tipo',this.value)" style="${fsm};width:100%">${tipoOpts}</select></div>
+        <div class="field" style="margin:0"><label>Meta / alvo${T.pct?' (%)':(T.unidade?' ('+T.unidade+')':'')}</label>${alvoInput}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1.6fr 1.2fr 1fr auto;gap:10px;align-items:end">
+        ${filtroUI}
+        <button class="btn ghost" style="padding:8px 10px;font-size:12px" onclick="removeMetaLivre(${i})" title="Remover meta">remover</button>
+      </div>
+      <div style="margin-top:10px;font-size:12.5px;color:var(--grey)">Realizado agora: <b style="color:var(--ink)">${T.fmt(realizado)}</b>${alvoNum>0?` · ${PCT0(prog)} da meta`:' · defina o alvo'}</div>
+    </div>`;
+  }).join('');
   const metasLivres=`<div class="panel" style="margin-bottom:18px">
-    <div class="panel-head"><div><h3>Minhas metas</h3><div class="ph-sub">Crie quantas metas quiser, com o nome e o valor que você definir. Aparecem no Painel. Pode ter várias do mesmo tipo (ex: 3 de faturamento).</div></div></div>
-    <div id="metasLivresBox">${linhasML||'<div style="font-size:13px;color:var(--grey);font-style:italic;margin-bottom:10px">Nenhuma meta criada ainda.</div>'}</div>
+    <div class="panel-head"><div><h3>Metas da clínica</h3><div class="ph-sub">Crie quantas metas quiser. Escolha o que acompanhar (faturamento, leads, etc.) e o app calcula o realizado sozinho. Pode ter várias do mesmo tipo — toda a clínica ou filtradas por procedimento/canal.</div></div></div>
+    <div id="metasLivresBox">${linhasML||'<div style="font-size:13px;color:var(--grey);font-style:italic;margin-bottom:10px">Nenhuma meta criada ainda. Clique em "+ nova meta" para começar.</div>'}</div>
     <div style="display:flex;gap:10px;margin-top:6px">
       <button class="btn ghost" style="padding:6px 12px;font-size:13px" onclick="addMetaLivre()">+ nova meta</button>
-      <button class="btn" onclick="salvarMetasLivres()">Salvar minhas metas</button>
+      <button class="btn" onclick="salvarMetasLivres()">Salvar metas</button>
     </div>
   </div>`;
   pg.innerHTML=`
@@ -3004,28 +3056,32 @@ function renderConfig(pg){
       <div class="panel-head"><div><h3>Configurações gerais</h3><div class="ph-sub">Crie e edite as listas do sistema — sem precisar mexer no código</div></div></div>
       <div style="font-size:13px;color:var(--grey);line-height:1.6">Tudo que você adicionar aqui aparece automaticamente nos formulários do sistema (atendimentos, captação, funcionários, etc.). ${MODO_NUVEM?'As alterações são salvas na nuvem.':'<b style="color:var(--amber)">Modo local:</b> as alterações valem só nesta sessão até conectar o Supabase.'}</div>
     </div>
-    ${metasGerais}
     ${metasLivres}
     ${blocos}`;
 }
-async function salvarMetasGerais(){
-  const num=i=>{const v=document.getElementById(i).value;return v===''?0:+v;};
-  META.faturamento=num('mg_fat');
-  META.ticket=num('mg_ticket');
-  META.comparecimento=num('mg_comp')/100;
-  META.conversao=num('mg_conv')/100;
-  META.ocupacao=num('mg_ocup')/100;
-  if(MODO_NUVEM){
-    const { data:{ user } } = await sb.auth.getUser();
-    await sb.from('configuracoes').upsert({user_id:user.id,chave:'metas_gerais',valores:{faturamento:META.faturamento,ticket:META.ticket,comparecimento:META.comparecimento,conversao:META.conversao,ocupacao:META.ocupacao}},{onConflict:'user_id,chave'});
-  }
-  window.__lastCalc=null;
-  go('config');
-}
-// ---- metas livres ----
-function addMetaLivre(){ METAS_LIVRES.push({id:Date.now()+Math.random(),nome:'',alvo:0,atual:0}); go('config'); setTimeout(()=>{const b=document.getElementById('metasLivresBox');if(b)b.scrollIntoView({behavior:'smooth',block:'center'});},50); }
+// ---- metas da clínica (livres, acompanhadas pelo app) ----
+function addMetaLivre(){ METAS_LIVRES.push({id:Date.now()+Math.random(),nome:'',tipo:'faturamento',alvo:0,filtroTipo:'todos',filtroValor:''}); go('config'); setTimeout(()=>{const b=document.getElementById('metasLivresBox');if(b)b.scrollIntoView({behavior:'smooth',block:'end'});},50); }
 function removeMetaLivre(i){ METAS_LIVRES.splice(i,1); go('config'); }
-function updMetaLivre(i,campo,val){ if(!METAS_LIVRES[i])return; METAS_LIVRES[i][campo] = (campo==='nome')?val:(+val||0); }
+function updMetaLivre(i,campo,val){
+  if(!METAS_LIVRES[i])return;
+  if(campo==='nome'||campo==='filtroValor'){ METAS_LIVRES[i][campo]=val; }
+  else if(campo==='alvo'){ METAS_LIVRES[i].alvo=+val||0; }
+  else if(campo==='alvoPct'){ METAS_LIVRES[i].alvo=(+val||0)/100; }
+  else if(campo==='tipo'){
+    METAS_LIVRES[i].tipo=val;
+    // ao trocar de tipo, reseta filtro se o novo tipo não for filtrável
+    const T=META_TIPOS[val]; if(!T||!T.filtravel||!T.filtravel.length){ METAS_LIVRES[i].filtroTipo='todos'; METAS_LIVRES[i].filtroValor=''; }
+    go('config');
+  }
+  else if(campo==='filtroTipo'){
+    METAS_LIVRES[i].filtroTipo=val;
+    // ao escolher um filtro, sugere o primeiro valor disponível
+    if(val==='procedimento') METAS_LIVRES[i].filtroValor=PROCS[0]||'';
+    else if(val==='canal') METAS_LIVRES[i].filtroValor=CANAIS[0]||'';
+    else METAS_LIVRES[i].filtroValor='';
+    go('config');
+  }
+}
 async function salvarMetasLivres(){
   // remove metas sem nome
   METAS_LIVRES = METAS_LIVRES.filter(m=>(m.nome||'').trim());
