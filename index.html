@@ -1055,7 +1055,7 @@ async function carregarTudo(){
     CAT_RECEITA = (cat.data||[]).filter(c=>c.tipo==='receita').map(c=>c.nome);
     CAT_DESPESA = (cat.data||[]).filter(c=>c.tipo==='despesa').map(c=>c.nome);
     CAIXA = (lanc.data||[]).map(l=>({id:l.id,data:l.data,tipo:l.tipo,categoria:l.categoria,desc:l.descricao,valor:+l.valor,carteira:l.carteira_id,carteiraDest:l.carteira_dest}));
-    DATA.atendimentos = (atend.data||[]).map(a=>({id:a.id,data:a.data,paciente:a.paciente,proc:a.procedimento,func:a.funcionario,canal:a.canal,valor:+a.valor,custo:+a.custo,pag:a.pagamento,agenda:a.agenda,recebimento:a.recebimento||'',parcelas:+a.parcelas||1,pagamentos:Array.isArray(a.pagamentos)?a.pagamentos:null}));
+    DATA.atendimentos = (atend.data||[]).map(a=>({id:a.id,data:a.data,paciente:a.paciente,proc:a.procedimento,func:a.funcionario,canal:a.canal,valor:+a.valor,custo:+a.custo,pag:a.pagamento,agenda:a.agenda,recebimento:a.recebimento||'',parcelas:+a.parcelas||1,pagamentos:Array.isArray(a.pagamentos)?a.pagamentos:null,procedimentos:Array.isArray(a.procedimentos)?a.procedimentos:null}));
     CAPTACAO = (capt.data||[]).map(c=>({id:c.id,data:c.data,plataforma:c.plataforma,seguidores:c.seguidores,leads:c.leads,agendadas:c.agendadas,investido:+c.investido,gasto:+c.gasto,campanhas:c.campanhas}));
     METAS = (met.data||[]).map(m=>({id:m.id,funcId:m.func_id,escopo:m.escopo,tipo:m.tipo,periodo:m.periodo,faixas:m.faixas}));
     DATA.conformidade = (conf.data||[]).map(c=>({id:c.id,item:c.item,resp:c.responsavel,status:c.status}));
@@ -1398,7 +1398,7 @@ function renderAtend(pg){
   const diaOpts=dias.map(d=>`<option value="${d}" ${d===window.__atendDia?'selected':''}>${fmtDateFull(d)}${d===hoje?' (hoje)':''}</option>`).join('');
   const recDia=rows.filter(a=>a.agenda==='Compareceu').reduce((s,a)=>s+a.valor,0);
   const body=rows.map(a=>`<tr>
-    <td>${fmtDate(a.data)}</td><td>${a.paciente}</td><td>${a.proc}</td>
+    <td>${fmtDate(a.data)}</td><td>${a.paciente}</td><td title="${procedimentosDe(a).map(p=>p.proc+(p.unidade==='ml'&&p.ml?' ('+p.ml+'ml)':'')).join(' · ')}">${a.proc}</td>
     <td style="font-size:12.5px">${a.func||'—'}</td>
     <td>${a.canal}</td><td class="num">${BRL(a.valor)}</td>
     <td style="font-size:12px" title="${pagamentosDe(a).map(p=>formaLabel(p.forma,p.parcelas)+': '+BRL(p.valor)).join(' · ')}">${recebLabel(a)}</td>
@@ -1446,17 +1446,26 @@ function editarAtend(id){
   const ps=pagamentosDe(a);
   __atendPagamentos = ps.length ? ps.map(p=>({forma:p.forma,valor:p.valor,parcelas:p.parcelas})) : [];
   __atendPagDividido = __atendPagamentos.length>1;
+  // estado de trabalho dos procedimentos (lista)
+  __atendProcs = procedimentosDe(a);
   document.getElementById('atendFormBox').innerHTML=`
     <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px">
         <div class="field"><label>Data do atendimento</label><input id="naData" type="date" value="${a.data}" style="${fs};width:100%"></div>
         <div class="field"><label>Paciente</label><input id="naPac" value="${a.paciente}" placeholder="Nome" style="${fs};width:100%"></div>
         <div class="field"><label>Realizado por</label><select id="naFunc" style="${fs};width:100%"><option value="">—</option>${funcOpts}</select></div>
-        <div class="field"><label>Procedimento</label><select id="naProc" style="${fs};width:100%">${procOpts}</select></div>
         <div class="field"><label>Canal</label><select id="naCanal" style="${fs};width:100%">${canalOpts}</select></div>
-        <div class="field"><label>Valor (R$)</label><input id="naValor" type="number" value="${a.valor}" oninput="atendValorMudou()" style="${fs};width:100%"></div>
+        <div class="field"><label>Valor total (R$)</label><input id="naValor" type="number" value="${a.valor}" oninput="atendValorMudou()" style="${fs};width:100%"></div>
         <div class="field"><label>Pagamento</label><select id="naPag" style="${fs};width:100%">${pagOpts}</select></div>
         <div class="field"><label>Status</label><select id="naAg" style="${fs};width:100%">${agOpts}</select></div>
+      </div>
+
+      <div style="border-top:1px solid var(--gold-l);padding-top:14px;margin-bottom:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <label style="font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:var(--grey);font-weight:600">Procedimentos realizados</label>
+          <button type="button" class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="addAtendProc()">+ adicionar procedimento</button>
+        </div>
+        <div id="naProcsBox"></div>
       </div>
 
       <div style="border-top:1px solid var(--gold-l);padding-top:14px">
@@ -1473,8 +1482,52 @@ function editarAtend(id){
         <button class="btn ghost" onclick="document.getElementById('atendFormBox').innerHTML=''">Cancelar</button>
       </div>
     </div>`;
+  renderAtendProcs();
   renderPagamentos();
   document.getElementById('atendFormBox').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+/* ---- procedimentos do atendimento (lista; cada um ml ou sessão) ---- */
+let __atendProcs = [];
+// normaliza os procedimentos de um atendimento (novo formato a.procedimentos OU antigo a.proc único)
+function procedimentosDe(a){
+  if(Array.isArray(a.procedimentos) && a.procedimentos.length){
+    return a.procedimentos.map(p=>({proc:p.proc||'', unidade:p.unidade==='sessao'?'sessao':'ml', ml:+p.ml||0, produtoId:p.produtoId||''}));
+  }
+  if(a.proc) return [{proc:a.proc, unidade:'sessao', ml:0, produtoId:''}]; // antigo: 1 proc, sem consumo
+  return [];
+}
+function addAtendProc(){ __atendProcs.push({proc:(PROCS[0]||''), unidade:'ml', ml:0, produtoId:(produtosMl()[0]&&produtosMl()[0].id)||''}); renderAtendProcs(); }
+function removeAtendProc(i){ __atendProcs.splice(i,1); renderAtendProcs(); }
+function updAtendProc(i,campo,val){
+  if(!__atendProcs[i])return;
+  __atendProcs[i][campo] = (campo==='ml') ? (+val||0) : val;
+  if(campo==='unidade') renderAtendProcs(); // mostra/oculta ml e produto
+}
+// produtos do estoque medidos em ml
+function produtosMl(){ return (ESTOQUE||[]).filter(e=>(e.unidade||'').toLowerCase()==='ml'); }
+function renderAtendProcs(){
+  const box=document.getElementById('naProcsBox'); if(!box) return;
+  const fsi='padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink);font-size:13px';
+  if(!__atendProcs.length){
+    box.innerHTML=`<div style="font-size:12.5px;color:var(--grey);font-style:italic;padding:6px 2px">Clique em "+ adicionar procedimento" para incluir o que foi feito neste atendimento.</div>`;
+    return;
+  }
+  const prods=produtosMl();
+  box.innerHTML=__atendProcs.map((p,i)=>{
+    const po=PROCS.concat('Avaliação').map(x=>`<option ${x===p.proc?'selected':''}>${x}</option>`).join('');
+    const ehMl = p.unidade!=='sessao';
+    const prodOpts=prods.map(e=>`<option value="${e.id}" ${e.id==p.produtoId?'selected':''}>${e.produto} (${e.quantidade} ml)</option>`).join('');
+    const mlUI = ehMl
+      ? `<div class="field" style="margin:0"><label>Qtd (ml)</label><input type="number" step="any" value="${p.ml||''}" oninput="updAtendProc(${i},'ml',this.value)" style="${fsi};width:100%"></div>
+         <div class="field" style="margin:0"><label>Abater de</label>${prods.length?`<select onchange="updAtendProc(${i},'produtoId',this.value)" style="${fsi};width:100%">${prodOpts}</select>`:`<input value="sem produto ml" disabled style="${fsi};width:100%;opacity:.6">`}</div>`
+      : `<div class="field" style="margin:0;grid-column:span 2"><div style="font-size:12px;color:var(--grey);padding-top:18px">Sessão — não consome estoque</div></div>`;
+    return `<div style="display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px">
+      <div class="field" style="margin:0"><label>Procedimento</label><select onchange="updAtendProc(${i},'proc',this.value)" style="${fsi};width:100%">${po}</select></div>
+      <div class="field" style="margin:0"><label>Unidade</label><select onchange="updAtendProc(${i},'unidade',this.value)" style="${fsi};width:100%"><option value="ml" ${ehMl?'selected':''}>ml</option><option value="sessao" ${!ehMl?'selected':''}>sessão</option></select></div>
+      ${mlUI}
+      <button type="button" class="btn ghost" style="padding:7px 9px;font-size:12px" onclick="removeAtendProc(${i})" title="Remover">×</button>
+    </div>`;
+  }).join('');
 }
 /* ---- pagamentos do atendimento (uma ou várias formas) ---- */
 let __atendPagamentos = [];
@@ -1560,15 +1613,49 @@ async function salvarAtend(id){
   }
   // campos de compatibilidade: forma "principal" = a de maior valor
   const principal = pagamentos.slice().sort((a,b)=>b.valor-a.valor)[0] || {forma:'',parcelas:1};
+  // procedimentos do atendimento
+  const procs=(__atendProcs||[]).filter(p=>p.proc).map(p=>({
+    proc:p.proc, unidade:p.unidade==='sessao'?'sessao':'ml',
+    ml: p.unidade==='sessao'?0:(+p.ml||0),
+    produtoId: p.unidade==='sessao'?'':(p.produtoId||'')
+  }));
+  // proc "principal" (texto) para compatibilidade com relatórios: 1º proc, ou resumo se vários
+  const procResumo = procs.length ? (procs.length>1 ? procs[0].proc+' +'+(procs.length-1) : procs[0].proc) : 'Avaliação';
+  // baixa de estoque: soma os ml por produto (só procedimentos em ml, com produto e status Compareceu)
+  const agenda=v('naAg');
+  const baixaMl={};
+  if(agenda==='Compareceu'){
+    procs.forEach(p=>{ if(p.unidade==='ml' && p.produtoId && p.ml>0){ baixaMl[p.produtoId]=(baixaMl[p.produtoId]||0)+p.ml; } });
+  }
   const reg={data:v('naData')||new Date().toISOString().slice(0,10),
     paciente:v('naPac')||'Sem nome',func:v('naFunc')||'',
-    proc:v('naProc'),canal:v('naCanal'),valor,custo:Math.round(valor*0.3),
-    pag:v('naPag')||'Pago',agenda:v('naAg'),
-    recebimento:principal.forma,parcelas:principal.parcelas,pagamentos};
+    proc:procResumo,canal:v('naCanal'),valor,custo:Math.round(valor*0.3),
+    pag:v('naPag')||'Pago',agenda,
+    recebimento:principal.forma,parcelas:principal.parcelas,pagamentos,procedimentos:procs};
   if(MODO_NUVEM){
-    const reg2={data:reg.data,paciente:reg.paciente,procedimento:reg.proc,funcionario:reg.func,canal:reg.canal,valor:reg.valor,custo:reg.custo,pagamento:reg.pag,agenda:reg.agenda,recebimento:reg.recebimento,parcelas:reg.parcelas,pagamentos:reg.pagamentos};
+    const reg2={data:reg.data,paciente:reg.paciente,procedimento:reg.proc,funcionario:reg.func,canal:reg.canal,valor:reg.valor,custo:reg.custo,pagamento:reg.pag,agenda:reg.agenda,recebimento:reg.recebimento,parcelas:reg.parcelas,pagamentos:reg.pagamentos,procedimentos:reg.procedimentos};
     if(id && id!=='0') await sbUpdate('atendimentos',id,reg2); else await sbInsert('atendimentos',reg2);
+    // baixa de estoque por ml
+    if(Object.keys(baixaMl).length){
+      try{
+        const { data:{ user } } = await sb.auth.getUser();
+        for(const pid in baixaMl){
+          const e=ESTOQUE.find(x=>x.id==pid); if(!e) continue;
+          const novaQtd=Math.max(0,e.quantidade-baixaMl[pid]);
+          await sb.from('estoque').update({quantidade:novaQtd}).eq('id',pid);
+          await sb.from('estoque_mov').insert({user_id:user.id,produto_id:pid,data:reg.data,tipo:'saida',quantidade:baixaMl[pid],obs:'Uso em atendimento — '+reg.paciente});
+        }
+      }catch(e){ console.warn('baixa de estoque não aplicada',e); }
+    }
     window.__atendDia=reg.data; await carregarTudo(); go('atendimentos'); return;
+  }
+  // ---- modo local ----
+  if(Object.keys(baixaMl).length){
+    for(const pid in baixaMl){
+      const e=ESTOQUE.find(x=>x.id==pid); if(!e) continue;
+      e.quantidade=Math.max(0,e.quantidade-baixaMl[pid]);
+      EST_MOV.push({id:MOV_SEQ++,produtoId:pid,data:reg.data,tipo:'saida',quantidade:baixaMl[pid],obs:'Uso em atendimento — '+reg.paciente});
+    }
   }
   if(id && id!=='0'){ const a=DATA.atendimentos.find(x=>x.id==id); Object.assign(a,reg); }
   else { DATA.atendimentos.unshift({id:Date.now(),...reg}); }
