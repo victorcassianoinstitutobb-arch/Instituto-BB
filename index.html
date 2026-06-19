@@ -804,11 +804,30 @@ let CONTA_SEQ = 1;
 let CAT_CONTAS = ['Equipamento','Fornecedor','Aluguel','Salário','Imposto','Software','Empréstimo','Outros'];
 
 /* ===== Estoque ===== */
-let ESTOQUE = [];
+// Produtos = cadastro fixo (sem saldo perpétuo). O saldo é MENSAL:
+//   ESTOQUE_MES[ym][produtoId] = saldo inicial lançado para aquele mês
+// O consumo do mês é calculado a partir dos atendimentos (procedimentos que abatem produto).
+// Saldo atual do mês = saldo inicial − consumido no mês.
+let ESTOQUE = [];          // [{id, produto, unidade, minimo, custoUnit}]
+let ESTOQUE_MES = {};      // { '2026-06': { '<produtoId>': <saldoInicial> } }
 let EST_SEQ = 1;
 let EST_MOV = [];
 let MOV_SEQ = 1;
 const UNIDADES = ['un','ml','frasco','caixa','ampola','seringa','kit'];
+// saldo inicial lançado para um produto num mês (0 se não lançado)
+function saldoInicialMes(pid, ym){ return (ESTOQUE_MES[ym] && +ESTOQUE_MES[ym][pid]) || 0; }
+// consumo de um produto num mês (soma a baixaAplicada dos atendimentos daquele mês)
+function consumoMes(pid, ym){
+  let t=0;
+  DATA.atendimentos.forEach(a=>{
+    if((a.data||'').slice(0,7)!==ym) return;
+    const b=a.baixaAplicada;
+    if(b && typeof b==='object' && b[pid]) t+=+b[pid]||0;
+  });
+  return t;
+}
+// saldo atual de um produto num mês = inicial − consumido
+function saldoAtualMes(pid, ym){ return saldoInicialMes(pid,ym) - consumoMes(pid,ym); }
 
 /* ===== Faturamento histórico (meses anteriores lançados manualmente) ===== */
 // permite registrar o faturamento/custo de meses que já passaram, sem precisar
@@ -837,20 +856,28 @@ function calc(){
   const totAgenda = at.length;
   const txComp = totAgenda ? nAtend/totAgenda : 0;
   const noShows = at.filter(a=>a.agenda==='No-show').length;
-  const leadsAg = ld.filter(l=>l.agendou).length;
-  const leadsFec = ld.filter(l=>l.fechou).length;
-  const txConv = leadsAg ? leadsFec/leadsAg : 0;
-  const investMkt = ld.reduce((s,l)=>s+l.custo,0);
-  const cac = leadsFec ? investMkt/leadsFec : 0;
+  // ---- leads / conversão / CAC a partir da CAPTAÇÃO real (tela de Captação de Leads) ----
+  // filtra a captação pelo mesmo período do cálculo
+  const captPer = (typeof CAPTACAO!=='undefined' && Array.isArray(CAPTACAO)) ? CAPTACAO.filter(c=>_dentro(c.data)) : [];
+  const totLeadsCapt = captPer.reduce((s,c)=>s+(+c.leads||0),0);
+  const totAgendCapt = captPer.reduce((s,c)=>s+(+c.agendadas||0),0);
+  const investMkt = captPer.reduce((s,c)=>s+(+c.gasto||0),0); // gasto real no período
+  const txConv = totLeadsCapt ? totAgendCapt/totLeadsCapt : 0; // % de leads que agendaram
+  // CAC = investimento / pacientes que vieram (atendimentos comparecidos no período)
+  const cac = nAtend ? investMkt/nAtend : 0;
+  const leadsFec = totAgendCapt; // compat: "fechados" ~ agendados
   const horasUsadas = nAtend*META.duracaoMedia;
   const txOcup = META.horasMes ? horasUsadas/META.horasMes : 0;
-  const porCanal = CANAIS.map(c=>({
-    canal:c,
-    leads:ld.filter(l=>l.canal===c).length,
-    fechados:ld.filter(l=>l.canal===c&&l.fechou).length,
-    receita:at.filter(a=>a.canal===c&&a.agenda==='Compareceu').reduce((s,a)=>s+a.valor,0),
-    qtd:at.filter(a=>a.canal===c&&a.agenda==='Compareceu').length,
-  })).map(x=>({...x,conv:x.leads?x.fechados/x.leads:0}));
+  const porCanal = CANAIS.map(c=>{
+    const capC = captPer.filter(x=>x.plataforma===c);
+    const leads = capC.reduce((s,x)=>s+(+x.leads||0),0);
+    const fechados = capC.reduce((s,x)=>s+(+x.agendadas||0),0);
+    return {
+      canal:c, leads, fechados,
+      receita:at.filter(a=>a.canal===c&&a.agenda==='Compareceu').reduce((s,a)=>s+a.valor,0),
+      qtd:at.filter(a=>a.canal===c&&a.agenda==='Compareceu').length,
+    };
+  }).map(x=>({...x,conv:x.leads?x.fechados/x.leads:0}));
   // ---- contagem de procedimentos reais (a partir da lista de cada atendimento) ----
   // conta quantas VEZES cada procedimento foi feito, somando os procedimentos de todos
   // os atendimentos comparecidos. Receita NÃO é atribuída por procedimento (valor é do atendimento).
@@ -881,16 +908,16 @@ function calc(){
   if(_per && !_per.acumulado && _ymSel){
     const ant = mesAnterior(_ymSel);
     const aAnt = DATA.atendimentos.filter(a=>a.agenda==='Compareceu' && a.data.slice(0,7)===ant);
-    const lAnt = DATA.leads.filter(l=>l.data && l.data.slice(0,7)===ant);
-    prev = {faturamento:aAnt.reduce((s,a)=>s+a.valor,0), nAtend:aAnt.length, leads:lAnt.length, comandas:aAnt.filter(a=>a.valor>0).length};
+    const cAnt = (typeof CAPTACAO!=='undefined'&&Array.isArray(CAPTACAO)) ? CAPTACAO.filter(c=>c.data && c.data.slice(0,7)===ant) : [];
+    prev = {faturamento:aAnt.reduce((s,a)=>s+a.valor,0), nAtend:aAnt.length, leads:cAnt.reduce((s,c)=>s+(+c.leads||0),0), comandas:aAnt.filter(a=>a.valor>0).length};
   } else {
-    prev = DATA.periodoAnterior || {faturamento:faturamento*0.8,nAtend:Math.round(nAtend*0.85),leads:ld.length*0.9,comandas:Math.round(nAtend*0.8)};
+    prev = DATA.periodoAnterior || {faturamento:faturamento*0.8,nAtend:Math.round(nAtend*0.85),leads:totLeadsCapt*0.9,comandas:Math.round(nAtend*0.8)};
   }
   const vs = (atual,ant)=> ant? (atual-ant)/ant : 0;
   const comp = {
     faturamento: vs(faturamento,prev.faturamento),
     atend: vs(nAtend,prev.nAtend),
-    leads: vs(ld.length,prev.leads),
+    leads: vs(totLeadsCapt,prev.leads),
     comandas: vs(compareceu.filter(a=>a.valor>0).length,prev.comandas),
   };
   const comandas = compareceu.filter(a=>a.valor>0).length;
@@ -906,11 +933,10 @@ function calc(){
   // ---- comissões (sobre valor bruto dos procedimentos realizados) ----
   const comissaoBaseTotal = compareceu.reduce((s,a)=>s+a.valor,0);
   const comissaoTotal = comissaoBaseTotal * META.comissaoPercent;
-  const comissaoPorProc = PROCS.map(p=>{
-    const itens=compareceu.filter(a=>a.proc===p);
-    const base=itens.reduce((s,a)=>s+a.valor,0);
-    return {proc:p, qtd:itens.length, base, comissao:base*META.comissaoPercent};
-  }).filter(x=>x.qtd>0).sort((a,b)=>b.comissao-a.comissao);
+  // comissão por procedimento: usa a CONTAGEM real de procedimentos. Como o valor é
+  // único do atendimento, a base por procedimento não é atribuível — mostramos só qtd.
+  const comissaoPorProc = porProc.map(x=>({proc:x.proc, qtd:x.qtd, base:0, comissao:0}))
+    .filter(x=>x.qtd>0).sort((a,b)=>b.qtd-a.qtd);
 
   // ---- base de pacientes (consolida atendimentos por pessoa) ----
   const nomes=[...new Set(at.map(a=>a.paciente))];
@@ -922,7 +948,7 @@ function calc(){
     const ultima=datas[datas.length-1]||'';
     const canal=hist[0]?hist[0].canal:'';
     return {nome, visitas:realizados.length, valorTotal, ultima, canal,
-      procedimentos:[...new Set(realizados.map(a=>a.proc))],
+      procedimentos:[...new Set(realizados.flatMap(a=>procedimentosDe(a).map(p=>p.proc)).filter(Boolean))],
       recorrente:realizados.length>1};
   }).sort((a,b)=>b.valorTotal-a.valorTotal);
   const totalPacientes=pacientes.length;
@@ -969,7 +995,7 @@ function calc(){
 
   const out = {faturamento,ticket,custoInsumo,custoTotal,imposto,lucro,margem,nAtend,txComp,noShows,
     txConv,investMkt,cac,txOcup,porCanal,porProc,porCat,confOK,confTotal:DATA.conformidade.length,
-    serieReceita,comp,comandas,ranking,rankPac,nLeads:ld.length,
+    serieReceita,comp,comandas,ranking,rankPac,nLeads:totLeadsCapt,
     comissaoTotal,comissaoBaseTotal,comissaoPorProc,comissaoPercent:META.comissaoPercent,
     pacientes,totalPacientes,pacRecorrentes,txRecompra,ltv,
     recebimentos,recebTotal,semReceb,
@@ -1061,7 +1087,7 @@ async function carregarTudo(){
     CAT_RECEITA = (cat.data||[]).filter(c=>c.tipo==='receita').map(c=>c.nome);
     CAT_DESPESA = (cat.data||[]).filter(c=>c.tipo==='despesa').map(c=>c.nome);
     CAIXA = (lanc.data||[]).map(l=>({id:l.id,data:l.data,tipo:l.tipo,categoria:l.categoria,desc:l.descricao,valor:+l.valor,carteira:l.carteira_id,carteiraDest:l.carteira_dest}));
-    DATA.atendimentos = (atend.data||[]).map(a=>({id:a.id,data:a.data,paciente:a.paciente,proc:a.procedimento,func:a.funcionario,canal:a.canal,valor:+a.valor,custo:+a.custo,pag:a.pagamento,agenda:a.agenda,recebimento:a.recebimento||'',parcelas:+a.parcelas||1,pagamentos:Array.isArray(a.pagamentos)?a.pagamentos:null,procedimentos:Array.isArray(a.procedimentos)?a.procedimentos:null}));
+    DATA.atendimentos = (atend.data||[]).map(a=>({id:a.id,data:a.data,paciente:a.paciente,proc:a.procedimento,func:a.funcionario,canal:a.canal,valor:+a.valor,custo:+a.custo,pag:a.pagamento,agenda:a.agenda,recebimento:a.recebimento||'',parcelas:+a.parcelas||1,pagamentos:Array.isArray(a.pagamentos)?a.pagamentos:null,procedimentos:Array.isArray(a.procedimentos)?a.procedimentos:null,baixaAplicada:(a.baixa_aplicada&&typeof a.baixa_aplicada==='object')?a.baixa_aplicada:{}}));
     CAPTACAO = (capt.data||[]).map(c=>({id:c.id,data:c.data,plataforma:c.plataforma,seguidores:c.seguidores,leads:c.leads,agendadas:c.agendadas,investido:+c.investido,gasto:+c.gasto,campanhas:c.campanhas}));
     METAS = (met.data||[]).map(m=>({id:m.id,funcId:m.func_id,escopo:m.escopo,tipo:m.tipo,periodo:m.periodo,faixas:m.faixas}));
     DATA.conformidade = (conf.data||[]).map(c=>({id:c.id,item:c.item,resp:c.responsavel,status:c.status}));
@@ -1072,7 +1098,7 @@ async function carregarTudo(){
       sb.from('estoque_mov').select('*').order('data'),
     ]);
     CONTAS = (contasR.data||[]).map(c=>({id:c.id,tipo:c.tipo,descricao:c.descricao,categoria:c.categoria,natureza:c.natureza,valorParcela:+c.valor_parcela,numParcelas:c.num_parcelas,carteira:c.carteira_id,parcelas:c.parcelas||[]}));
-    ESTOQUE = (estR.data||[]).map(e=>({id:e.id,produto:e.produto,unidade:e.unidade,quantidade:+e.quantidade,minimo:+e.minimo,custoUnit:+e.custo_unit}));
+    ESTOQUE = (estR.data||[]).map(e=>({id:e.id,produto:e.produto,unidade:e.unidade,minimo:+e.minimo,custoUnit:+e.custo_unit}));
     EST_MOV = (movR.data||[]).map(m=>({id:m.id,produtoId:m.produto_id,data:m.data,tipo:m.tipo,quantidade:+m.quantidade,obs:m.obs}));
     // leads e custos antigos (exemplo) não são usados na nuvem — zera para o painel refletir a realidade
     DATA.leads = [];
@@ -1095,6 +1121,9 @@ async function carregarTudo(){
       }
       if(row.chave==='metas_por_mes' && row.valores && typeof row.valores==='object' && !Array.isArray(row.valores)){
         METAS_POR_MES = row.valores;
+      }
+      if(row.chave==='estoque_mes' && row.valores && typeof row.valores==='object' && !Array.isArray(row.valores)){
+        ESTOQUE_MES = row.valores;
       }
       if(row.chave==='historico' && Array.isArray(row.valores)){ HISTORICO=row.valores; }
     });
@@ -1523,7 +1552,8 @@ function renderAtendProcs(){
     const po=PROCS.concat('Avaliação').map(x=>`<option ${x===p.proc?'selected':''}>${x}</option>`).join('');
     const ehProduto = p.modo!=='sessao';
     // todos os produtos do estoque, mostrando saldo e unidade
-    const prodOpts=(ESTOQUE||[]).map(e=>`<option value="${e.id}" ${e.id==p.produtoId?'selected':''}>${e.produto} (${e.quantidade} ${e.unidade||'un'})</option>`).join('');
+    const ymA=(document.getElementById('naData')&&document.getElementById('naData').value||'').slice(0,7)||mesHoje();
+    const prodOpts=(ESTOQUE||[]).map(e=>`<option value="${e.id}" ${e.id==p.produtoId?'selected':''}>${e.produto} (${saldoAtualMes(e.id,ymA)} ${e.unidade||'un'})</option>`).join('');
     const uni = ehProduto ? (unidadeProduto(p.produtoId)||'un') : '';
     const consumoUI = ehProduto
       ? (temProdutos
@@ -1630,46 +1660,34 @@ async function salvarAtend(id){
     produtoId: p.modo==='sessao'?'':(p.produtoId||'')
   }));
   const procResumo = procs.length ? (procs.length>1 ? procs[0].proc+' +'+(procs.length-1) : procs[0].proc) : 'Avaliação';
-  // baixa de estoque: soma a qtd por produto (procedimentos que consomem produto, status Compareceu)
+  // consumo de estoque deste atendimento: soma a qtd por produto (procedimentos que consomem
+  // produto, status Compareceu). É gravado em baixaAplicada; o saldo do mês é calculado a
+  // partir disso (saldo inicial do mês − soma dos consumos), então NÃO mexemos em saldo aqui.
   const agenda=v('naAg');
-  const baixa={};
+  const baixaNova={};
   if(agenda==='Compareceu'){
-    procs.forEach(p=>{ if(p.modo==='produto' && p.produtoId && p.qtd>0){ baixa[p.produtoId]=(baixa[p.produtoId]||0)+p.qtd; } });
+    procs.forEach(p=>{ if(p.modo==='produto' && p.produtoId && p.qtd>0){ baixaNova[p.produtoId]=(baixaNova[p.produtoId]||0)+p.qtd; } });
   }
+  const ehEdicao = id && id!=='0';
+  const atendAntigo = ehEdicao ? DATA.atendimentos.find(x=>x.id==id) : null;
   const reg={data:v('naData')||new Date().toISOString().slice(0,10),
     paciente:v('naPac')||'Sem nome',func:v('naFunc')||'',
     proc:procResumo,canal:v('naCanal'),valor,custo:Math.round(valor*0.3),
     pag:v('naPag')||'Pago',agenda,
-    recebimento:principal.forma,parcelas:principal.parcelas,pagamentos,procedimentos:procs};
+    recebimento:principal.forma,parcelas:principal.parcelas,pagamentos,procedimentos:procs,
+    baixaAplicada:baixaNova}; // consumo deste atendimento, por produto
   if(MODO_NUVEM){
-    const reg2={data:reg.data,paciente:reg.paciente,procedimento:reg.proc,funcionario:reg.func,canal:reg.canal,valor:reg.valor,custo:reg.custo,pagamento:reg.pag,agenda:reg.agenda,recebimento:reg.recebimento,parcelas:reg.parcelas,pagamentos:reg.pagamentos,procedimentos:reg.procedimentos};
-    if(id && id!=='0') await sbUpdate('atendimentos',id,reg2); else await sbInsert('atendimentos',reg2);
-    if(Object.keys(baixa).length){
-      try{
-        const { data:{ user } } = await sb.auth.getUser();
-        for(const pid in baixa){
-          const e=ESTOQUE.find(x=>x.id==pid); if(!e) continue;
-          const novaQtd=Math.max(0,e.quantidade-baixa[pid]);
-          await sb.from('estoque').update({quantidade:novaQtd}).eq('id',pid);
-          await sb.from('estoque_mov').insert({user_id:user.id,produto_id:pid,data:reg.data,tipo:'saida',quantidade:baixa[pid],obs:'Uso em atendimento — '+reg.paciente});
-        }
-      }catch(e){ console.warn('baixa de estoque não aplicada',e); }
-    }
+    const reg2={data:reg.data,paciente:reg.paciente,procedimento:reg.proc,funcionario:reg.func,canal:reg.canal,valor:reg.valor,custo:reg.custo,pagamento:reg.pag,agenda:reg.agenda,recebimento:reg.recebimento,parcelas:reg.parcelas,pagamentos:reg.pagamentos,procedimentos:reg.procedimentos,baixa_aplicada:reg.baixaAplicada};
+    if(ehEdicao) await sbUpdate('atendimentos',id,reg2); else await sbInsert('atendimentos',reg2);
     window.__atendDia=reg.data; await carregarTudo(); go('atendimentos'); return;
   }
   // ---- modo local ----
-  if(Object.keys(baixa).length){
-    for(const pid in baixa){
-      const e=ESTOQUE.find(x=>x.id==pid); if(!e) continue;
-      e.quantidade=Math.max(0,e.quantidade-baixa[pid]);
-      EST_MOV.push({id:MOV_SEQ++,produtoId:pid,data:reg.data,tipo:'saida',quantidade:baixa[pid],obs:'Uso em atendimento — '+reg.paciente});
-    }
-  }
-  if(id && id!=='0'){ const a=DATA.atendimentos.find(x=>x.id==id); Object.assign(a,reg); }
+  if(ehEdicao){ Object.assign(atendAntigo,reg); }
   else { DATA.atendimentos.unshift({id:Date.now(),...reg}); }
   window.__atendDia=reg.data; go('atendimentos');
 }
 async function excluirAtend(id){
+  // o consumo é derivado dos atendimentos: ao excluir, ele simplesmente deixa de contar.
   if(MODO_NUVEM){ await sbDelete('atendimentos',id); await carregarTudo(); }
   else { DATA.atendimentos=DATA.atendimentos.filter(a=>a.id!=id); }
   go('atendimentos');
@@ -3698,64 +3716,126 @@ function editarConta(id){
   box.scrollIntoView({behavior:'smooth',block:'center'});
 }
 function renderEstoque(pg){
-  const baixo=ESTOQUE.filter(e=>e.minimo>0 && e.quantidade<=e.minimo);
-  const valorTotal=ESTOQUE.reduce((s,e)=>s+e.quantidade*e.custoUnit,0);
+  if(!window.__estMes) window.__estMes = mesSelecionadoTopo() || mesHoje();
+  const ym = window.__estMes;
+  const ant = mesAnterior(ym);
+  // meses disponíveis no seletor: os que têm saldo + atual + selecionado
+  const setM = new Set([...Object.keys(ESTOQUE_MES||{}), mesHoje(), ym, ant]);
+  const mesesLista=[...setM].sort((a,b)=>b.localeCompare(a));
+  const mesOpts=mesesLista.map(m=>`<option value="${m}" ${m===ym?'selected':''}>${rotuloMes(m)}${m===mesHoje()?' (mês atual)':''}</option>`).join('');
+
   const linhas=ESTOQUE.map(e=>{
-    const alerta=e.minimo>0 && e.quantidade<=e.minimo;
+    const ini=saldoInicialMes(e.id,ym);
+    const cons=consumoMes(e.id,ym);
+    const atual=ini-cons;
+    const sobrouAnt=saldoAtualMes(e.id,ant); // o que sobrou no mês anterior
+    const alerta=e.minimo>0 && atual<=e.minimo;
     return `<tr>
-      <td><b>${e.produto}</b></td>
-      <td class="ctr">${e.quantidade} ${e.unidade||''}</td>
-      <td class="ctr" style="color:var(--grey)">${e.minimo||'—'}</td>
-      <td class="num">${e.custoUnit?BRL(e.custoUnit):'—'}</td>
-      <td class="num">${BRL(e.quantidade*e.custoUnit)}</td>
-      <td class="ctr">${alerta?'<span style="color:var(--red);font-size:12px;font-weight:600">⚠ repor</span>':'<span style="color:var(--green);font-size:12px">ok</span>'}</td>
+      <td><b>${e.produto}</b> <span style="color:var(--grey);font-size:11px">${e.unidade||''}</span></td>
+      <td class="ctr">${sobrouAnt>0?`<span style="color:var(--gold-d)">${sobrouAnt}</span>`:'<span style="color:var(--grey)">—</span>'}</td>
+      <td class="ctr"><input type="number" step="any" value="${ini||''}" onchange="setSaldoInicial('${e.id}',this.value)" style="width:80px;padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:var(--paper);color:var(--ink);font-family:inherit;text-align:center" placeholder="0"></td>
+      <td class="ctr" style="color:var(--red)">${cons||'—'}</td>
+      <td class="ctr" style="font-weight:700;color:${atual<0?'var(--red)':alerta?'var(--amber)':'var(--ink)'}">${atual}</td>
+      <td class="ctr">${e.minimo||'—'}</td>
+      <td class="ctr">${atual<0?'<span style="color:var(--red);font-size:12px;font-weight:600">⚠ negativo</span>':alerta?'<span style="color:var(--amber);font-size:12px;font-weight:600">⚠ repor</span>':'<span style="color:var(--green);font-size:12px">ok</span>'}</td>
       <td class="ctr">
-        <button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="movEstoque('${e.id}','entrada')">+ entrada</button>
-        <button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="movEstoque('${e.id}','saida')">− saída</button>
+        ${sobrouAnt>0&&!ini?`<button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="puxarSobra('${e.id}')" title="Trazer ${sobrouAnt} do mês anterior">↓ usar sobra</button> `:''}
         <button class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="excluirProduto('${e.id}')">×</button>
       </td>
     </tr>`;
   }).join('');
-  const movs=[...EST_MOV].sort((a,b)=>(b.data||'').localeCompare(a.data||'')).slice(0,12).map(m=>{
-    const prod=ESTOQUE.find(e=>e.id==m.produtoId);
-    return `<tr><td>${fmtDate(m.data)}</td><td>${prod?prod.produto:'—'}</td><td class="ctr">${m.tipo==='entrada'?'<span style="color:var(--green)">Entrada</span>':'<span style="color:var(--red)">Saída</span>'}</td><td class="num">${m.quantidade}</td><td>${m.obs||''}</td></tr>`;
-  }).join('');
+
+  const totConsumo=ESTOQUE.reduce((s,e)=>s+consumoMes(e.id,ym),0);
+  const valorAtual=ESTOQUE.reduce((s,e)=>s+Math.max(0,saldoAtualMes(e.id,ym))*e.custoUnit,0);
+  const baixoCount=ESTOQUE.filter(e=>{const a=saldoAtualMes(e.id,ym);return e.minimo>0&&a<=e.minimo;}).length;
 
   pg.innerHTML=`
     <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">
       <div class="kpi" style="animation-delay:0ms"><div class="label">Produtos cadastrados</div><div class="val">${ESTOQUE.length}</div><div class="meta">itens no estoque</div></div>
-      <div class="kpi ${baixo.length?'':'gold'}" style="animation-delay:70ms"><div class="label">Abaixo do mínimo</div><div class="val" style="color:${baixo.length?'var(--red)':'var(--ink)'}">${baixo.length}</div><div class="meta">${baixo.length?'precisam reposição':'tudo ok'}</div></div>
-      <div class="kpi" style="animation-delay:140ms"><div class="label">Valor em estoque</div><div class="val">${BRL(valorTotal)}</div><div class="meta">custo total imobilizado</div></div>
+      <div class="kpi ${baixoCount?'':'gold'}" style="animation-delay:70ms"><div class="label">Abaixo do mínimo</div><div class="val" style="color:${baixoCount?'var(--red)':'var(--ink)'}">${baixoCount}</div><div class="meta">${baixoCount?'precisam reposição':'tudo ok'}</div></div>
+      <div class="kpi" style="animation-delay:140ms"><div class="label">Valor em estoque</div><div class="val">${BRL(valorAtual)}</div><div class="meta">saldo atual de ${rotuloMes(ym)}</div></div>
     </div>
 
     <div class="panel" style="margin-bottom:18px">
-      <div class="toolbar"><div><h3>Produtos</h3><div class="ph-sub">Controle de entrada e saída manual</div></div>
+      <div class="toolbar"><div><h3>Estoque de ${rotuloMes(ym)}</h3><div class="ph-sub">Saldo por mês. Lance o que tem no início do mês; o consumo é calculado pelos atendimentos.</div></div>
         <button class="btn" onclick="abrirProdutoForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo produto</button>
       </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+        <span style="font-size:12.5px;color:var(--grey)">Mês:</span>
+        <select onchange="window.__estMes=this.value;go('estoque')" style="padding:8px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);font-size:13px">${mesOpts}</select>
+        ${ESTOQUE.some(e=>saldoAtualMes(e.id,ant)>0 && !saldoInicialMes(e.id,ym))?`<button class="btn ghost" style="padding:6px 12px;font-size:12.5px" onclick="puxarTodasSobras()">↓ trazer todas as sobras de ${rotuloMes(ant)}</button>`:''}
+      </div>
       <div id="produtoFormBox"></div>
-      <div id="movFormBox"></div>
       <table class="data">
-        <thead><tr><th>Produto</th><th class="ctr">Quantidade</th><th class="ctr">Mínimo</th><th class="num">Custo un.</th><th class="num">Valor total</th><th class="ctr">Status</th><th class="ctr">Movimentar</th></tr></thead>
-        <tbody>${linhas||'<tr><td colspan="7" style="text-align:center;color:var(--grey);padding:24px">Nenhum produto cadastrado.</td></tr>'}</tbody>
+        <thead><tr><th>Produto</th><th class="ctr">Sobrou ${mesAnoCurto(ant)}</th><th class="ctr">Saldo inicial</th><th class="ctr">Consumido</th><th class="ctr">Saldo atual</th><th class="ctr">Mínimo</th><th class="ctr">Status</th><th class="ctr">Ações</th></tr></thead>
+        <tbody>${linhas||'<tr><td colspan="8" style="text-align:center;color:var(--grey);padding:24px">Nenhum produto cadastrado. Clique em "Novo produto".</td></tr>'}</tbody>
       </table>
+      <div style="font-size:12px;color:var(--grey);font-style:italic;margin-top:12px">
+        <b>Como funciona:</b> "Saldo inicial" é o que você tinha no começo do mês (sobra do mês anterior + compras). "Consumido" soma o que os atendimentos do mês usaram. "Saldo atual" = inicial − consumido. Para adicionar uma compra no meio do mês, basta somar ao saldo inicial.
+      </div>
     </div>
 
     <div class="panel">
-      <h3>Últimas movimentações</h3><div class="ph-sub">Histórico de entradas e saídas</div>
-      <table class="data"><thead><tr><th>Data</th><th>Produto</th><th class="ctr">Tipo</th><th class="num">Qtd</th><th>Obs</th></tr></thead>
-      <tbody>${movs||'<tr><td colspan="5" style="text-align:center;color:var(--grey);padding:20px">Nenhuma movimentação ainda.</td></tr>'}</tbody></table>
+      <h3>Consumo do mês por produto</h3><div class="ph-sub">${rotuloMes(ym)} · total ${totConsumo} unidades consumidas</div>
+      <table class="data"><thead><tr><th>Produto</th><th class="ctr">Consumido</th><th>Origem</th></tr></thead>
+      <tbody>${consumoDetalhado(ym)||'<tr><td colspan="3" style="text-align:center;color:var(--grey);padding:18px">Nenhum consumo registrado neste mês.</td></tr>'}</tbody></table>
     </div>`;
+}
+// detalha o consumo do mês: cada produto, quanto, e em quais atendimentos
+function consumoDetalhado(ym){
+  return ESTOQUE.map(e=>{
+    const usos=[];
+    DATA.atendimentos.forEach(a=>{ if((a.data||'').slice(0,7)!==ym)return; const b=a.baixaAplicada; if(b&&b[e.id]){ usos.push(`${a.paciente} (${b[e.id]} ${e.unidade||''})`); } });
+    if(!usos.length) return '';
+    const tot=usos.length?DATA.atendimentos.filter(a=>(a.data||'').slice(0,7)===ym).reduce((s,a)=>s+((a.baixaAplicada&&a.baixaAplicada[e.id])||0),0):0;
+    return `<tr><td><b>${e.produto}</b></td><td class="ctr" style="color:var(--red);font-weight:600">${tot} ${e.unidade||''}</td><td style="font-size:12px;color:var(--grey)">${usos.join(' · ')}</td></tr>`;
+  }).filter(Boolean).join('');
+}
+// define o saldo inicial de um produto no mês selecionado
+async function setSaldoInicial(pid, val){
+  const ym=window.__estMes||mesHoje();
+  if(!ESTOQUE_MES[ym]) ESTOQUE_MES[ym]={};
+  ESTOQUE_MES[ym][pid]=+val||0;
+  await persistirEstoqueMes();
+  go('estoque');
+}
+// traz a sobra do mês anterior como saldo inicial deste mês (um produto)
+async function puxarSobra(pid){
+  const ym=window.__estMes||mesHoje();
+  const sobra=saldoAtualMes(pid, mesAnterior(ym));
+  if(!ESTOQUE_MES[ym]) ESTOQUE_MES[ym]={};
+  ESTOQUE_MES[ym][pid]=Math.max(0,sobra);
+  await persistirEstoqueMes();
+  go('estoque');
+}
+// traz todas as sobras do mês anterior
+async function puxarTodasSobras(){
+  const ym=window.__estMes||mesHoje();
+  const ant=mesAnterior(ym);
+  if(!ESTOQUE_MES[ym]) ESTOQUE_MES[ym]={};
+  ESTOQUE.forEach(e=>{ if(!saldoInicialMes(e.id,ym)){ const s=saldoAtualMes(e.id,ant); if(s>0) ESTOQUE_MES[ym][e.id]=s; } });
+  await persistirEstoqueMes();
+  toast('Sobras de '+rotuloMes(ant)+' trazidas');
+  go('estoque');
+}
+async function persistirEstoqueMes(){
+  if(MODO_NUVEM){
+    try{ const { data:{ user } } = await sb.auth.getUser();
+      await sb.from('configuracoes').upsert({user_id:user.id,chave:'estoque_mes',valores:ESTOQUE_MES},{onConflict:'user_id,chave'});
+    }catch(e){ console.warn('estoque_mes não salvo',e); }
+  }
 }
 function abrirProdutoForm(){
   const fs='padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);width:100%';
-  const uniOpts=UNIDADES.map(u=>`<option>${u}</option>`).join('');
+  const uniOpts=UNIDADES.map(u=>`<option ${u==='un'?'selected':''}>${u}</option>`).join('');
+  const ym=window.__estMes||mesHoje();
   document.getElementById('produtoFormBox').innerHTML=`
     <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
-      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:12px">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px">
         <div class="field" style="grid-column:span 2"><label>Produto</label><input id="pr_nome" placeholder="Ex: Toxina Botulínica 100U" style="${fs}"></div>
         <div class="field"><label>Unidade</label><select id="pr_uni" style="${fs}">${uniOpts}</select></div>
-        <div class="field"><label>Qtd inicial</label><input type="number" id="pr_qtd" value="0" style="${fs}"></div>
         <div class="field"><label>Estoque mínimo</label><input type="number" id="pr_min" value="0" style="${fs}"></div>
+        <div class="field"><label>Saldo inicial de ${rotuloMes(ym)}</label><input type="number" id="pr_qtd" value="0" style="${fs}"></div>
         <div class="field"><label>Custo unitário (R$)</label><input type="number" id="pr_custo" value="0" style="${fs}"></div>
       </div>
       <div style="display:flex;gap:10px">
@@ -3766,47 +3846,22 @@ function abrirProdutoForm(){
 }
 async function salvarProduto(){
   const v=i=>document.getElementById(i).value;
-  const prod={produto:v('pr_nome')||'Produto',unidade:v('pr_uni'),quantidade:+v('pr_qtd')||0,minimo:+v('pr_min')||0,custoUnit:+v('pr_custo')||0};
+  const ym=window.__estMes||mesHoje();
+  const saldoIni=+v('pr_qtd')||0;
+  const prod={produto:v('pr_nome')||'Produto',unidade:v('pr_uni'),minimo:+v('pr_min')||0,custoUnit:+v('pr_custo')||0};
   if(MODO_NUVEM){
-    await sbInsert('estoque',{produto:prod.produto,unidade:prod.unidade,quantidade:prod.quantidade,minimo:prod.minimo,custo_unit:prod.custoUnit});
+    const { data, error } = await sb.from('estoque').insert({produto:prod.produto,unidade:prod.unidade,minimo:prod.minimo,custo_unit:prod.custoUnit}).select();
+    const novoId = (data&&data[0])?data[0].id:null;
+    if(novoId && saldoIni){ if(!ESTOQUE_MES[ym])ESTOQUE_MES[ym]={}; ESTOQUE_MES[ym][novoId]=saldoIni; await persistirEstoqueMes(); }
     await carregarTudo(); go('estoque'); return;
   }
-  prod.id=EST_SEQ++; ESTOQUE.push(prod); go('estoque');
+  prod.id=EST_SEQ++; ESTOQUE.push(prod);
+  if(saldoIni){ if(!ESTOQUE_MES[ym])ESTOQUE_MES[ym]={}; ESTOQUE_MES[ym][prod.id]=saldoIni; }
+  go('estoque');
 }
 async function excluirProduto(id){
   if(MODO_NUVEM){await sbDelete('estoque',id);await carregarTudo();}
   else {ESTOQUE=ESTOQUE.filter(e=>e.id!=id);}
-  go('estoque');
-}
-function movEstoque(id,tipo){
-  const e=ESTOQUE.find(x=>x.id==id); if(!e)return;
-  const fs='padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);width:100%';
-  document.getElementById('movFormBox').innerHTML=`
-    <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
-      <div style="font-weight:600;margin-bottom:10px">${tipo==='entrada'?'Entrada':'Saída'} de estoque — ${e.produto} <span style="color:var(--grey);font-weight:400">(atual: ${e.quantidade} ${e.unidade})</span></div>
-      <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
-        <div class="field"><label>Quantidade</label><input type="number" id="mv_qtd" value="1" style="${fs};width:120px"></div>
-        <div class="field" style="flex:1;min-width:180px"><label>Observação (opcional)</label><input id="mv_obs" placeholder="Ex: compra fornecedor / uso em procedimento" style="${fs}"></div>
-        <button class="btn" onclick="salvarMov('${id}','${tipo}')">Confirmar ${tipo==='entrada'?'entrada':'saída'}</button>
-        <button class="btn ghost" onclick="document.getElementById('movFormBox').innerHTML=''">Cancelar</button>
-      </div>
-    </div>`;
-  document.getElementById('movFormBox').scrollIntoView({behavior:'smooth',block:'nearest'});
-}
-async function salvarMov(id,tipo){
-  const e=ESTOQUE.find(x=>x.id==id); if(!e)return;
-  const qtd=+document.getElementById('mv_qtd').value||0;
-  const obs=document.getElementById('mv_obs').value||'';
-  const hoje=new Date().toISOString().slice(0,10);
-  const novaQtd = tipo==='entrada'? e.quantidade+qtd : Math.max(0,e.quantidade-qtd);
-  if(MODO_NUVEM){
-    const { data:{ user } } = await sb.auth.getUser();
-    await sb.from('estoque').update({quantidade:novaQtd}).eq('id',id);
-    await sb.from('estoque_mov').insert({user_id:user.id,produto_id:id,data:hoje,tipo,quantidade:qtd,obs});
-    await carregarTudo(); go('estoque'); return;
-  }
-  e.quantidade=novaQtd;
-  EST_MOV.push({id:MOV_SEQ++,produtoId:id,data:hoje,tipo,quantidade:qtd,obs});
   go('estoque');
 }
 
