@@ -506,8 +506,11 @@ function kDoMes(ym){
   const ticket=nAtend?faturamento/nAtend:0;
   const totAgenda=DATA.atendimentos.filter(a=>a.data>=ini&&a.data<=fim).length;
   const txComp=totAgenda?nAtend/totAgenda:0;
+  // contagem de procedimentos reais (lista de cada atendimento)
+  const _cont={};
+  comp.forEach(a=>{ const lista=procedimentosDe(a); if(lista.length){ lista.forEach(p=>{ if(p.proc)_cont[p.proc]=(_cont[p.proc]||0)+1; }); } else if(a.proc){ _cont[a.proc]=(_cont[a.proc]||0)+1; } });
   const porProc=(PROCS||[]).map(p=>({proc:p,
-    qtd:comp.filter(a=>a.proc===p).length,
+    qtd:_cont[p]||0,
     receita:comp.filter(a=>a.proc===p).reduce((s,a)=>s+a.valor,0)}));
   const porCanal=(CANAIS||[]).map(c=>({canal:c,
     qtd:comp.filter(a=>a.canal===c).length,
@@ -848,11 +851,17 @@ function calc(){
     receita:at.filter(a=>a.canal===c&&a.agenda==='Compareceu').reduce((s,a)=>s+a.valor,0),
     qtd:at.filter(a=>a.canal===c&&a.agenda==='Compareceu').length,
   })).map(x=>({...x,conv:x.leads?x.fechados/x.leads:0}));
-  const porProc = PROCS.map(p=>({
-    proc:p,
-    qtd:compareceu.filter(a=>a.proc===p).length,
-    receita:compareceu.filter(a=>a.proc===p).reduce((s,a)=>s+a.valor,0),
-  })).map(x=>({...x,share:faturamento?x.receita/faturamento:0})).filter(x=>x.qtd>0);
+  // ---- contagem de procedimentos reais (a partir da lista de cada atendimento) ----
+  // conta quantas VEZES cada procedimento foi feito, somando os procedimentos de todos
+  // os atendimentos comparecidos. Receita NÃO é atribuída por procedimento (valor é do atendimento).
+  const contProc={};
+  compareceu.forEach(a=>{
+    const lista=procedimentosDe(a);
+    if(lista.length){ lista.forEach(p=>{ if(p.proc) contProc[p.proc]=(contProc[p.proc]||0)+1; }); }
+    else if(a.proc){ contProc[a.proc]=(contProc[a.proc]||0)+1; }
+  });
+  const porProc = Object.keys(contProc).map(p=>({proc:p, qtd:contProc[p], receita:0, share:0}))
+    .sort((a,b)=>b.qtd-a.qtd);
   const cats = [...new Set(cs.map(c=>c.cat))];
   const porCat = cats.map(ca=>({cat:ca,valor:cs.filter(c=>c.cat===ca).reduce((s,c)=>s+c.valor,0)}))
     .sort((a,b)=>b.valor-a.valor);
@@ -885,12 +894,9 @@ function calc(){
     comandas: vs(compareceu.filter(a=>a.valor>0).length,prev.comandas),
   };
   const comandas = compareceu.filter(a=>a.valor>0).length;
-  // ---- ranking de procedimentos por nº de atendimentos ----
-  const ranking = PROCS.map(p=>({
-    nome:p,
-    qtd:compareceu.filter(a=>a.proc===p).length,
-    receita:compareceu.filter(a=>a.proc===p).reduce((s,a)=>s+a.valor,0)
-  })).filter(x=>x.qtd>0).sort((a,b)=>b.qtd-a.qtd);
+  // ---- ranking de procedimentos por nº de vezes realizado ----
+  const ranking = porProc.map(x=>({nome:x.proc, qtd:x.qtd, receita:0}))
+    .sort((a,b)=>b.qtd-a.qtd);
   // ranking de pacientes por valor
   const rankPac = [...new Set(compareceu.map(a=>a.paciente))].map(nome=>({
     nome, valor:compareceu.filter(a=>a.paciente===nome).reduce((s,a)=>s+a.valor,0),
@@ -1196,23 +1202,21 @@ function renderPainel(pg){
     <div class="panel" style="margin-bottom:18px">
       <div class="itabs" id="painelTabs">
         <button class="active" data-itab="tend">Tendência de Visitas</button>
-        <button data-itab="canal">Receita por Canal</button>
         <button data-itab="proc">Procedimentos</button>
       </div>
       <div class="row two" style="margin-bottom:0">
         <div>
           <div class="itab-pane active" id="pane-tend"><div class="chart-wrap"><canvas id="chTend"></canvas></div></div>
-          <div class="itab-pane" id="pane-canal"><div class="chart-wrap"><canvas id="chCanal2"></canvas></div></div>
           <div class="itab-pane" id="pane-proc"><div class="chart-wrap"><canvas id="chProc2"></canvas></div></div>
         </div>
         <div>
           <h3 style="font-size:17px">Ranking de procedimentos</h3>
           <div class="ph-sub">Mais realizados no período</div>
-          <div class="rank-list">${k.ranking.map((r,i)=>`
+          <div class="rank-list">${k.ranking.length?k.ranking.map((r,i)=>`
             <div class="rank-row"><span class="rank-pos">${i+1}</span>
               <span class="rank-name">${r.nome}</span>
-              <span style="text-align:right"><div class="rank-val">${r.qtd}</div><div class="rank-sub">${BRL(r.receita)}</div></span>
-            </div>`).join('')}
+              <span style="text-align:right"><div class="rank-val">${r.qtd}</div><div class="rank-sub">${r.qtd===1?'1 vez':r.qtd+' vezes'}</div></span>
+            </div>`).join(''):'<div style="color:var(--grey);font-size:13px;padding:8px 0">Nenhum procedimento registrado no período.</div>'}
           </div>
         </div>
       </div>
@@ -1309,19 +1313,12 @@ function drawCRMCharts(k){
       scales:{y:{grid:{color:grid},ticks:{color:tick,stepSize:1}},x:{grid:{display:false},ticks:{color:tick,font:{size:10}}}}}});
 
   // receita por canal (tab)
-  charts.canal2=new Chart(document.getElementById('chCanal2'),{type:'bar',
-    data:{labels:k.porCanal.map(c=>c.canal),datasets:[{data:k.porCanal.map(c=>c.receita),
-      backgroundColor:'#9A7B2E',borderRadius:5,maxBarThickness:40}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
-      tooltip:{callbacks:{label:c=>' '+BRL(c.parsed.y)}}},
-      scales:{y:{grid:{color:grid},ticks:{color:tick,callback:v=>'R$'+(v/1000)+'k'}},x:{grid:{display:false},ticks:{color:tick,font:{size:10}}}}}});
-
-  // procedimentos (tab) - barras horizontais por qtd
+  // procedimentos (tab) - barras horizontais por nº de vezes realizado
   charts.proc2=new Chart(document.getElementById('chProc2'),{type:'bar',
     data:{labels:k.ranking.map(r=>r.nome),datasets:[{data:k.ranking.map(r=>r.qtd),
       backgroundColor:'#C9A24B',borderRadius:5,maxBarThickness:22}]},
     options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
-      tooltip:{callbacks:{label:c=>` ${c.parsed.x} atendimento(s)`}}},
+      tooltip:{callbacks:{label:c=>` ${c.parsed.x} ${c.parsed.x===1?'vez':'vezes'}`}}},
       scales:{x:{grid:{color:grid},ticks:{color:tick,stepSize:1}},y:{grid:{display:false},ticks:{color:tick,font:{size:11}}}}}});
 
   // doughnut proc + custo (reuse)
