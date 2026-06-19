@@ -1273,7 +1273,7 @@ function metasBlock(k){
     const T=META_TIPOS[m.tipo]||META_TIPOS.faturamento;
     const r=valorMetaLivre(m,kMes);
     const alvo=m.alvo||0;
-    const p=alvo?r/alvo:0, w=Math.min(p,1.15)/1.15*100;
+    const p=alvo?r/alvo:0, w=Math.min(p,1)*100;
     const cls=p>=1?'hit':(p<0.7?'low':'');
     const col=p>=1?'var(--green)':p<0.7?'var(--red)':'var(--gold-d)';
     const suf = (m.filtroTipo && m.filtroTipo!=='todos' && m.filtroValor) ? ` <span style="color:var(--grey);font-size:11px;font-weight:400">· ${m.filtroValor}</span>` : '';
