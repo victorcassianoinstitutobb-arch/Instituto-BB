@@ -816,13 +816,19 @@ let MOV_SEQ = 1;
 const UNIDADES = ['un','ml','frasco','caixa','ampola','seringa','kit'];
 // saldo inicial lançado para um produto num mês (0 se não lançado)
 function saldoInicialMes(pid, ym){ return (ESTOQUE_MES[ym] && +ESTOQUE_MES[ym][pid]) || 0; }
-// consumo de um produto num mês (soma a baixaAplicada dos atendimentos daquele mês)
+// consumo de um produto num mês — calculado DIRETO dos procedimentos dos atendimentos
+// comparecidos do mês (fonte real). Assim não depende de baixaAplicada estar gravado.
 function consumoMes(pid, ym){
   let t=0;
   DATA.atendimentos.forEach(a=>{
     if((a.data||'').slice(0,7)!==ym) return;
-    const b=a.baixaAplicada;
-    if(b && typeof b==='object' && b[pid]) t+=+b[pid]||0;
+    if(a.agenda!=='Compareceu') return;
+    const procs = procedimentosDe(a);
+    if(procs.length){
+      procs.forEach(p=>{ if(p.modo==='produto' && String(p.produtoId)===String(pid) && p.qtd>0) t+=+p.qtd||0; });
+    } else if(a.baixaAplicada && typeof a.baixaAplicada==='object' && a.baixaAplicada[pid]){
+      t+=+a.baixaAplicada[pid]||0;
+    }
   });
   return t;
 }
@@ -3784,10 +3790,16 @@ function renderEstoque(pg){
 // detalha o consumo do mês: cada produto, quanto, e em quais atendimentos
 function consumoDetalhado(ym){
   return ESTOQUE.map(e=>{
-    const usos=[];
-    DATA.atendimentos.forEach(a=>{ if((a.data||'').slice(0,7)!==ym)return; const b=a.baixaAplicada; if(b&&b[e.id]){ usos.push(`${a.paciente} (${b[e.id]} ${e.unidade||''})`); } });
-    if(!usos.length) return '';
-    const tot=usos.length?DATA.atendimentos.filter(a=>(a.data||'').slice(0,7)===ym).reduce((s,a)=>s+((a.baixaAplicada&&a.baixaAplicada[e.id])||0),0):0;
+    const usos=[]; let tot=0;
+    DATA.atendimentos.forEach(a=>{
+      if((a.data||'').slice(0,7)!==ym || a.agenda!=='Compareceu') return;
+      let q=0;
+      const procs=procedimentosDe(a);
+      if(procs.length){ procs.forEach(p=>{ if(p.modo==='produto' && String(p.produtoId)===String(e.id) && p.qtd>0) q+=+p.qtd||0; }); }
+      else if(a.baixaAplicada && a.baixaAplicada[e.id]){ q=+a.baixaAplicada[e.id]||0; }
+      if(q>0){ usos.push(`${a.paciente} (${q} ${e.unidade||''})`); tot+=q; }
+    });
+    if(!tot) return '';
     return `<tr><td><b>${e.produto}</b></td><td class="ctr" style="color:var(--red);font-weight:600">${tot} ${e.unidade||''}</td><td style="font-size:12px;color:var(--grey)">${usos.join(' · ')}</td></tr>`;
   }).filter(Boolean).join('');
 }
