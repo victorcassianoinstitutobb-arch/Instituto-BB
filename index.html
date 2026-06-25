@@ -888,6 +888,15 @@ function calc(){
   atendPele.forEach(a=>{ const r=rateioPele(a); repassePele+=r.repasse; fatPeleInstituto+=r.instituto; custoPele+=r.custo; });
   // faturamento que de fato fica para o Instituto = Bruna (cheio) + parte do Instituto na pele
   const fatInstituto = fatBruna + fatPeleInstituto;
+  // ---- custo REAL de material (a partir do consumo × custo unitário do estoque) ----
+  const custoUnitDe = pid => { const e=(ESTOQUE||[]).find(x=>x.id==pid); return e?(+e.custoUnit||0):0; };
+  const custoMaterialAtend = a => {
+    let c=0; procedimentosDe(a).forEach(p=>{ if(p.modo==='produto' && p.produtoId && p.qtd>0) c+=p.qtd*custoUnitDe(p.produtoId); });
+    return c;
+  };
+  const custoMatBruna = atendBruna.reduce((s,a)=>s+custoMaterialAtend(a),0);
+  const custoMatPele  = atendPele.reduce((s,a)=>s+custoMaterialAtend(a),0);
+  const custoMaterial = custoMatBruna + custoMatPele;
   const pagantes = compareceu.filter(a=>a.valor>0).length;
   const ticket = pagantes ? faturamento/pagantes : 0;
   const custoInsumo = compareceu.reduce((s,a)=>s+a.custo,0);
@@ -1043,6 +1052,7 @@ function calc(){
     pacientes,totalPacientes,pacRecorrentes,txRecompra,ltv,
     recebimentos,recebTotal,semReceb,
     fatBruna,fatPeleBruto,fatPeleInstituto,fatInstituto,repassePele,custoPele,nAtendPele:atendPele.length,
+    custoMaterial,custoMatBruna,custoMatPele,nAtendBruna:atendBruna.length,
     docPend,docVencer,docOk,docTotal:DOCS.length,evolucao};
   window.__lastCalc = out;
   return out;
@@ -1536,7 +1546,7 @@ function editarAtend(id){
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px">
         <div class="field"><label>Data do atendimento</label><input id="naData" type="date" value="${a.data}" style="${fs};width:100%"></div>
         <div class="field"><label>Paciente</label><input id="naPac" value="${a.paciente}" placeholder="Nome" style="${fs};width:100%"></div>
-        <div class="field"><label>Realizado por</label><select id="naFunc" style="${fs};width:100%"><option value="">—</option>${funcOpts}</select></div>
+        <div class="field"><label>Realizado por</label><select id="naFunc" onchange="renderAtendProcs()" style="${fs};width:100%"><option value="">—</option>${funcOpts}</select></div>
         <div class="field"><label>Canal</label><select id="naCanal" style="${fs};width:100%">${canalOpts}</select></div>
         <div class="field"><label>Valor total (R$)</label><input id="naValor" type="number" value="${a.valor}" oninput="atendValorMudou()" style="${fs};width:100%"></div>
         <div class="field"><label>Pagamento</label><select id="naPag" style="${fs};width:100%">${pagOpts}</select></div>
@@ -1593,7 +1603,13 @@ function removeAtendProc(i){ __atendProcs.splice(i,1); renderAtendProcs(); }
 function updAtendProc(i,campo,val){
   if(!__atendProcs[i])return;
   __atendProcs[i][campo] = (campo==='qtd') ? (+val||0) : val;
-  if(campo==='modo'||campo==='produtoId') renderAtendProcs(); // atualiza label de unidade / campos
+  // se escolheu um procedimento de pele, ele não consome estoque (vira 'sessao')
+  if(campo==='proc'){
+    const ehPele=(PROCS_PELE||[]).some(p=>p.nome===val);
+    if(ehPele){ __atendProcs[i].modo='sessao'; __atendProcs[i].qtd=0; __atendProcs[i].produtoId=''; }
+    renderAtendProcs();
+  }
+  if(campo==='modo'||campo==='produtoId') renderAtendProcs();
 }
 // unidade (texto) de um produto do estoque
 function unidadeProduto(pid){ const e=(ESTOQUE||[]).find(x=>x.id==pid); return e?(e.unidade||'un'):''; }
@@ -1605,22 +1621,35 @@ function renderAtendProcs(){
     return;
   }
   const temProdutos=(ESTOQUE||[]).length>0;
+  // a profissional selecionada é de pele? então prioriza os procedimentos de pele
+  const funcSel=(document.getElementById('naFunc')&&document.getElementById('naFunc').value)||'';
+  const ehPeleSel=funcEhPele(funcSel);
+  const nomesPele=(PROCS_PELE||[]).map(p=>p.nome).filter(Boolean);
   box.innerHTML=__atendProcs.map((p,i)=>{
-    const po=PROCS.concat('Avaliação').map(x=>`<option ${x===p.proc?'selected':''}>${x}</option>`).join('');
+    // monta o dropdown: grupo "Procedimentos de pele" + grupo normal
+    const optsPele = nomesPele.length?`<optgroup label="Procedimentos de pele (repasse)">${nomesPele.map(x=>`<option ${x===p.proc?'selected':''}>${x}</option>`).join('')}</optgroup>`:'';
+    const optsNorm = `<optgroup label="Procedimentos">${PROCS.concat('Avaliação').map(x=>`<option ${x===p.proc?'selected':''}>${x}</option>`).join('')}</optgroup>`;
+    const po = ehPeleSel ? (optsPele+optsNorm) : (optsNorm+optsPele);
     const ehProduto = p.modo!=='sessao';
-    // todos os produtos do estoque, mostrando saldo e unidade
     const ymA=(document.getElementById('naData')&&document.getElementById('naData').value||'').slice(0,7)||mesHoje();
     const prodOpts=(ESTOQUE||[]).map(e=>`<option value="${e.id}" ${e.id==p.produtoId?'selected':''}>${e.produto} (${saldoAtualMes(e.id,ymA)} ${e.unidade||'un'})</option>`).join('');
     const uni = ehProduto ? (unidadeProduto(p.produtoId)||'un') : '';
-    const consumoUI = ehProduto
+    const ehProcPele = nomesPele.includes(p.proc);
+    const consumoUI = ehProcPele
+      ? `<div class="field" style="margin:0;grid-column:span 2"><div style="font-size:12px;color:var(--gold-d);padding-top:18px">✦ Procedimento de pele — repasse calculado automaticamente</div></div>`
+      : ehProduto
       ? (temProdutos
           ? `<div class="field" style="margin:0"><label>Qtd (${uni})</label><input type="number" step="any" value="${p.qtd||''}" oninput="updAtendProc(${i},'qtd',this.value)" style="${fsi};width:100%"></div>
              <div class="field" style="margin:0"><label>Abater de</label><select onchange="updAtendProc(${i},'produtoId',this.value)" style="${fsi};width:100%">${prodOpts}</select></div>`
           : `<div class="field" style="margin:0;grid-column:span 2"><div style="font-size:12px;color:var(--amber);padding-top:18px">Nenhum produto no estoque — cadastre em Estoque para abater.</div></div>`)
       : `<div class="field" style="margin:0;grid-column:span 2"><div style="font-size:12px;color:var(--grey);padding-top:18px">Sessão — não consome estoque</div></div>`;
+    // se for procedimento de pele, o "Tipo" fica oculto (não consome estoque, é sessão)
+    const tipoUI = ehProcPele
+      ? `<div class="field" style="margin:0"><label>Tipo</label><input value="Pele (repasse)" disabled style="${fsi};width:100%;opacity:.7"></div>`
+      : `<div class="field" style="margin:0"><label>Tipo</label><select onchange="updAtendProc(${i},'modo',this.value)" style="${fsi};width:100%"><option value="produto" ${ehProduto?'selected':''}>Consome produto</option><option value="sessao" ${!ehProduto?'selected':''}>Sessão</option></select></div>`;
     return `<div style="display:grid;grid-template-columns:1.6fr 1.1fr 1fr 1.2fr auto;gap:8px;align-items:end;margin-bottom:8px">
       <div class="field" style="margin:0"><label>Procedimento</label><select onchange="updAtendProc(${i},'proc',this.value)" style="${fsi};width:100%">${po}</select></div>
-      <div class="field" style="margin:0"><label>Tipo</label><select onchange="updAtendProc(${i},'modo',this.value)" style="${fsi};width:100%"><option value="produto" ${ehProduto?'selected':''}>Consome produto</option><option value="sessao" ${!ehProduto?'selected':''}>Sessão</option></select></div>
+      ${tipoUI}
       ${consumoUI}
       <button type="button" class="btn ghost" style="padding:7px 9px;font-size:12px" onclick="removeAtendProc(${i})" title="Remover">×</button>
     </div>`;
@@ -3554,7 +3583,70 @@ function renderHoraClinica(pg){
           ${receitaMes>0?`<p>No mês, a receita foi ${BRL(receitaMes)} e o custo ${BRL(totalCusto)} — ${receitaMes>=totalCusto?`<b style="color:var(--green)">resultado positivo de ${BRL(receitaMes-totalCusto)}</b>`:`<b style="color:var(--red)">déficit de ${BRL(totalCusto-receitaMes)}</b>`}.</p>`:''}
         </div>
       </div>
+    </div>
+    ${dreBlock(horaClinica)}`;
+}
+// Demonstrativo de Resultado: separa Bruna x Pele, com custos discriminados.
+// Respeita o período selecionado no topo. horaClinicaUnit = custo por hora (do mês de referência).
+function dreBlock(horaClinicaUnit){
+  const k=calc();
+  const incluiHora = !!window.__dreHora;
+  const dur = META.duracaoMedia||1;
+  // custo de hora alocado a cada origem = horas usadas × custo/hora
+  const horaBruna = incluiHora ? (k.nAtendBruna||0)*dur*horaClinicaUnit : 0;
+  const horaPele  = incluiHora ? (k.nAtendPele||0)*dur*horaClinicaUnit : 0;
+  // BRUNA: receita = fatBruna; custos = material + (opcional) hora; lucro = receita - custos
+  const recBruna=k.fatBruna||0;
+  const custoBruna=(k.custoMatBruna||0)+horaBruna;
+  const lucroBruna=recBruna-custoBruna;
+  // PELE: receita bruta; custos = material + hora; repasse; lucro Instituto = receita - material - hora - repasse
+  const recPele=k.fatPeleBruto||0;
+  const custoPeleMat=(k.custoMatPele||0)+horaPele;
+  const repPele=k.repassePele||0;
+  const lucroPele=recPele-custoPeleMat-repPele;
+  // TOTAIS
+  const recTot=recBruna+recPele;
+  const custoTot=custoBruna+custoPeleMat;
+  const lucroTot=lucroBruna+lucroPele;
+  const col=(titulo,linhas,destaque)=>`
+    <div style="flex:1;min-width:230px;background:var(--paper);border:1px solid ${destaque?'var(--gold-l)':'var(--line)'};border-radius:14px;padding:16px">
+      <div style="font-family:var(--serif,'Cormorant Garamond',serif);font-size:19px;margin-bottom:10px">${titulo}</div>
+      ${linhas.map(l=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13.5px">
+        <span style="color:${l.forte?'var(--ink)':'var(--grey)'};${l.forte?'font-weight:600':''}">${l.nome}</span>
+        <span style="color:${l.cor||'var(--ink)'};${l.forte?'font-weight:700':''}">${l.neg?'− ':''}${BRL(Math.abs(l.val))}</span></div>`).join('')}
     </div>`;
+  return `<div class="panel" style="margin-top:18px">
+    <div class="panel-head"><div><h3>Demonstrativo de Resultado — ${rotuloMes(mesSelecionadoTopo()||mesHoje())}</h3>
+      <div class="ph-sub">Receita, custos e lucro separados por origem. Respeita o mês selecionado no topo.</div></div></div>
+    <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--grey);margin-bottom:14px;cursor:pointer">
+      <input type="checkbox" ${incluiHora?'checked':''} onchange="window.__dreHora=this.checked;go('horaclinica')" style="width:16px;height:16px;accent-color:var(--gold-d)">
+      Incluir custo de hora clínica (${BRL(horaClinicaUnit)}/h × ${dur}h por atendimento)
+    </label>
+    <div style="display:flex;gap:14px;flex-wrap:wrap">
+      ${col('Dra. Bruna',[
+        {nome:'Receita',val:recBruna,forte:true},
+        {nome:'Custo de material',val:k.custoMatBruna||0,neg:true,cor:'var(--red)'},
+        ...(incluiHora?[{nome:'Custo de hora clínica',val:horaBruna,neg:true,cor:'var(--red)'}]:[]),
+        {nome:'Lucro',val:lucroBruna,forte:true,cor:lucroBruna>=0?'var(--green)':'var(--red)'}
+      ])}
+      ${col('Procedimentos de pele',[
+        {nome:'Receita bruta',val:recPele,forte:true},
+        {nome:'Custo de material',val:k.custoMatPele||0,neg:true,cor:'var(--red)'},
+        ...(incluiHora?[{nome:'Custo de hora clínica',val:horaPele,neg:true,cor:'var(--red)'}]:[]),
+        {nome:'Repasse à profissional',val:repPele,neg:true,cor:'var(--amber)'},
+        {nome:'Lucro do Instituto',val:lucroPele,forte:true,cor:lucroPele>=0?'var(--green)':'var(--red)'}
+      ])}
+      ${col('Total do Instituto',[
+        {nome:'Receita total',val:recTot,forte:true},
+        {nome:'Custos totais',val:custoTot,neg:true,cor:'var(--red)'},
+        {nome:'Repasses a profissionais',val:repPele,neg:true,cor:'var(--amber)'},
+        {nome:'Lucro final',val:lucroTot,forte:true,cor:lucroTot>=0?'var(--green)':'var(--red)'}
+      ],true)}
+    </div>
+    <div style="font-size:12px;color:var(--grey);font-style:italic;margin-top:12px">
+      <b>Como ler:</b> "Custo de material" vem da baixa de estoque (quantidade × custo unitário cadastrado). O repasse à profissional de pele aparece como linha própria. A hora clínica é opcional — quando ligada, distribui o custo fixo da clínica (despesas ÷ horas do mês) pelos atendimentos de cada origem.
+    </div>
+  </div>`;
 }
 function mesAnoCurto(s){const meses=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];const[y,m]=s.split('-');return meses[+m-1]+'/'+y;}
 async function salvarHoras(){
