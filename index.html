@@ -34,27 +34,37 @@ body.light{
   --shadow-sm:0 1px 2px rgba(58,53,46,.05);
 }
 *{box-sizing:border-box;margin:0;padding:0}
-/* ===== PALETAS DE DESTAQUE (sobrescrevem o dourado em dark e light) ===== */
-body.pal-ouro      { --gold:#D8B468; --gold-l:#EAD49A; --gold-d:#C09A4C; }
+/* ===== PALETAS — transformam destaque + fundos + superfícies (dark e light) ===== */
+/* OURO (padrão, mantém o original) */
+body.pal-ouro{ --gold:#D8B468; --gold-l:#EAD49A; --gold-d:#C09A4C; }
 body.light.pal-ouro{ --gold:#B8923F; --gold-l:#D9BE7E; --gold-d:#8F6E2C; }
-body.pal-rose      { --gold:#E0A6A0; --gold-l:#F0C9C4; --gold-d:#C8847C; }
-body.light.pal-rose{ --gold:#C77A72; --gold-l:#E3B0AA; --gold-d:#A85C54; }
-body.pal-esmeralda      { --gold:#6FBF9A; --gold-l:#A4DCC4; --gold-d:#4E9E7A; }
-body.light.pal-esmeralda{ --gold:#3E8F6B; --gold-l:#7FC0A3; --gold-d:#2C6B4E; }
-body.pal-safira      { --gold:#6FA8DC; --gold-l:#A7CBEC; --gold-d:#4E84C0; }
-body.light.pal-safira{ --gold:#3F73B5; --gold-l:#82A9D6; --gold-d:#2C5690; }
-body.pal-ametista      { --gold:#B08FD8; --gold-l:#D2BCEC; --gold-d:#8E6BC0; }
-body.light.pal-ametista{ --gold:#7E5BB0; --gold-l:#B095D4; --gold-d:#5E418C; }
-body.pal-rubi      { --gold:#DE8A93; --gold-l:#EFB6BC; --gold-d:#C26570; }
-body.light.pal-rubi{ --gold:#B5505D; --gold-l:#D58993; --gold-d:#8F3A45; }
-body.pal-bronze      { --gold:#D69A6A; --gold-l:#EBC29B; --gold-d:#BC7B47; }
-body.light.pal-bronze{ --gold:#A56A3C; --gold-l:#CC9A6C; --gold-d:#824F28; }
-body.pal-grafite      { --gold:#A8AEB8; --gold-l:#CFD3DA; --gold-d:#868D99; }
-body.light.pal-grafite{ --gold:#5C636E; --gold-l:#959BA6; --gold-d:#414751; }
-body.pal-turquesa      { --gold:#5FC2C9; --gold-l:#9CDBE0; --gold-d:#3FA1A8; }
-body.light.pal-turquesa{ --gold:#2E8E95; --gold-l:#6FBEC4; --gold-d:#1F6B70; }
-body.pal-coral      { --gold:#E8956B; --gold-l:#F4BC9C; --gold-d:#CC7448; }
-body.light.pal-coral{ --gold:#C26139; --gold-l:#DD9069; --gold-d:#9E4826; }
+/* ROSÉ — fundo ameixa, destaque rosado */
+body.pal-rose{ --gold:#E59CB0; --gold-l:#F3C4D2; --gold-d:#C9788F; --ivory:#1C1518; --ivory2:#271C20; --cream:#241A1E; --paper:#291D22; --line:#3D2C33; --black:#1C1518; }
+body.light.pal-rose{ --gold:#C25E7C; --gold-l:#E3A2B6; --gold-d:#9E4862; --ivory:#FCF6F8; --ivory2:#F4E8ED; --cream:#FAF1F4; --paper:#FFFFFF; --line:#EBDCE2; }
+/* ESMERALDA — fundo verde-escuro, destaque esmeralda */
+body.pal-esmeralda{ --gold:#6FCFA0; --gold-l:#A6E4C6; --gold-d:#4DA97D; --ivory:#131915; --ivory2:#1C261F; --cream:#18211C; --paper:#1C2620; --line:#2C3A31; --black:#131915; }
+body.light.pal-esmeralda{ --gold:#2F9468; --gold-l:#73C19E; --gold-d:#1F6E4B; --ivory:#F4FAF6; --ivory2:#E7F2EB; --cream:#EFF7F2; --paper:#FFFFFF; --line:#DBEAE0; }
+/* SAFIRA — fundo azul-noite, destaque azul */
+body.pal-safira{ --gold:#74AEEA; --gold-l:#A9CDF2; --gold-d:#4E89CC; --ivory:#131720; --ivory2:#1B2230; --cream:#171D2A; --paper:#1B2230; --line:#2A3550; --black:#131720; }
+body.light.pal-safira{ --gold:#3A72BC; --gold-l:#7CA6DA; --gold-d:#27548F; --ivory:#F5F8FC; --ivory2:#E8EFF6; --cream:#EFF4FA; --paper:#FFFFFF; --line:#DCE6F1; }
+/* AMETISTA — fundo violeta-escuro, destaque lilás */
+body.pal-ametista{ --gold:#B596E4; --gold-l:#D3BFF0; --gold-d:#8E6BC8; --ivory:#171320; --ivory2:#211B30; --cream:#1C172A; --paper:#211B30; --line:#332A4E; --black:#171320; }
+body.light.pal-ametista{ --gold:#7E54BC; --gold-l:#B18ADA; --gold-d:#5C3A92; --ivory:#F8F5FC; --ivory2:#EEE8F6; --cream:#F3EFFA; --paper:#FFFFFF; --line:#E5DCF1; }
+/* RUBI — fundo bordô, destaque vermelho-rubi */
+body.pal-rubi{ --gold:#E68A93; --gold-l:#F2B7BD; --gold-d:#C8636E; --ivory:#1E1416; --ivory2:#2B1B1E; --cream:#27191B; --paper:#2B1B1E; --line:#412A2E; --black:#1E1416; }
+body.light.pal-rubi{ --gold:#B5404F; --gold-l:#D5818C; --gold-d:#8F2C3A; --ivory:#FDF5F6; --ivory2:#F6E7E9; --cream:#FBF0F1; --paper:#FFFFFF; --line:#EFD9DC; }
+/* BRONZE — fundo terroso, destaque cobre */
+body.pal-bronze{ --gold:#DBA06E; --gold-l:#EDC4A0; --gold-d:#BC7E4A; --ivory:#1C1611; --ivory2:#271E16; --cream:#241B14; --paper:#271E16; --line:#3C2E22; --black:#1C1611; }
+body.light.pal-bronze{ --gold:#A5683A; --gold-l:#CC9A6C; --gold-d:#824D24; --ivory:#FBF7F2; --ivory2:#F2E9DE; --cream:#F8F1E8; --paper:#FFFFFF; --line:#EBDFD0; }
+/* GRAFITE — fundo neutro frio, destaque prata-azulado */
+body.pal-grafite{ --gold:#9FB0C4; --gold-l:#C6D2E0; --gold-d:#7C8DA2; --ivory:#14171A; --ivory2:#1D2227; --cream:#191D21; --paper:#1D2227; --line:#2E363F; --black:#14171A; }
+body.light.pal-grafite{ --gold:#566373; --gold-l:#909BA9; --gold-d:#3B4654; --ivory:#F6F8FA; --ivory2:#EAEEF2; --cream:#F0F3F6; --paper:#FFFFFF; --line:#DEE4EA; }
+/* TURQUESA — fundo petróleo, destaque turquesa */
+body.pal-turquesa{ --gold:#5FCBD2; --gold-l:#9DE0E5; --gold-d:#3FA7AE; --ivory:#101A1B; --ivory2:#172627; --cream:#142122; --paper:#172627; --line:#243B3D; --black:#101A1B; }
+body.light.pal-turquesa{ --gold:#1F8F97; --gold-l:#69BEC4; --gold-d:#136A70; --ivory:#F2FAFA; --ivory2:#E3F2F3; --cream:#EBF7F7; --paper:#FFFFFF; --line:#D5EAEB; }
+/* CORAL — fundo terracota escuro, destaque coral vivo */
+body.pal-coral{ --gold:#EF9870; --gold-l:#F7C0A2; --gold-d:#D0744A; --ivory:#1D1411; --ivory2:#291C16; --cream:#251914; --paper:#291C16; --line:#3F2C22; --black:#1D1411; }
+body.light.pal-coral{ --gold:#C95A2E; --gold-l:#E48E63; --gold-d:#A0421C; --ivory:#FDF6F2; --ivory2:#F6E8DF; --cream:#FBF0E9; --paper:#FFFFFF; --line:#F0DCD0; }
 body{font-family:'Inter',system-ui,sans-serif;background:var(--ivory);color:var(--ink);
   -webkit-font-smoothing:antialiased;line-height:1.55;transition:background .25s,color .25s}
 .serif{font-family:'Cormorant Garamond',Georgia,serif}
@@ -944,7 +954,13 @@ function calc(){
   const pagantes = compareceu.filter(a=>a.valor>0).length;
   const ticket = pagantes ? faturamento/pagantes : 0;
   const custoInsumo = compareceu.reduce((s,a)=>s+a.custo,0);
-  const custoTotal = cs.reduce((s,c)=>s+c.valor,0);
+  // DESPESAS REAIS = lançamentos de despesa do Livro-Caixa no período (fonte de verdade).
+  // (DATA.custos fica vazio no modo nuvem; as despesas reais vivem no CAIXA.)
+  const despesasCaixa = (typeof CAIXA!=='undefined' && Array.isArray(CAIXA))
+    ? CAIXA.filter(l=>l.tipo==='despesa' && _dentro(l.data)).reduce((s,l)=>s+(+l.valor||0),0)
+    : 0;
+  // soma também eventuais custos antigos (DATA.custos) caso existam (modo local de teste)
+  const custoTotal = despesasCaixa + cs.reduce((s,c)=>s+c.valor,0);
   const imposto = faturamento*META.imposto;
   const lucro = faturamento - imposto - custoTotal;
   const margem = faturamento ? lucro/faturamento : 0;
@@ -1085,7 +1101,15 @@ function calc(){
     porMes[ym].custo += (a.custo||0);
     if(funcEhPele(a.func)){ porMes[ym].repasse += rateioPele(a).repasse; }
   });
-  // despesas reais (Livro-Caixa) por mês
+  // despesas reais (Livro-Caixa) por mês — fonte de verdade
+  if(typeof CAIXA!=='undefined' && Array.isArray(CAIXA)){
+    CAIXA.filter(l=>l.tipo==='despesa').forEach(l=>{
+      const ym=(l.data||'').slice(0,7); if(!ym) return;
+      if(!porMes[ym]) porMes[ym]={ym, fat:0, custo:0, desp:0, repasse:0};
+      porMes[ym].desp += (+l.valor||0);
+    });
+  }
+  // custos antigos (DATA.custos) caso existam (modo local)
   DATA.custos.forEach(c=>{
     const ym=(c.data||'').slice(0,7); if(!ym) return;
     if(!porMes[ym]) porMes[ym]={ym, fat:0, custo:0, desp:0, repasse:0};
@@ -1679,7 +1703,7 @@ function editarAtend(id, tipo){
     <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
         <span style="font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:700;color:#0E0D0C;background:var(--gold);padding:3px 10px;border-radius:7px">${tp==='parceiro'?'Atendimento de parceiro':'Atendimento Dra. Bruna'}</span>
-        ${tp==='parceiro'?'<span style="font-size:12px;color:var(--grey)">o repasse é calculado automaticamente pelos procedimentos de pele cadastrados</span>':''}
+        ${tp==='parceiro'?'<span style="font-size:12px;color:var(--grey)">o repasse é calculado automaticamente pelos procedimentos com repasse cadastrados</span>':''}
       </div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px">
         <div class="field"><label>Data do atendimento</label><input id="naData" type="date" value="${a.data}" style="${fs};width:100%"></div>
@@ -1759,31 +1783,39 @@ function renderAtendProcs(){
     return;
   }
   const temProdutos=(ESTOQUE||[]).length>0;
-  // a profissional selecionada é de pele? então prioriza os procedimentos de pele
+  // a profissional selecionada é parceira? então mostra os procedimentos com repasse DELA
   const funcSel=(document.getElementById('naFunc')&&document.getElementById('naFunc').value)||'';
   const ehPeleSel=funcEhPele(funcSel);
-  const nomesPele=(PROCS_PELE||[]).map(p=>p.nome).filter(Boolean);
+  // procedimentos com repasse vinculados à profissional selecionada (ou todos com repasse, se nenhuma selecionada)
+  const procsRepasseDela=(PROCS_PELE||[]).filter(p=>p.nome && (funcSel ? (p.func===funcSel || !p.func) : true));
+  const nomesRepasseDela=procsRepasseDela.map(p=>p.nome);
+  const nomesPeleTodos=(PROCS_PELE||[]).map(p=>p.nome).filter(Boolean);
   box.innerHTML=__atendProcs.map((p,i)=>{
-    // monta o dropdown: grupo "Procedimentos de pele" + grupo normal
-    const optsPele = nomesPele.length?`<optgroup label="Procedimentos de pele (repasse)">${nomesPele.map(x=>`<option ${x===p.proc?'selected':''}>${x}</option>`).join('')}</optgroup>`:'';
-    const optsNorm = `<optgroup label="Procedimentos">${PROCS.concat('Avaliação').map(x=>`<option ${x===p.proc?'selected':''}>${x}</option>`).join('')}</optgroup>`;
-    const po = ehPeleSel ? (optsPele+optsNorm) : (optsNorm+optsPele);
+    // se parceira selecionada: mostra só os procedimentos com repasse dela. Senão: procedimentos normais.
+    let po;
+    if(ehPeleSel){
+      const opts = nomesRepasseDela.length
+        ? `<optgroup label="Procedimentos com repasse de ${funcSel}">${nomesRepasseDela.map(x=>`<option ${x===p.proc?'selected':''}>${x}</option>`).join('')}</optgroup>`
+        : `<optgroup label="(nenhum procedimento vinculado a ${funcSel})"><option value="">— cadastre em Configurações —</option></optgroup>`;
+      po = opts;
+    } else {
+      po = `<optgroup label="Procedimentos">${PROCS.concat('Avaliação').map(x=>`<option ${x===p.proc?'selected':''}>${x}</option>`).join('')}</optgroup>`;
+    }
     const ehProduto = p.modo!=='sessao';
     const ymA=(document.getElementById('naData')&&document.getElementById('naData').value||'').slice(0,7)||mesHoje();
     const prodOpts=(ESTOQUE||[]).map(e=>`<option value="${e.id}" ${e.id==p.produtoId?'selected':''}>${e.produto} (${saldoAtualMes(e.id,ymA)} ${e.unidade||'un'})</option>`).join('');
     const uni = ehProduto ? (unidadeProduto(p.produtoId)||'un') : '';
-    const ehProcPele = nomesPele.includes(p.proc);
+    const ehProcPele = nomesPeleTodos.includes(p.proc);
     const consumoUI = ehProcPele
-      ? `<div class="field" style="margin:0;grid-column:span 2"><div style="font-size:12px;color:var(--gold-d);padding-top:18px">✦ Procedimento de pele — repasse calculado automaticamente</div></div>`
+      ? `<div class="field" style="margin:0;grid-column:span 2"><div style="font-size:12px;color:var(--gold-d);padding-top:18px">✦ Procedimento com repasse — calculado automaticamente</div></div>`
       : ehProduto
       ? (temProdutos
           ? `<div class="field" style="margin:0"><label>Qtd (${uni})</label><input type="number" step="any" value="${p.qtd||''}" oninput="updAtendProc(${i},'qtd',this.value)" style="${fsi};width:100%"></div>
              <div class="field" style="margin:0"><label>Abater de</label><select onchange="updAtendProc(${i},'produtoId',this.value)" style="${fsi};width:100%">${prodOpts}</select></div>`
           : `<div class="field" style="margin:0;grid-column:span 2"><div style="font-size:12px;color:var(--amber);padding-top:18px">Nenhum produto no estoque — cadastre em Estoque para abater.</div></div>`)
       : `<div class="field" style="margin:0;grid-column:span 2"><div style="font-size:12px;color:var(--grey);padding-top:18px">Sessão — não consome estoque</div></div>`;
-    // se for procedimento de pele, o "Tipo" fica oculto (não consome estoque, é sessão)
     const tipoUI = ehProcPele
-      ? `<div class="field" style="margin:0"><label>Tipo</label><input value="Pele (repasse)" disabled style="${fsi};width:100%;opacity:.7"></div>`
+      ? `<div class="field" style="margin:0"><label>Tipo</label><input value="Repasse" disabled style="${fsi};width:100%;opacity:.7"></div>`
       : `<div class="field" style="margin:0"><label>Tipo</label><select onchange="updAtendProc(${i},'modo',this.value)" style="${fsi};width:100%"><option value="produto" ${ehProduto?'selected':''}>Consome produto</option><option value="sessao" ${!ehProduto?'selected':''}>Sessão</option></select></div>`;
     return `<div style="display:grid;grid-template-columns:1.6fr 1.1fr 1fr 1.2fr auto;gap:8px;align-items:end;margin-bottom:8px">
       <div class="field" style="margin:0"><label>Procedimento</label><select onchange="updAtendProc(${i},'proc',this.value)" style="${fsi};width:100%">${po}</select></div>
@@ -2839,9 +2871,9 @@ function funcForm(f){
       <div class="field"><label>Contato</label><input id="f_contato" value="${f.contato||''}" style="${fs}"></div>
       <div class="field"><label>Admissão</label><input id="f_admissao" type="date" value="${f.admissao||''}" style="${fs}"></div>
       <div class="field"><label>Ativo?</label><select id="f_ativo" style="${fs}"><option value="sim" ${f.ativo?'selected':''}>Sim</option><option value="nao" ${!f.ativo?'selected':''}>Não</option></select></div>
-      <div class="field"><label>Profissional de pele? (repasse)</label><select id="f_pele" style="${fs}"><option value="nao" ${!f.pele?'selected':''}>Não</option><option value="sim" ${f.pele?'selected':''}>Sim</option></select></div>
+      <div class="field"><label>Profissional parceira (com repasse)?</label><select id="f_pele" style="${fs}"><option value="nao" ${!f.pele?'selected':''}>Não</option><option value="sim" ${f.pele?'selected':''}>Sim</option></select></div>
     </div>
-    <div style="font-size:12px;color:var(--grey);font-style:italic;margin-top:8px">Marque "Profissional de pele" se os atendimentos desta pessoa têm repasse (limpeza, microagulhamento, etc.). O lucro será dividido conforme cada procedimento cadastrado em Configurações.</div>
+    <div style="font-size:12px;color:var(--grey);font-style:italic;margin-top:8px">Marque "Sim" se esta profissional trabalha com <b>repasse</b> (divisão de lucro) — em qualquer área (pele, capilar, corporal, etc.). Depois vá em <b>Configurações → Procedimentos com repasse</b> e vincule os procedimentos dela.</div>
     <div style="display:flex;gap:10px;margin-top:18px">
       <button class="btn" onclick="salvarFunc('${f.id}')">Salvar</button>
       ${isNew?'':`<button class="btn ghost" onclick="excluirFunc('${f.id}')" style="color:var(--red);border-color:var(--red)">Excluir</button>`}
@@ -3596,31 +3628,37 @@ function renderConfig(pg){
       <button class="btn" onclick="salvarMetasLivres()">Salvar metas de ${rotuloMes(metaMesSel)}</button>
     </div>`:''}
   </div>`;
-  // ---- procedimentos de pele (profissional com repasse) ----
+  // ---- procedimentos com repasse (vinculados a uma profissional parceira) ----
   const fsp='padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink)';
+  const parceirasAtivas=(FUNCIONARIOS||[]).filter(f=>f.pele).map(f=>f.nome);
   const linhasPele=(PROCS_PELE||[]).map((p,i)=>{
     const lucro=Math.max(0,(+p.valor||0)-(+p.custo||0));
     const rep=lucro*(+p.repasse||0);
     const inst=lucro-rep;
+    const profOpts=`<option value="">— escolher profissional —</option>`+parceirasAtivas.map(n=>`<option ${n===p.func?'selected':''}>${n}</option>`).join('');
     return `<div style="border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px;background:var(--paper)">
-      <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:10px;align-items:end">
-        <div class="field" style="margin:0"><label>Procedimento de pele</label><input value="${(p.nome||'').replace(/"/g,'&quot;')}" oninput="updProcPele(${i},'nome',this.value)" placeholder="ex: Limpeza de pele" style="${fsp};width:100%"></div>
+      <div style="display:grid;grid-template-columns:1.6fr 1.4fr 1fr 1fr .8fr auto;gap:10px;align-items:end">
+        <div class="field" style="margin:0"><label>Procedimento</label><input value="${(p.nome||'').replace(/"/g,'&quot;')}" oninput="updProcPele(${i},'nome',this.value)" placeholder="ex: Limpeza de pele" style="${fsp};width:100%"></div>
+        <div class="field" style="margin:0"><label>Profissional</label><select onchange="updProcPele(${i},'func',this.value)" style="${fsp};width:100%">${profOpts}</select></div>
         <div class="field" style="margin:0"><label>Valor (R$)</label><input type="number" value="${p.valor||''}" oninput="updProcPele(${i},'valor',this.value)" placeholder="250" style="${fsp};width:100%"></div>
-        <div class="field" style="margin:0"><label>Custo estimado (R$)</label><input type="number" value="${p.custo||''}" oninput="updProcPele(${i},'custo',this.value)" placeholder="80" style="${fsp};width:100%"></div>
+        <div class="field" style="margin:0"><label>Custo (R$)</label><input type="number" value="${p.custo||''}" oninput="updProcPele(${i},'custo',this.value)" placeholder="80" style="${fsp};width:100%"></div>
         <div class="field" style="margin:0"><label>Repasse (%)</label><input type="number" value="${p.repasse?Math.round(p.repasse*100):''}" oninput="updProcPele(${i},'repassePct',this.value)" placeholder="50" style="${fsp};width:100%"></div>
         <button class="btn ghost" style="padding:8px 10px;font-size:12px" onclick="removeProcPele(${i})" title="Remover">×</button>
       </div>
-      <div style="margin-top:8px;font-size:12.5px;color:var(--grey)">Lucro: <b style="color:var(--ink)">${BRL(lucro)}</b> · Repasse à profissional: <b style="color:var(--amber)">${BRL(rep)}</b> · Fica para o Instituto: <b style="color:var(--green)">${BRL(inst)}</b></div>
+      <div style="margin-top:8px;font-size:12.5px;color:var(--grey)">${p.func?'':'<b style="color:var(--amber)">⚠ Escolha a profissional para este procedimento aparecer no atendimento dela. </b>'}Lucro: <b style="color:var(--ink)">${BRL(lucro)}</b> · Repasse: <b style="color:var(--amber)">${BRL(rep)}</b> · Instituto: <b style="color:var(--green)">${BRL(inst)}</b></div>
     </div>`;
   }).join('');
+  const semParceiras = parceirasAtivas.length===0
+    ? '<div style="font-size:12.5px;color:var(--amber);background:var(--amber-bg);border:1px solid var(--gold-l);border-radius:10px;padding:10px 12px;margin-bottom:12px">Você ainda não marcou ninguém como <b>profissional parceira</b>. Vá em <b>Cadastros → Funcionários</b>, edite a profissional e marque <b>"Profissional parceira (com repasse)? = Sim"</b>. Depois volte aqui para vincular os procedimentos a ela.</div>'
+    : '';
   const peleBlock=`<div class="panel" style="margin-bottom:18px">
-    <div class="panel-head"><div><h3>Procedimentos de pele (repasse)</h3><div class="ph-sub">Procedimentos feitos por profissional com repasse. Defina valor, custo estimado e % de repasse. O lucro (valor − custo) é dividido: parte para a profissional, parte para o Instituto.</div></div></div>
-    <div id="procsPeleBox">${linhasPele||'<div style="font-size:13px;color:var(--grey);font-style:italic;margin-bottom:10px">Nenhum procedimento de pele cadastrado.</div>'}</div>
+    <div class="panel-head"><div><h3>Procedimentos com repasse</h3><div class="ph-sub">Procedimentos de profissionais parceiras (qualquer área). Cada um é vinculado a uma profissional; o lucro (valor − custo) é dividido entre ela e o Instituto pela % de repasse.</div></div></div>
+    ${semParceiras}
+    <div id="procsPeleBox">${linhasPele||'<div style="font-size:13px;color:var(--grey);font-style:italic;margin-bottom:10px">Nenhum procedimento com repasse cadastrado.</div>'}</div>
     <div style="display:flex;gap:10px;margin-top:6px">
-      <button class="btn ghost" style="padding:6px 12px;font-size:13px" onclick="addProcPele()">+ novo procedimento de pele</button>
-      <button class="btn" onclick="salvarProcsPele()">Salvar procedimentos de pele</button>
+      <button class="btn ghost" style="padding:6px 12px;font-size:13px" onclick="addProcPele()">+ novo procedimento com repasse</button>
+      <button class="btn" onclick="salvarProcsPele()">Salvar procedimentos</button>
     </div>
-    <div style="font-size:12px;color:var(--grey);font-style:italic;margin-top:10px">Lembre de marcar a profissional como <b>"Profissional de pele"</b> no cadastro dela (Cadastros → Funcionários), para os atendimentos dela entrarem nesta regra.</div>
   </div>`;
   const palAtual=paletaAtual();
   const paletaBlock=`
@@ -3646,11 +3684,11 @@ function renderConfig(pg){
     ${blocos}`;
 }
 // ---- procedimentos de pele ----
-function addProcPele(){ PROCS_PELE.push({id:Date.now()+Math.random(),nome:'',valor:0,custo:0,repasse:0.5}); go('config'); }
+function addProcPele(){ PROCS_PELE.push({id:Date.now()+Math.random(),nome:'',func:'',valor:0,custo:0,repasse:0.5}); go('config'); }
 function removeProcPele(i){ PROCS_PELE.splice(i,1); go('config'); }
 function updProcPele(i,campo,val){
   if(!PROCS_PELE[i])return;
-  if(campo==='nome') PROCS_PELE[i].nome=val;
+  if(campo==='nome'||campo==='func') PROCS_PELE[i][campo]=val;
   else if(campo==='repassePct') PROCS_PELE[i].repasse=(+val||0)/100;
   else PROCS_PELE[i][campo]=+val||0;
 }
@@ -3661,7 +3699,7 @@ async function salvarProcsPele(){
       await sb.from('configuracoes').upsert({user_id:user.id,chave:'procs_pele',valores:PROCS_PELE},{onConflict:'user_id,chave'});
     }catch(e){ console.warn('procs_pele não salvo',e); }
   }
-  window.__lastCalc=null; go('config'); toast('Procedimentos de pele salvos');
+  window.__lastCalc=null; go('config'); toast('Procedimentos salvos');
 }
 // ---- metas da clínica (por mês, acompanhadas pelo app) ----
 function metasMesSel(){ return metasDoMes(metaMesSel||mesHoje()); }
@@ -3746,16 +3784,16 @@ function alternarTema(){
 
 /* ============================ PALETAS DE COR ============================ */
 const PALETAS=[
-  {id:'ouro',     nome:'Ouro',      cor:'#C9A24B'},
-  {id:'rose',     nome:'Rosé',      cor:'#C8847C'},
-  {id:'esmeralda',nome:'Esmeralda', cor:'#4E9E7A'},
-  {id:'safira',   nome:'Safira',    cor:'#4E84C0'},
-  {id:'ametista', nome:'Ametista',  cor:'#8E6BC0'},
-  {id:'rubi',     nome:'Rubi',      cor:'#C26570'},
-  {id:'bronze',   nome:'Bronze',    cor:'#BC7B47'},
-  {id:'grafite',  nome:'Grafite',   cor:'#868D99'},
-  {id:'turquesa', nome:'Turquesa',  cor:'#3FA1A8'},
-  {id:'coral',    nome:'Coral',     cor:'#CC7448'},
+  {id:'ouro',     nome:'Ouro',      cor:'#D8B468'},
+  {id:'rose',     nome:'Rosé',      cor:'#E59CB0'},
+  {id:'esmeralda',nome:'Esmeralda', cor:'#6FCFA0'},
+  {id:'safira',   nome:'Safira',    cor:'#74AEEA'},
+  {id:'ametista', nome:'Ametista',  cor:'#B596E4'},
+  {id:'rubi',     nome:'Rubi',      cor:'#E68A93'},
+  {id:'bronze',   nome:'Bronze',    cor:'#DBA06E'},
+  {id:'grafite',  nome:'Grafite',   cor:'#9FB0C4'},
+  {id:'turquesa', nome:'Turquesa',  cor:'#5FCBD2'},
+  {id:'coral',    nome:'Coral',     cor:'#EF9870'},
 ];
 function aplicarPaleta(id){
   PALETAS.forEach(p=>document.body.classList.remove('pal-'+p.id));
@@ -4330,9 +4368,11 @@ function renderEstoque(pg){
       <td class="ctr" style="color:var(--red)">${cons||'—'}</td>
       <td class="ctr" style="font-weight:700;color:${atual<0?'var(--red)':alerta?'var(--amber)':'var(--ink)'}">${atual}</td>
       <td class="ctr">${e.minimo||'—'}</td>
+      <td class="ctr">${e.custoUnit?BRL(e.custoUnit):'<span style="color:var(--amber)">definir</span>'}</td>
       <td class="ctr">${atual<0?'<span style="color:var(--red);font-size:12px;font-weight:600">⚠ negativo</span>':alerta?'<span style="color:var(--amber);font-size:12px;font-weight:600">⚠ repor</span>':'<span style="color:var(--green);font-size:12px">ok</span>'}</td>
       <td class="ctr">
         ${sobrouAnt>0&&!ini?`<button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="puxarSobra('${e.id}')" title="Trazer ${sobrouAnt} do mês anterior">↓ usar sobra</button> `:''}
+        <button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="editarProduto('${e.id}')">editar</button>
         <button class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="excluirProduto('${e.id}')">×</button>
       </td>
     </tr>`;
@@ -4360,8 +4400,8 @@ function renderEstoque(pg){
       </div>
       <div id="produtoFormBox"></div>
       <table class="data">
-        <thead><tr><th>Produto</th><th class="ctr">Sobrou ${mesAnoCurto(ant)}</th><th class="ctr">Saldo inicial</th><th class="ctr">Consumido</th><th class="ctr">Saldo atual</th><th class="ctr">Mínimo</th><th class="ctr">Status</th><th class="ctr">Ações</th></tr></thead>
-        <tbody>${linhas||'<tr><td colspan="8" style="text-align:center;color:var(--grey);padding:24px">Nenhum produto cadastrado. Clique em "Novo produto".</td></tr>'}</tbody>
+        <thead><tr><th>Produto</th><th class="ctr">Sobrou ${mesAnoCurto(ant)}</th><th class="ctr">Saldo inicial</th><th class="ctr">Consumido</th><th class="ctr">Saldo atual</th><th class="ctr">Mínimo</th><th class="ctr">Custo/un</th><th class="ctr">Status</th><th class="ctr">Ações</th></tr></thead>
+        <tbody>${linhas||'<tr><td colspan="9" style="text-align:center;color:var(--grey);padding:24px">Nenhum produto cadastrado. Clique em "Novo produto".</td></tr>'}</tbody>
       </table>
       <div style="font-size:12px;color:var(--grey);font-style:italic;margin-top:12px">
         <b>Como funciona:</b> "Saldo inicial" é o que você tinha no começo do mês (sobra do mês anterior + compras). "Consumido" soma o que os atendimentos do mês usaram. "Saldo atual" = inicial − consumido. Para adicionar uma compra no meio do mês, basta somar ao saldo inicial.
@@ -4424,39 +4464,51 @@ async function persistirEstoqueMes(){
     }catch(e){ console.warn('estoque_mes não salvo',e); }
   }
 }
-function abrirProdutoForm(){
+function editarProduto(id){ const e=ESTOQUE.find(x=>String(x.id)===String(id)); abrirProdutoForm(e); }
+function abrirProdutoForm(prodEdit){
   const fs='padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);width:100%';
-  const uniOpts=UNIDADES.map(u=>`<option ${u==='un'?'selected':''}>${u}</option>`).join('');
+  const e = prodEdit || null;
+  const uniOpts=UNIDADES.map(u=>`<option ${u===(e?e.unidade:'un')?'selected':''}>${u}</option>`).join('');
   const ym=window.__estMes||mesHoje();
+  const saldoIniAtual = e ? saldoInicialMes(e.id,ym) : 0;
   document.getElementById('produtoFormBox').innerHTML=`
     <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
+      <div style="font-size:13px;font-weight:600;color:var(--gold-d);margin-bottom:10px">${e?'Editar produto':'Novo produto'}</div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px">
-        <div class="field" style="grid-column:span 2"><label>Produto</label><input id="pr_nome" placeholder="Ex: Toxina Botulínica 100U" style="${fs}"></div>
+        <div class="field" style="grid-column:span 2"><label>Produto</label><input id="pr_nome" value="${e?(e.produto||'').replace(/"/g,'&quot;'):''}" placeholder="Ex: Toxina Botulínica 100U" style="${fs}"></div>
         <div class="field"><label>Unidade</label><select id="pr_uni" style="${fs}">${uniOpts}</select></div>
-        <div class="field"><label>Estoque mínimo</label><input type="number" id="pr_min" value="0" style="${fs}"></div>
-        <div class="field"><label>Saldo inicial de ${rotuloMes(ym)}</label><input type="number" id="pr_qtd" value="0" style="${fs}"></div>
-        <div class="field"><label>Custo unitário (R$)</label><input type="number" id="pr_custo" value="0" style="${fs}"></div>
+        <div class="field"><label>Estoque mínimo</label><input type="number" id="pr_min" value="${e?(e.minimo||0):0}" style="${fs}"></div>
+        <div class="field"><label>Saldo inicial de ${rotuloMes(ym)}</label><input type="number" id="pr_qtd" value="${saldoIniAtual||0}" style="${fs}"></div>
+        <div class="field"><label>Custo unitário / ${e?e.unidade:'un'} (R$)</label><input type="number" step="any" id="pr_custo" value="${e?(e.custoUnit||0):0}" style="${fs}"></div>
       </div>
       <div style="display:flex;gap:10px">
-        <button class="btn" onclick="salvarProduto()">Salvar produto</button>
+        <button class="btn" onclick="salvarProduto('${e?e.id:''}')">Salvar produto</button>
         <button class="btn ghost" onclick="document.getElementById('produtoFormBox').innerHTML=''">Cancelar</button>
       </div>
+      <div style="font-size:12px;color:var(--grey);font-style:italic;margin-top:10px">O <b>custo unitário</b> (por ${e?e.unidade:'ml/unidade'}) é usado para calcular o custo de material de cada atendimento e o resultado do mês.</div>
     </div>`;
+  document.getElementById('produtoFormBox').scrollIntoView({behavior:'smooth',block:'nearest'});
 }
-async function salvarProduto(){
+async function salvarProduto(id){
   const v=i=>document.getElementById(i).value;
   const ym=window.__estMes||mesHoje();
   const saldoIni=+v('pr_qtd')||0;
   const prod={produto:v('pr_nome')||'Produto',unidade:v('pr_uni'),minimo:+v('pr_min')||0,custoUnit:+v('pr_custo')||0};
+  const ehEdicao = id && id!=='';
   if(MODO_NUVEM){
-    const { data, error } = await sb.from('estoque').insert({produto:prod.produto,unidade:prod.unidade,minimo:prod.minimo,custo_unit:prod.custoUnit}).select();
-    const novoId = (data&&data[0])?data[0].id:null;
-    if(novoId && saldoIni){ if(!ESTOQUE_MES[ym])ESTOQUE_MES[ym]={}; ESTOQUE_MES[ym][novoId]=saldoIni; await persistirEstoqueMes(); }
-    await carregarTudo(); go('estoque'); return;
+    if(ehEdicao){
+      await sb.from('estoque').update({produto:prod.produto,unidade:prod.unidade,minimo:prod.minimo,custo_unit:prod.custoUnit}).eq('id',id);
+      if(!ESTOQUE_MES[ym])ESTOQUE_MES[ym]={}; ESTOQUE_MES[ym][id]=saldoIni; await persistirEstoqueMes();
+    } else {
+      const { data } = await sb.from('estoque').insert({produto:prod.produto,unidade:prod.unidade,minimo:prod.minimo,custo_unit:prod.custoUnit}).select();
+      const novoId = (data&&data[0])?data[0].id:null;
+      if(novoId && saldoIni){ if(!ESTOQUE_MES[ym])ESTOQUE_MES[ym]={}; ESTOQUE_MES[ym][novoId]=saldoIni; await persistirEstoqueMes(); }
+    }
+    await carregarTudo(); window.__lastCalc=null; go('estoque'); return;
   }
-  prod.id=EST_SEQ++; ESTOQUE.push(prod);
-  if(saldoIni){ if(!ESTOQUE_MES[ym])ESTOQUE_MES[ym]={}; ESTOQUE_MES[ym][prod.id]=saldoIni; }
-  go('estoque');
+  if(ehEdicao){ const ex=ESTOQUE.find(x=>String(x.id)===String(id)); if(ex) Object.assign(ex,prod); if(!ESTOQUE_MES[ym])ESTOQUE_MES[ym]={}; ESTOQUE_MES[ym][id]=saldoIni; }
+  else { prod.id=EST_SEQ++; ESTOQUE.push(prod); if(saldoIni){ if(!ESTOQUE_MES[ym])ESTOQUE_MES[ym]={}; ESTOQUE_MES[ym][prod.id]=saldoIni; } }
+  window.__lastCalc=null; go('estoque');
 }
 async function excluirProduto(id){
   if(MODO_NUVEM){await sbDelete('estoque',id);await carregarTudo();}
