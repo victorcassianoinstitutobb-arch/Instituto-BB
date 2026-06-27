@@ -1699,6 +1699,13 @@ function editarAtend(id, tipo){
   __atendPagDividido = __atendPagamentos.length>1;
   // estado de trabalho dos procedimentos (lista)
   __atendProcs = procedimentosDe(a);
+  // ATENDIMENTO DE PARCEIRO NOVO: já adiciona uma linha com o 1º procedimento de repasse
+  // disponível para a profissional (vínculo dela OU sem vínculo), para o repasse calcular sozinho.
+  if(tp==='parceiro' && (!id||id==='0') && !__atendProcs.length){
+    const fSel=funcAuto||'';
+    const dispo=(PROCS_PELE||[]).filter(p=>p.nome && (fSel ? (p.func===fSel || !p.func) : true));
+    if(dispo.length){ __atendProcs=[{proc:dispo[0].nome, modo:'sessao', qtd:0, produtoId:''}]; }
+  }
   document.getElementById('atendFormBox').innerHTML=`
     <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
@@ -1721,6 +1728,7 @@ function editarAtend(id, tipo){
           <button type="button" class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="addAtendProc()">+ adicionar procedimento</button>
         </div>
         <div id="naProcsBox"></div>
+        ${tp==='parceiro'?'<div id="naRepassePreview" style="margin-top:10px"></div>':''}
       </div>
 
       <div style="border-top:1px solid var(--gold-l);padding-top:14px">
@@ -1824,6 +1832,7 @@ function renderAtendProcs(){
       <button type="button" class="btn ghost" style="padding:7px 9px;font-size:12px" onclick="removeAtendProc(${i})" title="Remover">×</button>
     </div>`;
   }).join('');
+  if(typeof atualizaRepassePreview==='function') atualizaRepassePreview();
 }
 /* ---- pagamentos do atendimento (uma ou várias formas) ---- */
 let __atendPagamentos = [];
@@ -1855,6 +1864,26 @@ function atendValorMudou(){
     __atendPagamentos[0].valor = +(document.getElementById('naValor')||{}).value||0;
   }
   atualizaAvisoPag();
+  atualizaRepassePreview();
+}
+// preview em tempo real do rateio (repasse) no formulário de atendimento de parceiro
+function atualizaRepassePreview(){
+  const box=document.getElementById('naRepassePreview'); if(!box) return;
+  const funcSel=(document.getElementById('naFunc')&&document.getElementById('naFunc').value)||'';
+  const valor=+(document.getElementById('naValor')||{}).value||0;
+  // simula um atendimento com os procedimentos atuais para reaproveitar rateioPele
+  const fake={valor, func:funcSel, procedimentos:(__atendProcs||[]).map(p=>({proc:p.proc,modo:p.modo,qtd:p.qtd,produtoId:p.produtoId}))};
+  const temProcRepasse=(__atendProcs||[]).some(p=>(PROCS_PELE||[]).some(x=>x.nome===p.proc));
+  if(!funcEhPele(funcSel) || !temProcRepasse || valor<=0){ box.innerHTML=''; return; }
+  const r=rateioPele(fake);
+  box.innerHTML=`<div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:10px;padding:12px 14px;display:flex;gap:18px;flex-wrap:wrap;align-items:center">
+    <span style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--gold-d);font-weight:700">Rateio automático</span>
+    <span style="font-size:13px;color:var(--grey)">Valor <b style="color:var(--ink)">${BRL(r.valor)}</b></span>
+    <span style="font-size:13px;color:var(--grey)">− Custo <b style="color:var(--red)">${BRL(r.custo)}</b></span>
+    <span style="font-size:13px;color:var(--grey)">= Lucro <b style="color:var(--ink)">${BRL(r.lucro)}</b></span>
+    <span style="font-size:13px;color:var(--grey)">→ Repasse a ${funcSel.split(' ')[0]}: <b style="color:var(--amber)">${BRL(r.repasse)}</b></span>
+    <span style="font-size:13px;color:var(--grey)">Fica p/ Instituto: <b style="color:var(--green,#3b7a57)">${BRL(r.instituto)}</b></span>
+  </div>`;
 }
 function valorTotalAtend(){ return +(document.getElementById('naValor')||{}).value||0; }
 function atualizaAvisoPag(){
