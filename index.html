@@ -942,6 +942,20 @@ function calc(){
   });
   const parceiros = Object.values(_parcMap).sort((a,b)=>b.receita-a.receita);
   const repasseTotal = repassePele; // total a repassar a todos os parceiros no período
+  // ---- custo dos parceiros por TIPO (fixado vs material), conforme cadastro do procedimento ----
+  // custoFixadoParc: soma dos custos cadastrados dos procedimentos do tipo 'fixado'
+  // algumProcMaterial: se algum procedimento de parceiro no período é do tipo 'material'
+  let custoFixadoParc=0, algumProcMaterial=false, algumProcFixado=false;
+  atendPele.forEach(a=>{
+    procedimentosDe(a).forEach(p=>{
+      const pp=procPeleDe(p.proc);
+      if(pp){
+        const tipo=pp.custoTipo||'fixado';
+        if(tipo==='material'){ algumProcMaterial=true; }
+        else { algumProcFixado=true; custoFixadoParc += (+pp.custo||0); }
+      }
+    });
+  });
   // ---- custo REAL de material (a partir do consumo × custo unitário do estoque) ----
   const custoUnitDe = pid => { const e=(ESTOQUE||[]).find(x=>x.id==pid); return e?(+e.custoUnit||0):0; };
   const custoMaterialAtend = a => {
@@ -1155,6 +1169,7 @@ function calc(){
     recebimentos,recebTotal,semReceb,
     fatBruna,fatPeleBruto,fatPeleInstituto,fatInstituto,repassePele,custoPele,nAtendPele:atendPele.length,
     parceiros,repasseTotal,resultadoOper,margemOper,procVar,
+    custoFixadoParc,algumProcMaterial,algumProcFixado,
     custoMaterial,custoMatBruna,custoMatPele,nAtendBruna:atendBruna.length,
     docPend,docVencer,docOk,docTotal:DOCS.length,evolucao};
   window.__lastCalc = out;
@@ -1631,12 +1646,20 @@ function renderAtend(pg){
   const k=calc();
   const ymTopo=mesSelecionadoTopo()||mesHoje();
   const gastoMatMes=(MATERIAL_PARC||[]).filter(m=>(m.data||'').slice(0,7)===ymTopo).reduce((s,m)=>s+(+m.valor||0),0);
+  // Card de custo: depende do TIPO cadastrado nos procedimentos de repasse usados no período.
+  // - há compra real lançada → mostra "Gasto material (real)"
+  // - algum procedimento é tipo 'material' (e sem compra lançada) → "Custo material (estimado)"
+  // - todos 'fixado' → "Custo fixado"
+  let custoLabel, custoValor;
+  if(gastoMatMes>0){ custoLabel='Gasto material (real)'; custoValor=gastoMatMes; }
+  else if(k.algumProcMaterial){ custoLabel='Custo material (estimado)'; custoValor=k.custoPele; }
+  else { custoLabel='Custo fixado'; custoValor=k.custoFixadoParc; }
   const resumoParc = (k.nAtendPele>0 || gastoMatMes>0) ? `
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
       <div style="background:var(--cream);border:1px solid var(--line);border-radius:12px;padding:13px"><div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">Receita de parceiros</div><div style="font-size:19px;font-family:var(--serif,'Cormorant Garamond',serif);margin-top:3px">${BRL(k.fatPeleBruto)}</div></div>
       <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:12px;padding:13px"><div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">A repassar</div><div style="font-size:19px;font-family:var(--serif,'Cormorant Garamond',serif);margin-top:3px;color:var(--amber)">${BRL(k.repasseTotal)}</div></div>
       <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:12px;padding:13px"><div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">Fica p/ Instituto</div><div style="font-size:19px;font-family:var(--serif,'Cormorant Garamond',serif);margin-top:3px;color:var(--green,#3b7a57)">${BRL(k.fatPeleInstituto)}</div></div>
-      <div style="background:var(--cream);border:1px solid var(--line);border-radius:12px;padding:13px"><div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">Gasto material (real)</div><div style="font-size:19px;font-family:var(--serif,'Cormorant Garamond',serif);margin-top:3px">${BRL(gastoMatMes)}</div></div>
+      <div style="background:var(--cream);border:1px solid var(--line);border-radius:12px;padding:13px"><div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">${custoLabel}</div><div style="font-size:19px;font-family:var(--serif,'Cormorant Garamond',serif);margin-top:3px">${BRL(custoValor)}</div></div>
     </div>` : '';
   const body=rows.map(a=>`<tr>
     <td>${fmtDate(a.data)}</td><td>${a.paciente}</td><td title="${procedimentosDe(a).map(p=>p.proc+(p.modo==='produto'&&p.qtd?' ('+p.qtd+' '+unidadeProduto(p.produtoId)+')':'')).join(' · ')}">${a.proc}</td>
@@ -3664,15 +3687,25 @@ function renderConfig(pg){
     const lucro=Math.max(0,(+p.valor||0)-(+p.custo||0));
     const rep=lucro*(+p.repasse||0);
     const inst=lucro-rep;
+    const ct=p.custoTipo||'fixado'; // 'fixado' | 'material'
     const profOpts=`<option value="">— escolher profissional —</option>`+parceirasAtivas.map(n=>`<option ${n===p.func?'selected':''}>${n}</option>`).join('');
+    const custoLabel = ct==='material' ? 'Custo estimado (R$)' : 'Custo fixado (R$)';
     return `<div style="border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px;background:var(--paper)">
       <div style="display:grid;grid-template-columns:1.6fr 1.4fr 1fr 1fr .8fr auto;gap:10px;align-items:end">
         <div class="field" style="margin:0"><label>Procedimento</label><input value="${(p.nome||'').replace(/"/g,'&quot;')}" oninput="updProcPele(${i},'nome',this.value)" placeholder="ex: Limpeza de pele" style="${fsp};width:100%"></div>
         <div class="field" style="margin:0"><label>Profissional</label><select onchange="updProcPele(${i},'func',this.value)" style="${fsp};width:100%">${profOpts}</select></div>
         <div class="field" style="margin:0"><label>Valor (R$)</label><input type="number" value="${p.valor||''}" oninput="updProcPele(${i},'valor',this.value)" placeholder="250" style="${fsp};width:100%"></div>
-        <div class="field" style="margin:0"><label>Custo (R$)</label><input type="number" value="${p.custo||''}" oninput="updProcPele(${i},'custo',this.value)" placeholder="80" style="${fsp};width:100%"></div>
+        <div class="field" style="margin:0"><label>${custoLabel}</label><input type="number" value="${p.custo||''}" oninput="updProcPele(${i},'custo',this.value)" placeholder="80" style="${fsp};width:100%"></div>
         <div class="field" style="margin:0"><label>Repasse (%)</label><input type="number" value="${p.repasse?Math.round(p.repasse*100):''}" oninput="updProcPele(${i},'repassePct',this.value)" placeholder="50" style="${fsp};width:100%"></div>
         <button class="btn ghost" style="padding:8px 10px;font-size:12px" onclick="removeProcPele(${i})" title="Remover">×</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
+        <label style="font-size:12px;color:var(--grey)">Tipo de custo:</label>
+        <select onchange="updProcPele(${i},'custoTipo',this.value)" style="${fsp};padding:6px 10px;font-size:13px">
+          <option value="fixado" ${ct==='fixado'?'selected':''}>Fixado (valor definido aqui)</option>
+          <option value="material" ${ct==='material'?'selected':''}>Material (gasto real lançado)</option>
+        </select>
+        <span style="font-size:11.5px;color:var(--grey);font-style:italic">${ct==='material'?'O custo real virá das compras lançadas em Material de Parceiros.':'O custo é sempre este valor por atendimento.'}</span>
       </div>
       <div style="margin-top:8px;font-size:12.5px;color:var(--grey)">${p.func?'':'<b style="color:var(--amber)">⚠ Escolha a profissional para este procedimento aparecer no atendimento dela. </b>'}Lucro: <b style="color:var(--ink)">${BRL(lucro)}</b> · Repasse: <b style="color:var(--amber)">${BRL(rep)}</b> · Instituto: <b style="color:var(--green)">${BRL(inst)}</b></div>
     </div>`;
@@ -3713,13 +3746,14 @@ function renderConfig(pg){
     ${blocos}`;
 }
 // ---- procedimentos de pele ----
-function addProcPele(){ PROCS_PELE.push({id:Date.now()+Math.random(),nome:'',func:'',valor:0,custo:0,repasse:0.5}); go('config'); }
+function addProcPele(){ PROCS_PELE.push({id:Date.now()+Math.random(),nome:'',func:'',valor:0,custo:0,repasse:0.5,custoTipo:'fixado'}); go('config'); }
 function removeProcPele(i){ PROCS_PELE.splice(i,1); go('config'); }
 function updProcPele(i,campo,val){
   if(!PROCS_PELE[i])return;
-  if(campo==='nome'||campo==='func') PROCS_PELE[i][campo]=val;
+  if(campo==='nome'||campo==='func'||campo==='custoTipo') PROCS_PELE[i][campo]=val;
   else if(campo==='repassePct') PROCS_PELE[i].repasse=(+val||0)/100;
   else PROCS_PELE[i][campo]=+val||0;
+  if(campo==='custoTipo') go('config'); // re-render p/ atualizar rótulos
 }
 async function salvarProcsPele(){
   PROCS_PELE=PROCS_PELE.filter(p=>(p.nome||'').trim());
