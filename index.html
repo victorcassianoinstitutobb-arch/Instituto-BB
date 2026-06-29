@@ -670,6 +670,18 @@ let CAIXA_SEQ = 10;
    ============================================================ */
 let MATERIAL_PARC = [];
 let MATPARC_SEQ = 1;
+
+/* ITENS DE COMPRA — autocompletar. Nomes já digitados ficam salvos p/ reuso.
+   Cada despesa pode ter m.itens = [{nome, qtd, valor}] (opcional). */
+let ITENS_CONHECIDOS = [];
+function registrarItens(itens){
+  (itens||[]).forEach(it=>{
+    const n=(it.nome||'').trim(); if(!n) return;
+    if(!ITENS_CONHECIDOS.some(x=>x.toLowerCase()===n.toLowerCase())) ITENS_CONHECIDOS.push(n);
+  });
+  try{ localStorage.setItem('ibb_itens', JSON.stringify(ITENS_CONHECIDOS)); }catch(e){}
+}
+(function(){ try{ const s=localStorage.getItem('ibb_itens'); if(s) ITENS_CONHECIDOS=JSON.parse(s)||[]; }catch(e){} })();
 const TIPOS_LANC = {
   receita:{label:'Receita',sinal:1,cor:'var(--green)',ehReceita:true,ehDespesa:false},
   aporte:{label:'Aporte',sinal:1,cor:'var(--sage)',ehReceita:false,ehDespesa:false},
@@ -1258,7 +1270,8 @@ async function carregarTudo(){
     CARTEIRAS = (cart.data||[]).map(c=>({id:c.id,nome:c.nome,saldoInicial:+c.saldo_inicial}));
     CAT_RECEITA = (cat.data||[]).filter(c=>c.tipo==='receita').map(c=>c.nome);
     CAT_DESPESA = (cat.data||[]).filter(c=>c.tipo==='despesa').map(c=>c.nome);
-    CAIXA = (lanc.data||[]).map(l=>({id:l.id,data:l.data,tipo:l.tipo,categoria:l.categoria,desc:l.descricao,valor:+l.valor,carteira:l.carteira_id,carteiraDest:l.carteira_dest}));
+    CAIXA = (lanc.data||[]).map(l=>({id:l.id,data:l.data,tipo:l.tipo,categoria:l.categoria,desc:l.descricao,valor:+l.valor,carteira:l.carteira_id,carteiraDest:l.carteira_dest,itens:Array.isArray(l.itens)?l.itens:[]}));
+    CAIXA.forEach(l=>{ if(l.itens&&l.itens.length) registrarItens(l.itens); });
     DATA.atendimentos = (atend.data||[]).map(a=>({id:a.id,data:a.data,paciente:a.paciente,proc:a.procedimento,func:a.funcionario,canal:a.canal,valor:+a.valor,custo:+a.custo,pag:a.pagamento,agenda:a.agenda,recebimento:a.recebimento||'',parcelas:+a.parcelas||1,pagamentos:Array.isArray(a.pagamentos)?a.pagamentos:null,procedimentos:Array.isArray(a.procedimentos)?a.procedimentos:null,baixaAplicada:(a.baixa_aplicada&&typeof a.baixa_aplicada==='object')?a.baixa_aplicada:{}}));
     CAPTACAO = (capt.data||[]).map(c=>({id:c.id,data:c.data,plataforma:c.plataforma,seguidores:c.seguidores,leads:c.leads,agendadas:c.agendadas,investido:+c.investido,gasto:+c.gasto,campanhas:c.campanhas}));
     METAS = (met.data||[]).map(m=>({id:m.id,funcId:m.func_id,escopo:m.escopo,tipo:m.tipo,periodo:m.periodo,faixas:m.faixas}));
@@ -3026,7 +3039,7 @@ function renderCaixa(pg){
       <td data-label="Data">${fmtDate(m.data)}</td>
       <td data-label="Tipo" class="ctr"><span class="pill" style="background:${tipoBg(m.tipo)};color:${t.cor}">${t.label}</span></td>
       <td data-label="Categoria">${m.categoria}</td>
-      <td data-label="Descrição">${m.desc}</td>
+      <td data-label="Descrição">${m.desc}${(Array.isArray(m.itens)&&m.itens.length)?` <span style="font-size:10px;color:var(--gold-d);border:1px solid var(--gold-l);border-radius:6px;padding:1px 5px" title="${m.itens.map(it=>it.nome+' '+BRL(it.valor)).join(' · ')}">${m.itens.length} ${m.itens.length===1?'item':'itens'}</span>`:''}</td>
       <td data-label="Carteira" style="font-size:12px;color:var(--grey)">${cartTxt}</td>
       <td data-label="Valor" class="num">${valTxt}</td>
       <td data-label="Saldo" class="num" style="font-weight:600;color:${acc>=0?'var(--ink)':'var(--red)'}">${BRL(acc)}</td>
@@ -3072,6 +3085,35 @@ function renderCaixa(pg){
     totDesp=rDespesa; totRec=rReceita;
   }
 
+  // ---- consolidado de ITENS comprados no mês (do topo) ----
+  const ymItens = mesSelecionadoTopo()||mesHoje();
+  const itAgg={};
+  CAIXA.filter(m=>m.tipo==='despesa' && (m.data||'').slice(0,7)===ymItens && Array.isArray(m.itens))
+    .forEach(m=>{ m.itens.forEach(it=>{
+      const n=(it.nome||'').trim(); if(!n) return;
+      const key=n.toLowerCase();
+      if(!itAgg[key]) itAgg[key]={nome:n, qtd:0, valor:0, vezes:0};
+      itAgg[key].qtd += (+it.qtd||0);
+      itAgg[key].valor += (+it.valor||0);
+      itAgg[key].vezes += 1;
+    }); });
+  const itArr=Object.values(itAgg).sort((a,b)=>b.valor-a.valor);
+  const totItens=itArr.reduce((s,x)=>s+x.valor,0);
+  const resumoItensHTML = itArr.length ? `
+    <div class="panel" style="margin-bottom:18px">
+      <div class="panel-head"><div><h3>Itens comprados — ${rotuloMes(ymItens)}</h3><div class="ph-sub">Consolidado de tudo que você detalhou nas despesas do mês</div></div>
+        <div style="font-size:13px;color:var(--grey)">Total em itens: <b style="color:var(--ink)">${BRL(totItens)}</b></div></div>
+      <div style="overflow-x:auto;margin-top:10px">
+        <table class="data"><thead><tr><th>Item</th><th class="num">Qtd no mês</th><th class="ctr">Compras</th><th class="num">Valor total</th></tr></thead>
+        <tbody>${itArr.map(x=>`<tr>
+          <td><b>${x.nome}</b></td>
+          <td class="num">${(+x.qtd||0).toLocaleString('pt-BR')}</td>
+          <td class="ctr" style="color:var(--grey)">${x.vezes}×</td>
+          <td class="num">${BRL(x.valor)}</td>
+        </tr>`).join('')}</tbody></table>
+      </div>
+    </div>` : '';
+
   pg.innerHTML=`
     <div class="trend-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
       ${cartCards}
@@ -3100,6 +3142,7 @@ function renderCaixa(pg){
       </div>
     </div>
 
+    ${resumoItensHTML}
     <div class="panel" style="margin-bottom:18px">
       <div class="toolbar"><div><h3>Carteiras & Categorias</h3><div class="ph-sub">Cadastre contas e categorias</div></div>
         <div style="display:flex;gap:8px">
@@ -3198,6 +3241,8 @@ function editarLanc(id){
   const tipoOpts=Object.keys(TIPOS_LANC).map(t=>`<option value="${t}" ${t===m.tipo?'selected':''}>${TIPOS_LANC[t].label}</option>`).join('');
   const cartOpts=CARTEIRAS.map(w=>`<option value="${w.id}" ${w.id==m.carteira?'selected':''}>${w.nome}</option>`).join('');
   const cartDestOpts=CARTEIRAS.map(w=>`<option value="${w.id}" ${w.id==m.carteiraDest?'selected':''}>${w.nome}</option>`).join('');
+  // estado de trabalho dos itens da despesa
+  __lancItens = Array.isArray(m.itens) ? m.itens.map(it=>({nome:it.nome||'',qtd:+it.qtd||1,valor:+it.valor||0})) : [];
   document.getElementById('lancFormBox').innerHTML=`
     <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px">
@@ -3209,14 +3254,62 @@ function editarLanc(id){
         <div class="field" id="lc_cartWrap"><label>Carteira</label><select id="lc_cart" style="${fs}">${cartOpts}</select></div>
         <div class="field" id="lc_cartDestWrap" style="display:none"><label>Carteira destino</label><select id="lc_cartDest" style="${fs}">${cartDestOpts}</select></div>
       </div>
+      <div id="lc_itensWrap" style="margin-bottom:12px"></div>
       <div style="display:flex;gap:10px">
         <button class="btn" onclick="salvarLanc('${m.id}')">Salvar</button>
         <button class="btn ghost" onclick="document.getElementById('lancFormBox').innerHTML=''">Cancelar</button>
       </div>
       <div id="lc_hint" style="margin-top:10px;font-size:12px;color:var(--grey);font-style:italic"></div>
-    </div>`;
+    </div>
+    <datalist id="lc_itensList">${ITENS_CONHECIDOS.map(n=>`<option value="${n.replace(/"/g,'&quot;')}">`).join('')}</datalist>`;
   lancTipoMudou();
+  renderLancItens();
   if(m.categoria){const sel=document.getElementById('lc_cat');[...sel.options].forEach(o=>{if(o.value===m.categoria)o.selected=true;});}
+}
+let __lancItens=[];
+function renderLancItens(){
+  const wrap=document.getElementById('lc_itensWrap'); if(!wrap) return;
+  const tipo=(document.getElementById('lc_tipo')||{}).value;
+  // só faz sentido detalhar itens em despesas
+  if(tipo!=='despesa'){ wrap.innerHTML=''; return; }
+  const fsi='padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink)';
+  if(!__lancItens.length){
+    wrap.innerHTML=`<button class="btn ghost" style="padding:6px 12px;font-size:12.5px" onclick="addLancItem()">+ detalhar itens desta compra (opcional)</button>`;
+    return;
+  }
+  const totalItens=__lancItens.reduce((s,it)=>s+(+it.valor||0),0);
+  wrap.innerHTML=`
+    <div style="border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--paper)">
+      <div style="font-size:12px;font-weight:600;color:var(--gold-d);margin-bottom:10px">Itens da compra</div>
+      <div style="display:grid;grid-template-columns:80px 1fr 130px auto;gap:8px;font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">
+        <span>Qtd</span><span>Item</span><span>Valor (R$)</span><span></span>
+      </div>
+      ${__lancItens.map((it,i)=>`<div style="display:grid;grid-template-columns:80px 1fr 130px auto;gap:8px;margin-bottom:6px;align-items:center">
+        <input type="number" step="any" value="${it.qtd||''}" oninput="updLancItem(${i},'qtd',this.value)" placeholder="1" style="${fsi};text-align:center">
+        <input list="lc_itensList" value="${(it.nome||'').replace(/"/g,'&quot;')}" oninput="updLancItem(${i},'nome',this.value)" placeholder="ex: Café, Leite, Capuccino" style="${fsi}">
+        <input type="number" step="any" value="${it.valor||''}" oninput="updLancItem(${i},'valor',this.value)" placeholder="0,00" style="${fsi}">
+        <button class="btn ghost" style="padding:6px 9px;font-size:12px" onclick="removeLancItem(${i})" title="Remover">×</button>
+      </div>`).join('')}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;border-top:1px solid var(--line);padding-top:10px">
+        <button class="btn ghost" style="padding:6px 12px;font-size:12.5px" onclick="addLancItem()">+ adicionar item</button>
+        <div style="font-size:13px;color:var(--grey)">Soma dos itens: <b id="lc_somaItens" style="color:var(--ink)">${BRL(totalItens)}</b>
+          <button class="btn ghost" style="padding:4px 10px;font-size:11.5px;margin-left:8px" onclick="usarSomaItens()" title="Preencher o valor da despesa com a soma dos itens">↑ usar como valor</button>
+        </div>
+      </div>
+    </div>`;
+}
+function addLancItem(){ __lancItens.push({nome:'',qtd:1,valor:0}); renderLancItens(); }
+function removeLancItem(i){ __lancItens.splice(i,1); renderLancItens(); }
+function updLancItem(i,campo,val){
+  if(!__lancItens[i])return;
+  if(campo==='nome') __lancItens[i].nome=val;
+  else __lancItens[i][campo]=+val||0;
+  const soma=__lancItens.reduce((s,it)=>s+(+it.valor||0),0);
+  const el=document.getElementById('lc_somaItens'); if(el) el.textContent=BRL(soma);
+}
+function usarSomaItens(){
+  const soma=__lancItens.reduce((s,it)=>s+(+it.valor||0),0);
+  const inp=document.getElementById('lc_valor'); if(inp){ inp.value=soma; }
 }
 function lancTipoMudou(){
   const tipo=document.getElementById('lc_tipo').value;
@@ -3235,16 +3328,22 @@ function lancTipoMudou(){
   catWrap.style.display = tipo==='transferencia'?'none':'block';
   const hints={receita:'Entra na carteira E conta como faturamento.',aporte:'Entra na carteira, mas NÃO é receita (reforço de caixa).',despesa:'Sai da carteira e conta como gasto da clínica.',retirada:'Sai da carteira, mas NÃO é despesa (retirada de lucro/pró-labore).',transferencia:'Move saldo de uma carteira para outra — neutro no total.'};
   hint.textContent=hints[tipo]||'';
+  if(typeof renderLancItens==='function') renderLancItens();
 }
 async function salvarLanc(id){
   const v=i=>document.getElementById(i).value;
   const tipo=v('lc_tipo');
+  // itens válidos (com nome) — só para despesa
+  const itens = (tipo==='despesa')
+    ? (__lancItens||[]).filter(it=>(it.nome||'').trim()).map(it=>({nome:it.nome.trim(),qtd:+it.qtd||1,valor:+it.valor||0}))
+    : [];
+  registrarItens(itens);
   const dados={data:v('lc_data'),tipo,
     categoria: tipo==='transferencia'?'Transferência':v('lc_cat'),
     desc:v('lc_desc')||'—',valor:+v('lc_valor')||0,carteira:+v('lc_cart'),
-    carteiraDest: tipo==='transferencia'?+v('lc_cartDest'):null};
+    carteiraDest: tipo==='transferencia'?+v('lc_cartDest'):null, itens};
   if(MODO_NUVEM){
-    const reg={data:dados.data,tipo:dados.tipo,categoria:dados.categoria,descricao:dados.desc,valor:dados.valor,carteira_id:document.getElementById('lc_cart').value,carteira_dest:tipo==='transferencia'?document.getElementById('lc_cartDest').value:null};
+    const reg={data:dados.data,tipo:dados.tipo,categoria:dados.categoria,descricao:dados.desc,valor:dados.valor,carteira_id:document.getElementById('lc_cart').value,carteira_dest:tipo==='transferencia'?document.getElementById('lc_cartDest').value:null,itens:itens};
     if(id && id!=='0') await sbUpdate('lancamentos',id,reg); else await sbInsert('lancamentos',reg);
     await carregarTudo(); go('caixa'); return;
   }
