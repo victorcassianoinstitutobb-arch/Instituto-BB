@@ -891,13 +891,20 @@ let CAT_CONTAS = ['Equipamento','Fornecedor','Aluguel','Salário','Imposto','Sof
 // O consumo do mês é calculado a partir dos atendimentos (procedimentos que abatem produto).
 // Saldo atual do mês = saldo inicial − consumido no mês.
 let ESTOQUE = [];          // [{id, produto, unidade, minimo, custoUnit}]
-let ESTOQUE_MES = {};      // { '2026-06': { '<produtoId>': <saldoInicial> } }
+// ESTOQUE_MES[ym][pid] pode ser:
+//   - número (formato antigo): saldo inicial direto
+//   - {sobra, compra} (novo): sobra do mês anterior + compras do mês
+let ESTOQUE_MES = {};
 let EST_SEQ = 1;
 let EST_MOV = [];
 let MOV_SEQ = 1;
 const UNIDADES = ['un','ml','frasco','caixa','ampola','seringa','kit'];
-// saldo inicial lançado para um produto num mês (0 se não lançado)
-function saldoInicialMes(pid, ym){ return (ESTOQUE_MES[ym] && +ESTOQUE_MES[ym][pid]) || 0; }
+// helpers que entendem os dois formatos
+function regMes(pid, ym){ const r=(ESTOQUE_MES[ym]||{})[pid]; if(r==null) return null; return (typeof r==='object')?r:{sobra:0, compra:+r||0}; }
+function sobraLancada(pid, ym){ const r=regMes(pid,ym); return r?(+r.sobra||0):0; }
+function compraMes(pid, ym){ const r=regMes(pid,ym); return r?(+r.compra||0):0; }
+// saldo inicial = sobra do mês anterior (lançada) + compras do mês
+function saldoInicialMes(pid, ym){ const r=regMes(pid,ym); return r?((+r.sobra||0)+(+r.compra||0)):0; }
 // consumo de um produto num mês — calculado DIRETO dos procedimentos dos atendimentos
 // comparecidos do mês (fonte real). Assim não depende de baixaAplicada estar gravado.
 function consumoMes(pid, ym){
@@ -916,6 +923,13 @@ function consumoMes(pid, ym){
 }
 // saldo atual de um produto num mês = inicial − consumido
 function saldoAtualMes(pid, ym){ return saldoInicialMes(pid,ym) - consumoMes(pid,ym); }
+// grava um componente (sobra ou compra) preservando o outro
+function setRegMes(pid, ym, campo, val){
+  if(!ESTOQUE_MES[ym]) ESTOQUE_MES[ym]={};
+  const atual=regMes(pid,ym)||{sobra:0,compra:0};
+  atual[campo]=+val||0;
+  ESTOQUE_MES[ym][pid]=atual;
+}
 
 /* ===== Faturamento histórico (meses anteriores lançados manualmente) ===== */
 // permite registrar o faturamento/custo de meses que já passaram, sem precisar
@@ -4518,22 +4532,26 @@ function renderEstoque(pg){
   const mesOpts=mesesLista.map(m=>`<option value="${m}" ${m===ym?'selected':''}>${rotuloMes(m)}${m===mesHoje()?' (mês atual)':''}</option>`).join('');
 
   const linhas=ESTOQUE.map(e=>{
-    const ini=saldoInicialMes(e.id,ym);
+    const sobra=sobraLancada(e.id,ym);
+    const compra=compraMes(e.id,ym);
+    const ini=sobra+compra;
     const cons=consumoMes(e.id,ym);
     const atual=ini-cons;
     const sobrouAnt=saldoAtualMes(e.id,ant); // o que sobrou no mês anterior
     const alerta=e.minimo>0 && atual<=e.minimo;
+    const inp='width:74px;padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:var(--paper);color:var(--ink);font-family:inherit;text-align:center';
     return `<tr>
       <td><b>${e.produto}</b> <span style="color:var(--grey);font-size:11px">${e.unidade||''}</span></td>
-      <td class="ctr">${sobrouAnt>0?`<span style="color:var(--gold-d)">${sobrouAnt}</span>`:'<span style="color:var(--grey)">—</span>'}</td>
-      <td class="ctr"><input type="number" step="any" value="${ini||''}" onchange="setSaldoInicial('${e.id}',this.value)" style="width:80px;padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:var(--paper);color:var(--ink);font-family:inherit;text-align:center" placeholder="0"></td>
+      <td class="ctr">${sobrouAnt>0?`<span style="color:var(--gold-d)" title="Sobrou no mês anterior">${sobrouAnt}</span> ${(!sobra&&!compra)?`<button class="btn ghost" style="padding:2px 7px;font-size:10px" onclick="puxarSobra('${e.id}')" title="Trazer ${sobrouAnt} para a coluna Sobrou">↓</button>`:''}`:'<span style="color:var(--grey)">—</span>'}</td>
+      <td class="ctr"><input type="number" step="any" value="${sobra||''}" onchange="setSobra('${e.id}',this.value)" style="${inp}" placeholder="0" title="Quanto sobrou do mês anterior"></td>
+      <td class="ctr"><input type="number" step="any" value="${compra||''}" onchange="setCompra('${e.id}',this.value)" style="${inp};border-color:var(--gold-l)" placeholder="0" title="Quanto você comprou neste mês"></td>
+      <td class="ctr" style="font-weight:600">${ini||'—'}</td>
       <td class="ctr" style="color:var(--red)">${cons||'—'}</td>
       <td class="ctr" style="font-weight:700;color:${atual<0?'var(--red)':alerta?'var(--amber)':'var(--ink)'}">${atual}</td>
       <td class="ctr">${e.minimo||'—'}</td>
       <td class="ctr">${e.custoUnit?BRL(e.custoUnit):'<span style="color:var(--amber)">definir</span>'}</td>
       <td class="ctr">${atual<0?'<span style="color:var(--red);font-size:12px;font-weight:600">⚠ negativo</span>':alerta?'<span style="color:var(--amber);font-size:12px;font-weight:600">⚠ repor</span>':'<span style="color:var(--green);font-size:12px">ok</span>'}</td>
       <td class="ctr">
-        ${sobrouAnt>0&&!ini?`<button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="puxarSobra('${e.id}')" title="Trazer ${sobrouAnt} do mês anterior">↓ usar sobra</button> `:''}
         <button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="editarProduto('${e.id}')">editar</button>
         <button class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="excluirProduto('${e.id}')">×</button>
       </td>
@@ -4562,8 +4580,8 @@ function renderEstoque(pg){
       </div>
       <div id="produtoFormBox"></div>
       <table class="data">
-        <thead><tr><th>Produto</th><th class="ctr">Sobrou ${mesAnoCurto(ant)}</th><th class="ctr">Saldo inicial</th><th class="ctr">Consumido</th><th class="ctr">Saldo atual</th><th class="ctr">Mínimo</th><th class="ctr">Custo/un</th><th class="ctr">Status</th><th class="ctr">Ações</th></tr></thead>
-        <tbody>${linhas||'<tr><td colspan="9" style="text-align:center;color:var(--grey);padding:24px">Nenhum produto cadastrado. Clique em "Novo produto".</td></tr>'}</tbody>
+        <thead><tr><th>Produto</th><th class="ctr">Sobrou ${mesAnoCurto(ant)}</th><th class="ctr">Sobra (usar)</th><th class="ctr">Comprei este mês</th><th class="ctr">Saldo inicial</th><th class="ctr">Consumido</th><th class="ctr">Saldo atual</th><th class="ctr">Mínimo</th><th class="ctr">Custo/un</th><th class="ctr">Status</th><th class="ctr">Ações</th></tr></thead>
+        <tbody>${linhas||'<tr><td colspan="11" style="text-align:center;color:var(--grey);padding:24px">Nenhum produto cadastrado. Clique em "Novo produto".</td></tr>'}</tbody>
       </table>
       <div style="font-size:12px;color:var(--grey);font-style:italic;margin-top:12px">
         <b>Como funciona:</b> "Saldo inicial" é o que você tinha no começo do mês (sobra do mês anterior + compras). "Consumido" soma o que os atendimentos do mês usaram. "Saldo atual" = inicial − consumido. Para adicionar uma compra no meio do mês, basta somar ao saldo inicial.
@@ -4592,29 +4610,40 @@ function consumoDetalhado(ym){
     return `<tr><td><b>${e.produto}</b></td><td class="ctr" style="color:var(--red);font-weight:600">${tot} ${e.unidade||''}</td><td style="font-size:12px;color:var(--grey)">${usos.join(' · ')}</td></tr>`;
   }).filter(Boolean).join('');
 }
-// define o saldo inicial de um produto no mês selecionado
+// define a SOBRA do mês anterior (componente) no mês selecionado
+async function setSobra(pid, val){
+  const ym=window.__estMes||mesHoje();
+  setRegMes(pid, ym, 'sobra', val);
+  await persistirEstoqueMes();
+  go('estoque');
+}
+// define a COMPRA do mês (componente) no mês selecionado
+async function setCompra(pid, val){
+  const ym=window.__estMes||mesHoje();
+  setRegMes(pid, ym, 'compra', val);
+  await persistirEstoqueMes();
+  go('estoque');
+}
+// compatibilidade: define saldo inicial direto (cai na "compra")
 async function setSaldoInicial(pid, val){
   const ym=window.__estMes||mesHoje();
-  if(!ESTOQUE_MES[ym]) ESTOQUE_MES[ym]={};
-  ESTOQUE_MES[ym][pid]=+val||0;
+  setRegMes(pid, ym, 'compra', val);
   await persistirEstoqueMes();
   go('estoque');
 }
-// traz a sobra do mês anterior como saldo inicial deste mês (um produto)
+// traz a sobra do mês anterior para a coluna "Sobra" deste mês (um produto)
 async function puxarSobra(pid){
   const ym=window.__estMes||mesHoje();
-  const sobra=saldoAtualMes(pid, mesAnterior(ym));
-  if(!ESTOQUE_MES[ym]) ESTOQUE_MES[ym]={};
-  ESTOQUE_MES[ym][pid]=Math.max(0,sobra);
+  const sobra=Math.max(0, saldoAtualMes(pid, mesAnterior(ym)));
+  setRegMes(pid, ym, 'sobra', sobra);
   await persistirEstoqueMes();
   go('estoque');
 }
-// traz todas as sobras do mês anterior
+// traz todas as sobras do mês anterior para a coluna "Sobra"
 async function puxarTodasSobras(){
   const ym=window.__estMes||mesHoje();
   const ant=mesAnterior(ym);
-  if(!ESTOQUE_MES[ym]) ESTOQUE_MES[ym]={};
-  ESTOQUE.forEach(e=>{ if(!saldoInicialMes(e.id,ym)){ const s=saldoAtualMes(e.id,ant); if(s>0) ESTOQUE_MES[ym][e.id]=s; } });
+  ESTOQUE.forEach(e=>{ if(!sobraLancada(e.id,ym)){ const s=Math.max(0,saldoAtualMes(e.id,ant)); if(s>0) setRegMes(e.id, ym, 'sobra', s); } });
   await persistirEstoqueMes();
   toast('Sobras de '+rotuloMes(ant)+' trazidas');
   go('estoque');
@@ -4632,7 +4661,7 @@ function abrirProdutoForm(prodEdit){
   const e = prodEdit || null;
   const uniOpts=UNIDADES.map(u=>`<option ${u===(e?e.unidade:'un')?'selected':''}>${u}</option>`).join('');
   const ym=window.__estMes||mesHoje();
-  const saldoIniAtual = e ? saldoInicialMes(e.id,ym) : 0;
+  const saldoIniAtual = e ? compraMes(e.id,ym) : 0;
   document.getElementById('produtoFormBox').innerHTML=`
     <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
       <div style="font-size:13px;font-weight:600;color:var(--gold-d);margin-bottom:10px">${e?'Editar produto':'Novo produto'}</div>
@@ -4640,7 +4669,7 @@ function abrirProdutoForm(prodEdit){
         <div class="field" style="grid-column:span 2"><label>Produto</label><input id="pr_nome" value="${e?(e.produto||'').replace(/"/g,'&quot;'):''}" placeholder="Ex: Toxina Botulínica 100U" style="${fs}"></div>
         <div class="field"><label>Unidade</label><select id="pr_uni" style="${fs}">${uniOpts}</select></div>
         <div class="field"><label>Estoque mínimo</label><input type="number" id="pr_min" value="${e?(e.minimo||0):0}" style="${fs}"></div>
-        <div class="field"><label>Saldo inicial de ${rotuloMes(ym)}</label><input type="number" id="pr_qtd" value="${saldoIniAtual||0}" style="${fs}"></div>
+        <div class="field"><label>Comprei este mês (${rotuloMes(ym)})</label><input type="number" id="pr_qtd" value="${saldoIniAtual||0}" style="${fs}"></div>
         <div class="field"><label>Custo unitário / ${e?e.unidade:'un'} (R$)</label><input type="number" step="any" id="pr_custo" value="${e?(e.custoUnit||0):0}" style="${fs}"></div>
       </div>
       <div style="display:flex;gap:10px">
@@ -4660,16 +4689,16 @@ async function salvarProduto(id){
   if(MODO_NUVEM){
     if(ehEdicao){
       await sb.from('estoque').update({produto:prod.produto,unidade:prod.unidade,minimo:prod.minimo,custo_unit:prod.custoUnit}).eq('id',id);
-      if(!ESTOQUE_MES[ym])ESTOQUE_MES[ym]={}; ESTOQUE_MES[ym][id]=saldoIni; await persistirEstoqueMes();
+      setRegMes(id,ym,'compra',saldoIni); await persistirEstoqueMes();
     } else {
       const { data } = await sb.from('estoque').insert({produto:prod.produto,unidade:prod.unidade,minimo:prod.minimo,custo_unit:prod.custoUnit}).select();
       const novoId = (data&&data[0])?data[0].id:null;
-      if(novoId && saldoIni){ if(!ESTOQUE_MES[ym])ESTOQUE_MES[ym]={}; ESTOQUE_MES[ym][novoId]=saldoIni; await persistirEstoqueMes(); }
+      if(novoId && saldoIni){ setRegMes(novoId,ym,'compra',saldoIni); await persistirEstoqueMes(); }
     }
     await carregarTudo(); window.__lastCalc=null; go('estoque'); return;
   }
-  if(ehEdicao){ const ex=ESTOQUE.find(x=>String(x.id)===String(id)); if(ex) Object.assign(ex,prod); if(!ESTOQUE_MES[ym])ESTOQUE_MES[ym]={}; ESTOQUE_MES[ym][id]=saldoIni; }
-  else { prod.id=EST_SEQ++; ESTOQUE.push(prod); if(saldoIni){ if(!ESTOQUE_MES[ym])ESTOQUE_MES[ym]={}; ESTOQUE_MES[ym][prod.id]=saldoIni; } }
+  if(ehEdicao){ const ex=ESTOQUE.find(x=>String(x.id)===String(id)); if(ex) Object.assign(ex,prod); setRegMes(id,ym,'compra',saldoIni); }
+  else { prod.id=EST_SEQ++; ESTOQUE.push(prod); if(saldoIni){ setRegMes(prod.id,ym,'compra',saldoIni); } }
   window.__lastCalc=null; go('estoque');
 }
 async function excluirProduto(id){
