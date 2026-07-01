@@ -2069,9 +2069,13 @@ async function excluirAtend(id){
 /* ============================ LEADS ============================ */
 function renderLeads(pg){
   const grao=window.__captGrao||'dia';
-  // agrega captação por plataforma no período todo
+  // cada mês é independente: mostra só a captação do mês selecionado no topo
+  const _perCapt = (typeof periodoSelecionadoIntervalo==='function') ? periodoSelecionadoIntervalo() : null;
+  const _dentroCapt = (d)=> !_perCapt || (d && d>=_perCapt.ini && d<=_perCapt.fim);
+  const CAPT_MES = CAPTACAO.filter(c=>_dentroCapt(c.data));
+  // agrega captação por plataforma no período selecionado
   const porPlat={};
-  CAPTACAO.forEach(c=>{
+  CAPT_MES.forEach(c=>{
     if(!porPlat[c.plataforma]) porPlat[c.plataforma]={plataforma:c.plataforma,seguidores:0,leads:0,agendadas:0,investido:0,gasto:0,campanhas:0};
     const p=porPlat[c.plataforma];
     p.seguidores+=c.seguidores||0; p.leads+=c.leads||0; p.agendadas+=c.agendadas||0;
@@ -2086,7 +2090,7 @@ function renderLeads(pg){
   const cpl=totLeads&&totGasto?totGasto/totLeads:0;
 
   // tabela de lançamentos (linha a linha, editável)
-  const linhas=[...CAPTACAO].sort((a,b)=>b.data.localeCompare(a.data)).map(c=>{
+  const linhas=[...CAPT_MES].sort((a,b)=>b.data.localeCompare(a.data)).map(c=>{
     const conv=c.leads?(c.agendadas/c.leads):0;
     return `<tr>
       <td>${fmtDate(c.data)}</td>
@@ -3057,8 +3061,10 @@ function renderCaixa(pg){
   const filtro=window.__caixaFiltro||'todas';
   const todas = filtro==='todas';
   // movimentos do período (filtrados por carteira quando aplicável)
-  // numa transferência, a carteira aparece tanto como origem quanto destino
-  const movFull=[...CAIXA].sort((a,b)=>a.data.localeCompare(b.data));
+  // a LISTA mostra só o mês selecionado (cada mês é independente); o SALDO segue acumulado (calcCaixa)
+  const _perLista = (typeof periodoSelecionadoIntervalo==='function') ? periodoSelecionadoIntervalo() : null;
+  const _dentroLista = (d)=> !_perLista || (d && d>=_perLista.ini && d<=_perLista.fim);
+  const movFull=[...CAIXA].filter(m=>_dentroLista(m.data)).sort((a,b)=>a.data.localeCompare(b.data));
   const mov = todas ? movFull : movFull.filter(m=>String(m.carteira)===String(filtro)||String(m.carteiraDest)===String(filtro));
   // resumo da carteira selecionada (entradas e saídas que tocam aquela carteira)
   let rDespesa=0,rReceita=0,rAporte=0,rRetirada=0,rEntraTransf=0,rSaiTransf=0;
