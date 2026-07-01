@@ -730,9 +730,13 @@ const cartNome = id => (CARTEIRAS.find(c=>c.id===id)||{}).nome || '—';
 
 
 // valor realizado de uma meta, respeitando escopo (geral x individual) e funcionário
-let META_MES = null; // AAAA-MM de referência das metas
+let META_MES = null; // (legado) mantido por compatibilidade; metas agora seguem o mês do topo
 function metaMesRef(){
-  if(META_MES) return META_MES;
+  // as metas seguem o mês selecionado no topo (igual às demais abas)
+  if(typeof mesSelecionadoTopo==='function'){
+    const ym=mesSelecionadoTopo();
+    if(ym) return ym;
+  }
   const datas=DATA.atendimentos.map(a=>a.data).filter(Boolean).sort();
   return datas.length? datas[datas.length-1].slice(0,7) : new Date().toISOString().slice(0,7);
 }
@@ -755,6 +759,16 @@ function realizadoMeta(meta){
     return 0;
   }
   const nome = funcNome(meta.funcId);
+  // se a pessoa NÃO atende (apoio/recepção/admin), a meta de faturamento/agendamentos
+  // é medida pelo desempenho da CLÍNICA no mês (ela não gera atendimentos próprios).
+  const f = (FUNCIONARIOS||[]).find(x=>x.nome===nome);
+  const atende = f ? (f.atende!==false) : true;
+  if(!atende){
+    if(tipo==='faturamento') return DATA.atendimentos.filter(a=>a.agenda==='Compareceu'&&a.data.slice(0,7)===mesRef).reduce((s,a)=>s+a.valor,0);
+    if(tipo==='agendamentos') return DATA.atendimentos.filter(a=>a.agenda==='Compareceu'&&a.data.slice(0,7)===mesRef).length;
+    if(tipo==='leads') return CAPTACAO.filter(c=>c.data.slice(0,7)===mesRef).reduce((s,c)=>s+(c.leads||0),0);
+    return 0;
+  }
   const at = DATA.atendimentos.filter(a=>a.func===nome && a.agenda==='Compareceu' && a.data.slice(0,7)===mesRef);
   if(tipo==='faturamento') return at.reduce((s,a)=>s+a.valor,0);
   if(tipo==='agendamentos') return at.length;
@@ -768,6 +782,8 @@ function realizadoPorSemana(meta){
   const tipo=meta.tipo;
   const semanas=[1,2,3,4,5];
   const nome= meta.escopo==='individual'? funcNome(meta.funcId): null;
+  const fSem = nome ? (FUNCIONARIOS||[]).find(x=>x.nome===nome) : null;
+  const atendeSem = fSem ? (fSem.atende!==false) : true;
   return semanas.map(sem=>{
     const filtraSemana=(data)=>{
       if(data.slice(0,7)!==mesRef) return false;
@@ -777,7 +793,8 @@ function realizadoPorSemana(meta){
     let val=0;
     if(tipo==='faturamento'||tipo==='agendamentos'){
       let at=DATA.atendimentos.filter(a=>a.agenda==='Compareceu'&&filtraSemana(a.data));
-      if(nome) at=at.filter(a=>a.func===nome);
+      // só filtra por pessoa se ela atende; apoio mede a clínica toda
+      if(nome && atendeSem) at=at.filter(a=>a.func===nome);
       val= tipo==='faturamento'? at.reduce((s,a)=>s+a.valor,0): at.length;
     } else if(tipo==='leads'){
       val=CAPTACAO.filter(c=>filtraSemana(c.data)).reduce((s,c)=>s+(c.leads||0),0);
@@ -2412,20 +2429,12 @@ function renderComissoes(pg){
   const avaliadas = METAS.map(m=>({meta:m, av:avaliarMeta(m)}));
   const totalBonus = avaliadas.reduce((s,x)=>s+x.av.bonus,0);
   const pessoas = [...new Set(METAS.map(m=>funcNome(m.funcId)))];
-  // opções de mês (a partir de atendimentos + mês atual)
-  const meses=[...new Set(DATA.atendimentos.map(a=>a.data.slice(0,7)))].sort().reverse();
-  if(!meses.includes(mesRef)) meses.unshift(mesRef);
-  const mesOpts=meses.map(m=>`<option value="${m}" ${m===mesRef?'selected':''}>${mesAnoCurto(m)}</option>`).join('');
 
   // cards resumo
   const atingidas = avaliadas.filter(x=>x.av.atingida).length;
   pg.innerHTML=`
     <div class="panel" style="margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
-      <div><h3 style="font-size:18px">Metas do mês</h3><div class="ph-sub">As metas são contabilizadas sobre o mês selecionado${MODO_NUVEM?'':''}. Metas semanais mostram cada semana desse mês.</div></div>
-      <div style="display:flex;align-items:center;gap:10px">
-        <label style="font-size:12px;color:var(--grey)">Mês de referência</label>
-        <select onchange="setMetaMes(this.value)" style="padding:8px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink)">${mesOpts}</select>
-      </div>
+      <div><h3 style="font-size:18px">Metas do mês — ${rotuloMes(mesRef)}</h3><div class="ph-sub">As metas são contabilizadas sobre o mês selecionado no topo. Metas semanais mostram cada semana desse mês.</div></div>
     </div>
     <div class="trend-grid" style="grid-template-columns:repeat(3,1fr)">
       <div class="tcard" style="animation-delay:0ms">
