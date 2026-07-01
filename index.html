@@ -1384,7 +1384,12 @@ async function carregarTudo(){
         METAS_POR_MES[mesHoje()] = row.valores;
       }
       if(row.chave==='metas_por_mes' && row.valores && typeof row.valores==='object' && !Array.isArray(row.valores)){
-        METAS_POR_MES = row.valores;
+        // mescla por mês (não sobrescreve tudo): protege contra linhas duplicadas/parciais
+        Object.keys(row.valores).forEach(ym=>{
+          const arr=row.valores[ym];
+          if(Array.isArray(arr) && arr.length){ METAS_POR_MES[ym]=arr; }
+          else if(!METAS_POR_MES[ym]){ METAS_POR_MES[ym]=arr||[]; }
+        });
       }
       if(row.chave==='estoque_mes' && row.valores && typeof row.valores==='object' && !Array.isArray(row.valores)){
         ESTOQUE_MES = row.valores;
@@ -4017,8 +4022,15 @@ async function salvarMetasLivres(){
   // mantém o ponteiro do mês atual sincronizado
   METAS_LIVRES = metasDoMes(mesHoje());
   if(MODO_NUVEM){
-    const { data:{ user } } = await sb.auth.getUser();
-    await sb.from('configuracoes').upsert({user_id:user.id,chave:'metas_por_mes',valores:METAS_POR_MES},{onConflict:'user_id,chave'});
+    try{
+      const { data:{ user } } = await sb.auth.getUser();
+      // relê o que está salvo e MESCLA, para nunca perder meses de outra sessão
+      const { data:existente } = await sb.from('configuracoes').select('valores').eq('user_id',user.id).eq('chave','metas_por_mes').maybeSingle();
+      const base = (existente && existente.valores && typeof existente.valores==='object' && !Array.isArray(existente.valores)) ? existente.valores : {};
+      const merged = {...base, ...METAS_POR_MES}; // o estado local (mais recente) prevalece por mês
+      METAS_POR_MES = merged;
+      await sb.from('configuracoes').upsert({user_id:user.id,chave:'metas_por_mes',valores:merged},{onConflict:'user_id,chave'});
+    }catch(e){ console.error('Erro ao salvar metas:',e); alert('Não consegui salvar as metas na nuvem. Verifique a conexão e tente de novo.'); }
   }
   window.__lastCalc=null;
   go('config'); toast('Metas de '+rotuloMes(metaMesSel)+' salvas');
