@@ -632,33 +632,31 @@ let FUNC_TIPOS = ['Profissional','Apoio','Parceiro','Administrativo'];
            'geral'      (mede o total da clínica)
    funcId: id do funcionário dono da meta
    ============================================================ */
-let METAS = [
-  {
-    id:1, funcId:1, escopo:'individual', tipo:'faturamento', periodo:'mensal',
-    faixas:[
-      {nome:'Mínima', alvo:30000, bonus:{tipo:'fixo', valor:500}},
-      {nome:'Média',  alvo:45000, bonus:{tipo:'fixo', valor:1200}},
-      {nome:'Máxima', alvo:60000, bonus:{tipo:'fixo', valor:2500}},
-    ]
-  },
-  {
-    id:2, funcId:1, escopo:'individual', tipo:'agendamentos', periodo:'mensal',
-    faixas:[
-      {nome:'Mínima', alvo:8,  bonus:{tipo:'fixo', valor:200}},
-      {nome:'Média',  alvo:12, bonus:{tipo:'fixo', valor:500}},
-      {nome:'Máxima', alvo:18, bonus:{tipo:'fixo', valor:900}},
-    ]
-  },
-  {
-    id:3, funcId:2, escopo:'geral', tipo:'leads', periodo:'mensal',
-    faixas:[
-      {nome:'Mínima', alvo:10, bonus:{tipo:'fixo', valor:150}},
-      {nome:'Média',  alvo:15, bonus:{tipo:'fixo', valor:350}},
-      {nome:'Máxima', alvo:25, bonus:{tipo:'fixo', valor:600}},
-    ]
-  },
-];
-let METAS_SEQ = 4;
+// Metas por MÊS: cada mês tem seu próprio conjunto (começam vazios).
+// METAS_MES = { 'AAAA-MM': [ {meta}, ... ] }
+// METAS é sempre um espelho do mês ATIVO (carregado por carregarMetasDoMes()).
+let METAS_MES = {};
+let METAS = [];        // espelho do mês ativo — não editar direto, usar via carregarMetasDoMes
+let METAS_SEQ = 1;
+// dados de exemplo (modo local): metas só em junho/2026, para demonstração
+(function(){
+  METAS_MES['2026-06'] = [
+    {id:1, funcId:1, escopo:'individual', tipo:'faturamento', periodo:'mensal',
+      faixas:[{nome:'Mínima', alvo:30000, bonus:{tipo:'fixo', valor:500}},{nome:'Média', alvo:45000, bonus:{tipo:'fixo', valor:1200}},{nome:'Máxima', alvo:60000, bonus:{tipo:'fixo', valor:2500}}]},
+    {id:2, funcId:1, escopo:'individual', tipo:'agendamentos', periodo:'mensal',
+      faixas:[{nome:'Mínima', alvo:8, bonus:{tipo:'fixo', valor:200}},{nome:'Média', alvo:12, bonus:{tipo:'fixo', valor:500}},{nome:'Máxima', alvo:18, bonus:{tipo:'fixo', valor:900}}]},
+  ];
+  METAS_SEQ = 3;
+})();
+// mês ativo das metas = mês do topo
+function metasMesAtivo(){ return (typeof mesSelecionadoTopo==='function' && mesSelecionadoTopo()) || mesHoje(); }
+// carrega METAS (espelho) com as metas do mês ativo
+function carregarMetasDoMes(){
+  const ym=metasMesAtivo();
+  if(!METAS_MES[ym]) METAS_MES[ym]=[];
+  METAS = METAS_MES[ym];
+  return METAS;
+}
 const TIPO_META = {
   faturamento:{label:'Faturamento', unidade:'R$', fmt:v=>BRL(v)},
   leads:{label:'Leads', unidade:'un', fmt:v=>v+' leads'},
@@ -1347,7 +1345,13 @@ async function carregarTudo(){
     CAIXA.forEach(l=>{ if(l.itens&&l.itens.length) registrarItens(l.itens); });
     DATA.atendimentos = (atend.data||[]).map(a=>({id:a.id,data:a.data,paciente:a.paciente,proc:a.procedimento,func:a.funcionario,canal:a.canal,valor:+a.valor,custo:+a.custo,pag:a.pagamento,agenda:a.agenda,recebimento:a.recebimento||'',parcelas:+a.parcelas||1,pagamentos:Array.isArray(a.pagamentos)?a.pagamentos:null,procedimentos:Array.isArray(a.procedimentos)?a.procedimentos:null,baixaAplicada:(a.baixa_aplicada&&typeof a.baixa_aplicada==='object')?a.baixa_aplicada:{}}));
     CAPTACAO = (capt.data||[]).map(c=>({id:c.id,data:c.data,plataforma:c.plataforma,seguidores:c.seguidores,leads:c.leads,agendadas:c.agendadas,investido:+c.investido,gasto:+c.gasto,campanhas:c.campanhas}));
-    METAS = (met.data||[]).map(m=>({id:m.id,funcId:m.func_id,escopo:m.escopo,tipo:m.tipo,periodo:m.periodo,faixas:m.faixas}));
+    METAS_MES = {};
+    (met.data||[]).forEach(m=>{
+      const ym = m.mes || mesHoje();
+      if(!METAS_MES[ym]) METAS_MES[ym]=[];
+      METAS_MES[ym].push({id:m.id,funcId:m.func_id,escopo:m.escopo,tipo:m.tipo,periodo:m.periodo,faixas:m.faixas});
+    });
+    carregarMetasDoMes();
     DATA.conformidade = (conf.data||[]).map(c=>({id:c.id,item:c.item,resp:c.responsavel,status:c.status}));
     // contas a pagar/receber + estoque
     const [contasR, estR, movR, matR] = await Promise.all([
@@ -2424,6 +2428,7 @@ function responder(pergunta){
 /* ============================ COMISSÕES ============================ */
 function renderComissoes(pg){
   const k=calc();
+  carregarMetasDoMes();       // METAS = metas do mês do topo
   const mesRef=metaMesRef();
   // avalia todas as metas
   const avaliadas = METAS.map(m=>({meta:m, av:avaliarMeta(m)}));
@@ -2587,18 +2592,21 @@ async function salvarMeta(id){
     tipo:document.getElementById('m_tipo').value,
     periodo:document.getElementById('m_periodo').value,
     faixas:lerFaixas()};
+  const ymMeta=metasMesAtivo();
   if(MODO_NUVEM){
-    const reg={func_id:funcVal,escopo:dados.escopo,tipo:dados.tipo,periodo:dados.periodo,faixas:dados.faixas};
+    const reg={func_id:funcVal,escopo:dados.escopo,tipo:dados.tipo,periodo:dados.periodo,faixas:dados.faixas,mes:ymMeta};
     if(id && id!=='0') await sbUpdate('metas',id,reg); else await sbInsert('metas',reg);
     await carregarTudo(); go('comissoes'); return;
   }
-  if(id && id!=='0'){ const m=METAS.find(x=>x.id==id); Object.assign(m,dados); }
-  else { METAS.push({id:METAS_SEQ++,...dados}); }
+  if(!METAS_MES[ymMeta]) METAS_MES[ymMeta]=[];
+  if(id && id!=='0'){ const m=METAS_MES[ymMeta].find(x=>x.id==id); if(m) Object.assign(m,dados); }
+  else { METAS_MES[ymMeta].push({id:METAS_SEQ++,...dados}); }
   go('comissoes');
 }
 async function excluirMeta(id){
   if(MODO_NUVEM){await sbDelete('metas',id);await carregarTudo();go('comissoes');return;}
-  METAS=METAS.filter(m=>m.id!=id);
+  const ymMeta=metasMesAtivo();
+  if(METAS_MES[ymMeta]) METAS_MES[ymMeta]=METAS_MES[ymMeta].filter(m=>m.id!=id);
   go('comissoes');
 }
 /* ============================ PACIENTES ============================ */
@@ -2950,6 +2958,7 @@ function fmtDateFull(s){if(!s)return '—';const[y,m,d]=s.split('-');return `${d
 
 /* ============================ FUNCIONÁRIOS ============================ */
 function renderFuncionarios(pg){
+  carregarMetasDoMes();
   const ativos=FUNCIONARIOS.filter(f=>f.ativo);
   const atendentes=FUNCIONARIOS.filter(f=>f.atende&&f.ativo).length;
   const body=FUNCIONARIOS.map(f=>{
@@ -3024,7 +3033,8 @@ async function salvarFunc(id){
   go('funcionarios');
 }
 async function excluirFunc(id){
-  if(METAS.some(m=>m.funcId==id)){alert('Este funcionário tem metas vinculadas. Remova as metas antes de excluir.');return;}
+  const temMeta = Object.values(METAS_MES).some(arr=>(arr||[]).some(m=>m.funcId==id));
+  if(temMeta){alert('Este funcionário tem metas vinculadas (em algum mês). Remova as metas antes de excluir.');return;}
   if(MODO_NUVEM){await sbDelete('funcionarios',id);await carregarTudo();} else {FUNCIONARIOS=FUNCIONARIOS.filter(f=>f.id!=id);}
   go('funcionarios');
 }
@@ -3522,6 +3532,7 @@ async function delCat(tipo,nome){
 
 /* ============================ RELATÓRIO PDF ============================ */
 function renderRelatorio(pg){
+  carregarMetasDoMes();
   const chk=(id,label,desc)=>`
     <label style="display:flex;gap:12px;align-items:flex-start;padding:14px;border:1px solid var(--line);border-radius:12px;cursor:pointer;background:var(--paper);transition:.15s" onmouseover="this.style.borderColor='var(--gold-l)'" onmouseout="this.style.borderColor='var(--line)'">
       <input type="checkbox" id="rb_${id}" checked style="width:18px;height:18px;margin-top:1px;accent-color:var(--gold-d)">
