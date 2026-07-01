@@ -724,6 +724,7 @@ const TIPOS_LANC = {
   despesa:{label:'Despesa',sinal:-1,cor:'var(--red)',ehReceita:false,ehDespesa:true},
   retirada:{label:'Retirada',sinal:-1,cor:'var(--amber)',ehReceita:false,ehDespesa:false},
   transferencia:{label:'Transferência',sinal:0,cor:'var(--grey)',ehReceita:false,ehDespesa:false},
+  fechamento:{label:'Fechamento de caixa',sinal:1,cor:'var(--grey)',ehReceita:false,ehDespesa:false,neutro:true},
 };
 const cartNome = id => (CARTEIRAS.find(c=>c.id===id)||{}).nome || '—';
 
@@ -1199,9 +1200,11 @@ function calc(){
   });
 
   // ---- procedimentos: crescimento vs mês anterior (sobe/desce) ----
-  // compara a contagem de cada procedimento no período selecionado com o mês imediatamente anterior
+  // compara a contagem de cada procedimento no período selecionado com o mês imediatamente anterior.
+  // Só faz sentido se o mês selecionado JÁ TEM atendimentos (senão mostraria tudo "caindo" no início do mês).
   let procVar=[];
-  if(_per && !_per.acumulado && _ymSel){
+  const _totalAtendMes = Object.values(contProc).reduce((s,v)=>s+v,0);
+  if(_per && !_per.acumulado && _ymSel && _totalAtendMes>0){
     const antYM=mesAnterior(_ymSel);
     const contAnt={};
     DATA.atendimentos.filter(a=>a.agenda==='Compareceu' && (a.data||'').slice(0,7)===antYM).forEach(a=>{
@@ -1215,6 +1218,7 @@ function calc(){
       return {nome, atual, ant, delta:atual-ant};
     }).filter(x=>x.delta!==0).sort((a,b)=>b.delta-a.delta);
   }
+  const _mesVazio = _totalAtendMes===0; // sinaliza mês sem movimento ainda
 
   // ---- RESULTADO OPERACIONAL (competência) ----
   // O número de gestão: o que a clínica realmente ganhou no mês.
@@ -1230,7 +1234,7 @@ function calc(){
     pacientes,totalPacientes,pacRecorrentes,txRecompra,ltv,
     recebimentos,recebTotal,semReceb,
     fatBruna,fatPeleBruto,fatPeleInstituto,fatInstituto,repassePele,custoPele,nAtendPele:atendPele.length,
-    parceiros,repasseTotal,resultadoOper,margemOper,procVar,
+    parceiros,repasseTotal,resultadoOper,margemOper,procVar,mesVazio:_mesVazio,
     custoFixadoParc,algumProcMaterial,algumProcFixado,
     custoMaterial,custoMatBruna,custoMatPele,nAtendBruna:atendBruna.length,
     docPend,docVencer,docOk,docTotal:DOCS.length,evolucao};
@@ -1322,7 +1326,7 @@ async function carregarTudo(){
     CARTEIRAS = (cart.data||[]).map(c=>({id:c.id,nome:c.nome,saldoInicial:+c.saldo_inicial}));
     CAT_RECEITA = (cat.data||[]).filter(c=>c.tipo==='receita').map(c=>c.nome);
     CAT_DESPESA = (cat.data||[]).filter(c=>c.tipo==='despesa').map(c=>c.nome);
-    CAIXA = (lanc.data||[]).map(l=>({id:l.id,data:l.data,tipo:l.tipo,categoria:l.categoria,desc:l.descricao,valor:+l.valor,carteira:l.carteira_id,carteiraDest:l.carteira_dest,itens:Array.isArray(l.itens)?l.itens:[]}));
+    CAIXA = (lanc.data||[]).map(l=>({id:l.id,data:l.data,tipo:l.tipo,categoria:l.categoria,desc:l.descricao,valor:+l.valor,carteira:l.carteira_id,carteiraDest:l.carteira_dest,itens:Array.isArray(l.itens)?l.itens:[],fechAcao:l.fech_acao||null}));
     CAIXA.forEach(l=>{ if(l.itens&&l.itens.length) registrarItens(l.itens); });
     DATA.atendimentos = (atend.data||[]).map(a=>({id:a.id,data:a.data,paciente:a.paciente,proc:a.procedimento,func:a.funcionario,canal:a.canal,valor:+a.valor,custo:+a.custo,pag:a.pagamento,agenda:a.agenda,recebimento:a.recebimento||'',parcelas:+a.parcelas||1,pagamentos:Array.isArray(a.pagamentos)?a.pagamentos:null,procedimentos:Array.isArray(a.procedimentos)?a.procedimentos:null,baixaAplicada:(a.baixa_aplicada&&typeof a.baixa_aplicada==='object')?a.baixa_aplicada:{}}));
     CAPTACAO = (capt.data||[]).map(c=>({id:c.id,data:c.data,plataforma:c.plataforma,seguidores:c.seguidores,leads:c.leads,agendadas:c.agendadas,investido:+c.investido,gasto:+c.gasto,campanhas:c.campanhas}));
@@ -1488,7 +1492,7 @@ function renderPainel(pg){
                 <span class="rank-name">${r.nome}<div class="rank-sub">${r.ant} → ${r.atual} no mês</div></span>
                 <span style="text-align:right"><div class="rank-val" style="color:${up?'#3b7a57':'#b43c3c'}">${up?'+':''}${r.delta}</div></span>
               </div>`;
-            }).join('') : '<div style="color:var(--grey);font-size:13px;padding:8px 0">Selecione um mês específico no topo para comparar com o mês anterior.</div>'
+            }).join('') : `<div style="color:var(--grey);font-size:13px;padding:8px 0">${k.mesVazio?'Ainda não há atendimentos neste mês para comparar. Os dados aparecem conforme você registra os atendimentos.':'Sem variação para mostrar neste período.'}</div>`
           }</div>
         </div>
       </div>
@@ -3014,13 +3018,17 @@ async function excluirFunc(id){
 
 /* ============================ LIVRO-CAIXA ============================ */
 function calcCaixa(){
-  // saldo por carteira + resultado da clínica
+  // saldo por carteira + resultado da clínica — FILTRADO pelo período do topo (mês ou acumulado)
+  const _per = (typeof periodoSelecionadoIntervalo==='function') ? periodoSelecionadoIntervalo() : null;
+  const _dentro = (d)=> !_per || (d && d>=_per.ini && d<=_per.fim);
   const saldos={};
-  CARTEIRAS.forEach(c=>saldos[c.id]=c.saldoInicial);
-  let receita=0, despesa=0, aporte=0, retirada=0, gastoMateriais=0;
+  // saldo do mês começa em 0 por carteira (o que "vem do mês anterior" entra como lançamento de fechamento)
+  CARTEIRAS.forEach(c=>saldos[c.id]=0);
+  let receita=0, despesa=0, aporte=0, retirada=0, gastoMateriais=0, fechamentoTot=0;
   const porCatDespesa={}, porCatReceita={};
   CAIXA.forEach(m=>{
-    const t=TIPOS_LANC[m.tipo];
+    if(!_dentro(m.data)) return; // <- só lançamentos do período
+    const t=TIPOS_LANC[m.tipo]; if(!t) return;
     if(m.tipo==='transferencia'){
       if(saldos[m.carteira]!=null) saldos[m.carteira]-=m.valor;
       if(saldos[m.carteiraDest]!=null) saldos[m.carteiraDest]+=m.valor;
@@ -3031,13 +3039,14 @@ function calcCaixa(){
     if(t.ehDespesa){ despesa+=m.valor; porCatDespesa[m.categoria]=(porCatDespesa[m.categoria]||0)+m.valor; }
     if(m.tipo==='aporte') aporte+=m.valor;
     if(m.tipo==='retirada') retirada+=m.valor;
+    if(m.tipo==='fechamento') fechamentoTot+=(t.sinal*m.valor);
     if(m.tipo==='despesa' && (m.categoria==='Produtos/Insumos')) gastoMateriais+=m.valor;
   });
   const saldoTotal=Object.values(saldos).reduce((s,v)=>s+v,0);
-  const resultado=receita-despesa; // resultado da clínica (não conta aporte/retirada)
+  const resultado=receita-despesa; // resultado da clínica (não conta aporte/retirada/fechamento)
   const catDespesaArr=Object.entries(porCatDespesa).map(([cat,v])=>({cat,valor:v})).sort((a,b)=>b.valor-a.valor);
   const catReceitaArr=Object.entries(porCatReceita).map(([cat,v])=>({cat,valor:v})).sort((a,b)=>b.valor-a.valor);
-  return {saldos,saldoTotal,receita,despesa,aporte,retirada,gastoMateriais,resultado,catDespesaArr,catReceitaArr};
+  return {saldos,saldoTotal,receita,despesa,aporte,retirada,fechamentoTot,gastoMateriais,resultado,catDespesaArr,catReceitaArr};
 }
 
 function renderCaixa(pg){
@@ -3109,13 +3118,31 @@ function renderCaixa(pg){
     </div>`}
   </div>`;
 
-  // cards de saldo por carteira
-  const cartCards=CARTEIRAS.map((w,i)=>`
-    <div class="tcard" style="animation-delay:${i*60}ms">
+  // cards de saldo por carteira — com fechamento mensal (zerar/puxar)
+  const _ymCaixa = (typeof mesSelecionadoTopo==='function' && mesSelecionadoTopo()) || mesHoje();
+  const _perCaixa = (typeof periodoSelecionadoIntervalo==='function') ? periodoSelecionadoIntervalo() : null;
+  const _acum = _perCaixa && _perCaixa.acumulado;
+  const cartCards=CARTEIRAS.map((w,i)=>{
+    const saldo=c.saldos[w.id]||0;
+    // já existe fechamento lançado neste mês para esta carteira?
+    const jaFechou = CAIXA.some(m=>m.tipo==='fechamento' && m.carteira===w.id && (m.data||'').slice(0,7)===_ymCaixa && m.fechAcao==='zerar');
+    const jaPuxou = CAIXA.some(m=>m.tipo==='fechamento' && m.carteira===w.id && (m.data||'').slice(0,7)===_ymCaixa && m.fechAcao==='entrada');
+    let acaoBtn='';
+    if(!_acum){ // ações de fechamento só fazem sentido num mês específico
+      if(saldo<-0.005){
+        acaoBtn=`<button class="btn ghost" style="padding:4px 10px;font-size:11px;margin-top:8px;width:100%" onclick="zerarCarteira(${w.id})" title="Registrar fechamento para zerar o saldo negativo">Zerar (fechamento)</button>`;
+      } else if(saldo>0.005){
+        acaoBtn=`<button class="btn ghost" style="padding:4px 10px;font-size:11px;margin-top:8px;width:100%" onclick="puxarSaldoCarteira(${w.id})" title="Levar este saldo para o próximo mês">Puxar p/ próximo mês →</button>`;
+      }
+    }
+    const nota = jaFechou ? '<div style="font-size:10.5px;color:var(--grey);margin-top:4px">✓ fechada neste mês</div>'
+              : jaPuxou ? '<div style="font-size:10.5px;color:var(--gold-d);margin-top:4px">↳ inclui saldo puxado</div>' : '';
+    return `<div class="tcard" style="animation-delay:${i*60}ms">
       <div class="tc-head">${w.nome}</div>
-      <div class="tc-val" style="color:${c.saldos[w.id]>=0?'var(--gold)':'var(--red)'}">${BRL(c.saldos[w.id])}</div>
-      <div class="tc-sub">saldo atual · iniciou com ${BRL(w.saldoInicial)}</div>
-    </div>`).join('');
+      <div class="tc-val" style="color:${saldo>=0?'var(--gold)':'var(--red)'}">${BRL(saldo)}</div>
+      <div class="tc-sub">saldo ${_acum?'acumulado no ano':'do mês'}</div>
+      ${nota}${acaoBtn}
+    </div>`;}).join('');
 
   // categorias conforme o filtro: em "todas" usa o cálculo global; filtrado, recalcula só da carteira
   let despCatArr, recCatArr, totDesp, totRec;
@@ -3378,6 +3405,54 @@ function lancTipoMudou(){
   hint.textContent=hints[tipo]||'';
   if(typeof renderLancItens==='function') renderLancItens();
 }
+// ===== FECHAMENTO DE CAIXA POR CARTEIRA =====
+// Zera uma carteira negativa: cria um lançamento de fechamento (entrada neutra) do valor que faltou.
+async function zerarCarteira(cartId){
+  const ym=(mesSelecionadoTopo&&mesSelecionadoTopo())||mesHoje();
+  const c=calcCaixa();
+  const saldo=c.saldos[cartId]||0;
+  if(saldo>=0){ alert('Esta carteira não está negativa neste mês.'); return; }
+  const falta=Math.abs(saldo);
+  const w=CARTEIRAS.find(x=>x.id==cartId);
+  if(!confirm(`Zerar "${w?w.nome:''}" com um fechamento de ${BRL(falta)}? Isso não conta como receita nem despesa — apenas fecha o caixa do mês.`)) return;
+  const data=ym+'-'+String(diaFechamento(ym)).padStart(2,'0');
+  const reg={data,tipo:'fechamento',categoria:'Fechamento de caixa',desc:'Fechamento (zerar saldo)',valor:falta,carteira:cartId,carteiraDest:null,itens:[],fechAcao:'zerar'};
+  if(MODO_NUVEM){
+    await sbInsert('lancamentos',{data,tipo:'fechamento',categoria:reg.categoria,descricao:reg.desc,valor:falta,carteira_id:cartId,carteira_dest:null,itens:[],fech_acao:'zerar'});
+    await carregarTudo();
+  } else { CAIXA.push({id:CAIXA_SEQ++,...reg}); }
+  go('caixa');
+}
+// Puxa o saldo positivo de uma carteira para o próximo mês (lança fechamento de entrada no mês seguinte).
+async function puxarSaldoCarteira(cartId){
+  const ym=(mesSelecionadoTopo&&mesSelecionadoTopo())||mesHoje();
+  const c=calcCaixa();
+  const saldo=c.saldos[cartId]||0;
+  if(saldo<=0){ alert('Esta carteira não tem saldo positivo para puxar.'); return; }
+  const prox=proximoMes(ym);
+  const w=CARTEIRAS.find(x=>x.id==cartId);
+  // evita duplicar
+  const jaExiste=CAIXA.some(m=>m.tipo==='fechamento' && m.carteira==cartId && (m.data||'').slice(0,7)===prox && m.fechAcao==='entrada');
+  if(jaExiste){ alert('O saldo desta carteira já foi puxado para '+rotuloMes(prox)+'.'); return; }
+  if(!confirm(`Levar ${BRL(saldo)} de "${w?w.nome:''}" para ${rotuloMes(prox)}? O próximo mês vai iniciar com esse saldo.`)) return;
+  const data=prox+'-01';
+  const reg={data,tipo:'fechamento',categoria:'Fechamento de caixa',desc:'Saldo trazido de '+rotuloMes(ym),valor:saldo,carteira:cartId,carteiraDest:null,itens:[],fechAcao:'entrada'};
+  if(MODO_NUVEM){
+    await sbInsert('lancamentos',{data,tipo:'fechamento',categoria:reg.categoria,descricao:reg.desc,valor:saldo,carteira_id:cartId,carteira_dest:null,itens:[],fech_acao:'entrada'});
+    await carregarTudo();
+  } else { CAIXA.push({id:CAIXA_SEQ++,...reg}); }
+  // muda o seletor para o próximo mês, para o usuário ver o saldo lá
+  const el=document.getElementById('periodSel'); if(el){ const alvo=rotuloMes(prox); [...el.options].forEach(o=>{if(o.value===alvo)o.selected=true;}); }
+  go('caixa');
+}
+// dia de referência do fechamento (último dia do mês, ou hoje se for o mês corrente)
+function diaFechamento(ym){
+  const hoje=new Date();
+  const [a,m]=ym.split('-').map(Number);
+  if(ym===mesHoje()) return hoje.getDate();
+  return new Date(a, m, 0).getDate(); // último dia do mês
+}
+function proximoMes(ym){ const [a,m]=ym.split('-').map(Number); const d=new Date(a,m-1,1); d.setMonth(d.getMonth()+1); return d.toISOString().slice(0,7); }
 async function salvarLanc(id){
   const v=i=>document.getElementById(i).value;
   const tipo=v('lc_tipo');
