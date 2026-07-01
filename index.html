@@ -3327,6 +3327,10 @@ function tipoBg(t){return {receita:'var(--green-bg)',aporte:'var(--sage-bg)',des
 
 function abrirLancForm(){ editarLanc(0); }
 function editarLanc(id){
+  const _box=document.getElementById('lancFormBox');
+  if(!_box){ // botão chamado de uma tela sem o formulário — abre o Livro-Caixa e reabre o editor
+    go('caixa'); setTimeout(()=>editarLanc(id),120); return;
+  }
   if(!CARTEIRAS.length){
     document.getElementById('lancFormBox').innerHTML=`<div style="background:var(--amber-bg);border:1px solid var(--amber);border-radius:14px;padding:18px;margin-bottom:18px;color:var(--ink)">
       <b>Cadastre uma carteira primeiro.</b><br><span style="font-size:13px;color:var(--grey)">Todo lançamento precisa estar vinculado a uma carteira (conta). Use o botão <b>+ Carteira</b> acima para criar uma (ex: Conta Stone, Dinheiro), depois lance os valores.</span>
@@ -3363,6 +3367,9 @@ function editarLanc(id){
   lancTipoMudou();
   renderLancItens();
   if(m.categoria){const sel=document.getElementById('lc_cat');[...sel.options].forEach(o=>{if(o.value===m.categoria)o.selected=true;});}
+  // traz o formulário para a visão (senão abre no topo e parece que "não abriu")
+  const box=document.getElementById('lancFormBox');
+  if(box){ box.scrollIntoView({behavior:'smooth',block:'start'}); const inp=document.getElementById('lc_valor'); if(inp && (id&&id!=='0')) setTimeout(()=>inp.focus(),200); }
 }
 let __lancItens=[];
 function renderLancItens(){
@@ -3441,7 +3448,15 @@ async function zerarCarteira(cartId){
   const data=ym+'-'+String(diaFechamento(ym)).padStart(2,'0');
   const reg={data,tipo:'fechamento',categoria:'Fechamento de caixa',desc:'Fechamento (zerar saldo)',valor:falta,carteira:cartId,carteiraDest:null,itens:[],fechAcao:'zerar'};
   if(MODO_NUVEM){
-    await sbInsert('lancamentos',{data,tipo:'fechamento',categoria:reg.categoria,descricao:reg.desc,valor:falta,carteira_id:cartId,carteira_dest:null,itens:[],fech_acao:'zerar'});
+    try{
+      const r = await sbInsert('lancamentos',{data,tipo:'fechamento',categoria:reg.categoria,descricao:reg.desc,valor:falta,carteira_id:cartId,carteira_dest:null,itens:[],fech_acao:'zerar'});
+      if(r===null || r===false) throw new Error('insert vazio');
+    }catch(e){
+      // fallback: tenta sem a coluna fech_acao (caso o SQL ainda não tenha sido rodado)
+      try{
+        await sb.from('lancamentos').insert({data,tipo:'fechamento',categoria:reg.categoria,descricao:reg.desc,valor:falta,carteira_id:cartId,carteira_dest:null});
+      }catch(e2){ alert('Não consegui registrar o fechamento na nuvem. Detalhe: '+(e2.message||e2)); return; }
+    }
     await carregarTudo();
   } else { CAIXA.push({id:CAIXA_SEQ++,...reg}); }
   go('caixa');
