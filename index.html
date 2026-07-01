@@ -3157,7 +3157,7 @@ function renderCaixa(pg){
     // Zerar só faz sentido quando negativo. Saldo positivo já é acumulado (passa sozinho p/ o mês seguinte).
     let acaoBtn='';
     if(saldo<-0.005){
-      acaoBtn=`<button class="btn ghost" style="padding:4px 10px;font-size:11px;margin-top:8px;width:100%" onclick="zerarCarteira(${w.id})" title="Registrar aporte de fechamento para zerar o saldo negativo atual">Zerar (fechamento)</button>`;
+      acaoBtn=`<button class="btn ghost" style="padding:4px 10px;font-size:11px;margin-top:8px;width:100%" onclick="zerarCarteira('${w.id}')" title="Registrar aporte de fechamento para zerar o saldo negativo atual">Zerar (fechamento)</button>`;
     }
     const nota='';
     return `<div class="tcard" style="animation-delay:${i*60}ms">
