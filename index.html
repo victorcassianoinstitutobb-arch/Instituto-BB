@@ -3018,32 +3018,35 @@ async function excluirFunc(id){
 
 /* ============================ LIVRO-CAIXA ============================ */
 function calcCaixa(){
-  // saldo por carteira + resultado da clínica — FILTRADO pelo período do topo (mês ou acumulado)
+  // SALDO das carteiras = ACUMULADO REAL (saldo inicial + todo o histórico até hoje).
+  // RESULTADO / categorias = filtrado pelo período do topo (mês ou acumulado).
   const _per = (typeof periodoSelecionadoIntervalo==='function') ? periodoSelecionadoIntervalo() : null;
   const _dentro = (d)=> !_per || (d && d>=_per.ini && d<=_per.fim);
   const saldos={};
-  // saldo do mês começa em 0 por carteira (o que "vem do mês anterior" entra como lançamento de fechamento)
-  CARTEIRAS.forEach(c=>saldos[c.id]=0);
+  CARTEIRAS.forEach(c=>saldos[c.id]=+c.saldoInicial||0);
   let receita=0, despesa=0, aporte=0, retirada=0, gastoMateriais=0, fechamentoTot=0;
   const porCatDespesa={}, porCatReceita={};
   CAIXA.forEach(m=>{
-    if(!_dentro(m.data)) return; // <- só lançamentos do período
     const t=TIPOS_LANC[m.tipo]; if(!t) return;
+    // --- SALDO: acumula SEMPRE (todo o histórico), independe do período ---
     if(m.tipo==='transferencia'){
       if(saldos[m.carteira]!=null) saldos[m.carteira]-=m.valor;
       if(saldos[m.carteiraDest]!=null) saldos[m.carteiraDest]+=m.valor;
     } else {
       if(saldos[m.carteira]!=null) saldos[m.carteira]+=t.sinal*m.valor;
     }
-    if(t.ehReceita){ receita+=m.valor; porCatReceita[m.categoria]=(porCatReceita[m.categoria]||0)+m.valor; }
-    if(t.ehDespesa){ despesa+=m.valor; porCatDespesa[m.categoria]=(porCatDespesa[m.categoria]||0)+m.valor; }
-    if(m.tipo==='aporte') aporte+=m.valor;
-    if(m.tipo==='retirada') retirada+=m.valor;
-    if(m.tipo==='fechamento') fechamentoTot+=(t.sinal*m.valor);
-    if(m.tipo==='despesa' && (m.categoria==='Produtos/Insumos')) gastoMateriais+=m.valor;
+    // --- RESULTADO / categorias: só o que está DENTRO do período selecionado ---
+    if(_dentro(m.data)){
+      if(t.ehReceita){ receita+=m.valor; porCatReceita[m.categoria]=(porCatReceita[m.categoria]||0)+m.valor; }
+      if(t.ehDespesa){ despesa+=m.valor; porCatDespesa[m.categoria]=(porCatDespesa[m.categoria]||0)+m.valor; }
+      if(m.tipo==='aporte') aporte+=m.valor;
+      if(m.tipo==='retirada') retirada+=m.valor;
+      if(m.tipo==='fechamento') fechamentoTot+=(t.sinal*m.valor);
+      if(m.tipo==='despesa' && (m.categoria==='Produtos/Insumos')) gastoMateriais+=m.valor;
+    }
   });
   const saldoTotal=Object.values(saldos).reduce((s,v)=>s+v,0);
-  const resultado=receita-despesa; // resultado da clínica (não conta aporte/retirada/fechamento)
+  const resultado=receita-despesa; // resultado da clínica no período (não conta aporte/retirada/fechamento)
   const catDespesaArr=Object.entries(porCatDespesa).map(([cat,v])=>({cat,valor:v})).sort((a,b)=>b.valor-a.valor);
   const catReceitaArr=Object.entries(porCatReceita).map(([cat,v])=>({cat,valor:v})).sort((a,b)=>b.valor-a.valor);
   return {saldos,saldoTotal,receita,despesa,aporte,retirada,fechamentoTot,gastoMateriais,resultado,catDespesaArr,catReceitaArr};
@@ -3118,29 +3121,19 @@ function renderCaixa(pg){
     </div>`}
   </div>`;
 
-  // cards de saldo por carteira — com fechamento mensal (zerar/puxar)
-  const _ymCaixa = (typeof mesSelecionadoTopo==='function' && mesSelecionadoTopo()) || mesHoje();
-  const _perCaixa = (typeof periodoSelecionadoIntervalo==='function') ? periodoSelecionadoIntervalo() : null;
-  const _acum = _perCaixa && _perCaixa.acumulado;
+  // cards de saldo por carteira — saldo acumulado real; "Zerar" quando negativo
   const cartCards=CARTEIRAS.map((w,i)=>{
     const saldo=c.saldos[w.id]||0;
-    // já existe fechamento lançado neste mês para esta carteira?
-    const jaFechou = CAIXA.some(m=>m.tipo==='fechamento' && m.carteira===w.id && (m.data||'').slice(0,7)===_ymCaixa && m.fechAcao==='zerar');
-    const jaPuxou = CAIXA.some(m=>m.tipo==='fechamento' && m.carteira===w.id && (m.data||'').slice(0,7)===_ymCaixa && m.fechAcao==='entrada');
+    // Zerar só faz sentido quando negativo. Saldo positivo já é acumulado (passa sozinho p/ o mês seguinte).
     let acaoBtn='';
-    if(!_acum){ // ações de fechamento só fazem sentido num mês específico
-      if(saldo<-0.005){
-        acaoBtn=`<button class="btn ghost" style="padding:4px 10px;font-size:11px;margin-top:8px;width:100%" onclick="zerarCarteira(${w.id})" title="Registrar fechamento para zerar o saldo negativo">Zerar (fechamento)</button>`;
-      } else if(saldo>0.005){
-        acaoBtn=`<button class="btn ghost" style="padding:4px 10px;font-size:11px;margin-top:8px;width:100%" onclick="puxarSaldoCarteira(${w.id})" title="Levar este saldo para o próximo mês">Puxar p/ próximo mês →</button>`;
-      }
+    if(saldo<-0.005){
+      acaoBtn=`<button class="btn ghost" style="padding:4px 10px;font-size:11px;margin-top:8px;width:100%" onclick="zerarCarteira(${w.id})" title="Registrar aporte de fechamento para zerar o saldo negativo atual">Zerar (fechamento)</button>`;
     }
-    const nota = jaFechou ? '<div style="font-size:10.5px;color:var(--grey);margin-top:4px">✓ fechada neste mês</div>'
-              : jaPuxou ? '<div style="font-size:10.5px;color:var(--gold-d);margin-top:4px">↳ inclui saldo puxado</div>' : '';
+    const nota='';
     return `<div class="tcard" style="animation-delay:${i*60}ms">
       <div class="tc-head">${w.nome}</div>
       <div class="tc-val" style="color:${saldo>=0?'var(--gold)':'var(--red)'}">${BRL(saldo)}</div>
-      <div class="tc-sub">saldo ${_acum?'acumulado no ano':'do mês'}</div>
+      <div class="tc-sub">saldo atual${(+w.saldoInicial)?' · iniciou com '+BRL(w.saldoInicial):''}</div>
       ${nota}${acaoBtn}
     </div>`;}).join('');
 
@@ -3424,27 +3417,6 @@ async function zerarCarteira(cartId){
   go('caixa');
 }
 // Puxa o saldo positivo de uma carteira para o próximo mês (lança fechamento de entrada no mês seguinte).
-async function puxarSaldoCarteira(cartId){
-  const ym=(mesSelecionadoTopo&&mesSelecionadoTopo())||mesHoje();
-  const c=calcCaixa();
-  const saldo=c.saldos[cartId]||0;
-  if(saldo<=0){ alert('Esta carteira não tem saldo positivo para puxar.'); return; }
-  const prox=proximoMes(ym);
-  const w=CARTEIRAS.find(x=>x.id==cartId);
-  // evita duplicar
-  const jaExiste=CAIXA.some(m=>m.tipo==='fechamento' && m.carteira==cartId && (m.data||'').slice(0,7)===prox && m.fechAcao==='entrada');
-  if(jaExiste){ alert('O saldo desta carteira já foi puxado para '+rotuloMes(prox)+'.'); return; }
-  if(!confirm(`Levar ${BRL(saldo)} de "${w?w.nome:''}" para ${rotuloMes(prox)}? O próximo mês vai iniciar com esse saldo.`)) return;
-  const data=prox+'-01';
-  const reg={data,tipo:'fechamento',categoria:'Fechamento de caixa',desc:'Saldo trazido de '+rotuloMes(ym),valor:saldo,carteira:cartId,carteiraDest:null,itens:[],fechAcao:'entrada'};
-  if(MODO_NUVEM){
-    await sbInsert('lancamentos',{data,tipo:'fechamento',categoria:reg.categoria,descricao:reg.desc,valor:saldo,carteira_id:cartId,carteira_dest:null,itens:[],fech_acao:'entrada'});
-    await carregarTudo();
-  } else { CAIXA.push({id:CAIXA_SEQ++,...reg}); }
-  // muda o seletor para o próximo mês, para o usuário ver o saldo lá
-  const el=document.getElementById('periodSel'); if(el){ const alvo=rotuloMes(prox); [...el.options].forEach(o=>{if(o.value===alvo)o.selected=true;}); }
-  go('caixa');
-}
 // dia de referência do fechamento (último dia do mês, ou hoje se for o mês corrente)
 function diaFechamento(ym){
   const hoje=new Date();
@@ -3452,7 +3424,6 @@ function diaFechamento(ym){
   if(ym===mesHoje()) return hoje.getDate();
   return new Date(a, m, 0).getDate(); // último dia do mês
 }
-function proximoMes(ym){ const [a,m]=ym.split('-').map(Number); const d=new Date(a,m-1,1); d.setMonth(d.getMonth()+1); return d.toISOString().slice(0,7); }
 async function salvarLanc(id){
   const v=i=>document.getElementById(i).value;
   const tipo=v('lc_tipo');
