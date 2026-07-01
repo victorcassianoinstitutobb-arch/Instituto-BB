@@ -3835,15 +3835,10 @@ function renderConfig(pg){
     </div>`;
   }).join('');
   const fsm='padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink)';
-  // ---- metas da clínica POR MÊS ----
-  if(!metaMesSel) metaMesSel = mesHoje();
+  // ---- metas da clínica POR MÊS — segue o mês do TOPO (sem seletor interno) ----
+  metaMesSel = (typeof mesSelecionadoTopo==='function' && mesSelecionadoTopo()) || mesHoje();
   const metasMes = metasDoMes(metaMesSel);
   const kCalc = kDoMes(metaMesSel);
-  // meses que têm metas + o mês atual + o selecionado, ordenados desc
-  const mesesComMetas = Object.keys(METAS_POR_MES).filter(ym=>(METAS_POR_MES[ym]||[]).length);
-  const setMeses = new Set([...mesesComMetas, mesHoje(), metaMesSel]);
-  const mesesLista = [...setMeses].sort((a,b)=>b.localeCompare(a));
-  const mesOpts = mesesLista.map(ym=>`<option value="${ym}" ${ym===metaMesSel?'selected':''}>${rotuloMes(ym)}${ym===mesHoje()?' (mês atual)':''}${(METAS_POR_MES[ym]||[]).length?'':' — vazio'}</option>`).join('');
   const mesAnt = mesAnterior(metaMesSel);
   const temMesAnterior = (METAS_POR_MES[mesAnt]||[]).length>0;
   // faixa de ação quando o mês está vazio
@@ -3891,12 +3886,7 @@ function renderConfig(pg){
   }).join('');
   const ehMesAtual = metaMesSel===mesHoje();
   const metasLivres=`<div class="panel" style="margin-bottom:18px">
-    <div class="panel-head"><div><h3>Metas da clínica</h3><div class="ph-sub">Metas por mês. Escolha o que acompanhar e o app calcula o realizado sozinho. Cada mês tem seu conjunto — selecione o mês para ver ou criar.</div></div></div>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
-      <span style="font-size:12.5px;color:var(--grey)">Mês das metas:</span>
-      <select onchange="metaMesSel=this.value;go('config')" style="padding:8px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);font-size:13px">${mesOpts}</select>
-      ${ehMesAtual?'<span style="font-size:12px;color:var(--gold-d)">● acompanhando agora</span>':'<span style="font-size:12px;color:var(--grey)">consulta de outro mês</span>'}
-    </div>
+    <div class="panel-head"><div><h3>Metas da clínica — ${rotuloMes(metaMesSel)}</h3><div class="ph-sub">Metas do mês selecionado no topo. Cada mês tem seu próprio conjunto — troque o mês no topo para ver ou criar as metas daquele mês. ${ehMesAtual?'<span style="color:var(--gold-d)">● mês atual</span>':'<span style="color:var(--grey)">consulta de outro mês</span>'}</div></div></div>
     ${vazioMsg}
     <div id="metasLivresBox">${linhasML}</div>
     ${metasMes.length?`<div style="display:flex;gap:10px;margin-top:6px">
@@ -3989,7 +3979,9 @@ async function salvarProcsPele(){
   window.__lastCalc=null; go('config'); toast('Procedimentos salvos');
 }
 // ---- metas da clínica (por mês, acompanhadas pelo app) ----
-function metasMesSel(){ return metasDoMes(metaMesSel||mesHoje()); }
+// o mês das metas SEMPRE segue o seletor do topo
+function metaMesAtivoTopo(){ return (typeof mesSelecionadoTopo==='function' && mesSelecionadoTopo()) || mesHoje(); }
+function metasMesSel(){ metaMesSel=metaMesAtivoTopo(); return metasDoMes(metaMesSel); }
 function addMetaLivre(){ metasMesSel().push({id:Date.now()+Math.random(),nome:'',tipo:'faturamento',alvo:0,filtroTipo:'todos',filtroValor:''}); go('config'); setTimeout(()=>{const b=document.getElementById('metasLivresBox');if(b)b.scrollIntoView({behavior:'smooth',block:'end'});},50); }
 function removeMetaLivre(i){ metasMesSel().splice(i,1); go('config'); }
 function copiarMetasMesAnterior(){
@@ -4017,8 +4009,9 @@ function updMetaLivre(i,campo,val){
   }
 }
 async function salvarMetasLivres(){
+  metaMesSel = metaMesAtivoTopo();
   // remove metas sem nome no mês selecionado
-  METAS_POR_MES[metaMesSel] = metasMesSel().filter(m=>(m.nome||'').trim());
+  METAS_POR_MES[metaMesSel] = metasDoMes(metaMesSel).filter(m=>(m.nome||'').trim());
   // mantém o ponteiro do mês atual sincronizado
   METAS_LIVRES = metasDoMes(mesHoje());
   if(MODO_NUVEM){
