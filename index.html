@@ -396,8 +396,8 @@ table.data tbody tr:hover{background:var(--cream)}
    troque os arrays DATA.* por consultas e mantenha calc()/render*.
    ============================================================ */
 
-const BRL = n => 'R$ ' + Math.round(n).toLocaleString('pt-BR');
-const BRL2 = n => n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const BRL = n => { let v = Math.round(+n||0); if(v===0) v=0; /* elimina -0 */ return 'R$ ' + v.toLocaleString('pt-BR'); };
+const BRL2 = n => { let v=+n||0; if(Object.is(v,-0)) v=0; return v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); };
 const PCT = n => (n*100).toFixed(1).replace('.',',') + '%';
 const PCT0 = n => Math.round(n*100) + '%';
 // percentual que não vira "0%" quando há valor pequeno mas real
@@ -674,8 +674,8 @@ const funcNome = id => (FUNCIONARIOS.find(f=>f.id===id)||{}).nome || '—';
      'transferencia'→ move saldo de uma carteira para outra (neutro no total)
    ============================================================ */
 let CARTEIRAS = [
-  {id:1, nome:'Conta Stone', saldoInicial:11000},
-  {id:2, nome:'Dinheiro (espécie)', saldoInicial:2000},
+  {id:1, nome:'Conta Stone'},
+  {id:2, nome:'Dinheiro (espécie)'},
 ];
 let CART_SEQ = 3;
 
@@ -1338,7 +1338,7 @@ async function carregarTudo(){
     // MODO NUVEM: o estado do app é exatamente o que está no banco (vazio = vazio).
     // Os dados de exemplo NÃO são usados aqui — só existem no modo local de teste.
     FUNCIONARIOS = (func.data||[]).map(f=>({id:f.id,nome:f.nome,funcao:f.funcao,tipo:f.tipo,atende:f.atende,registro:f.registro,contato:f.contato,admissao:f.admissao,ativo:f.ativo,pele:!!f.pele}));
-    CARTEIRAS = (cart.data||[]).map(c=>({id:c.id,nome:c.nome,saldoInicial:+c.saldo_inicial}));
+    CARTEIRAS = (cart.data||[]).map(c=>({id:c.id,nome:c.nome}));
     CAT_RECEITA = (cat.data||[]).filter(c=>c.tipo==='receita').map(c=>c.nome);
     CAT_DESPESA = (cat.data||[]).filter(c=>c.tipo==='despesa').map(c=>c.nome);
     CAIXA = (lanc.data||[]).map(l=>({id:l.id,data:l.data,tipo:l.tipo,categoria:l.categoria,desc:l.descricao,valor:+l.valor,carteira:l.carteira_id,carteiraDest:l.carteira_dest,itens:Array.isArray(l.itens)?l.itens:[],fechAcao:l.fech_acao||null}));
@@ -3046,24 +3046,47 @@ async function excluirFunc(id){
 
 /* ============================ LIVRO-CAIXA ============================ */
 function calcCaixa(){
-  // SALDO das carteiras = ACUMULADO REAL (saldo inicial + todo o histórico até hoje).
-  // RESULTADO / categorias = filtrado pelo período do topo (mês ou acumulado).
+  // MODELO: sem saldo inicial fixo. O saldo ARRASTA de mês em mês até você FECHAR o caixa.
+  // - saldo da carteira = soma dos lançamentos desde o último FECHAMENTO até o fim do mês selecionado
+  // - fechar zera tudo (o fechamento reseta a corrente naquele ponto)
+  // - RESULTADO / categorias = só o período selecionado
   const _per = (typeof periodoSelecionadoIntervalo==='function') ? periodoSelecionadoIntervalo() : null;
   const _dentro = (d)=> !_per || (d && d>=_per.ini && d<=_per.fim);
+  const _fimPer = _per ? _per.fim : '9999-12-31';
   const saldos={};
-  CARTEIRAS.forEach(c=>saldos[c.id]=+c.saldoInicial||0);
+  CARTEIRAS.forEach(c=>saldos[c.id]=0);
   let receita=0, despesa=0, aporte=0, retirada=0, gastoMateriais=0, fechamentoTot=0;
   const porCatDespesa={}, porCatReceita={};
+
+  // 1) SALDO por carteira: para cada carteira, acha o último fechamento com data <= fim do período,
+  //    e soma os lançamentos daquela carteira desde esse fechamento (exclusive) até o fim do período.
+  //    O próprio fechamento zera o saldo naquele ponto.
+  CARTEIRAS.forEach(c=>{
+    const cid=String(c.id);
+    const lancs = CAIXA.filter(m=>{
+      if(!m.data || m.data>_fimPer) return false;
+      return String(m.carteira)===cid || String(m.carteiraDest)===cid;
+    }).sort((a,b)=>a.data.localeCompare(b.data) || String(a.id).localeCompare(String(b.id)));
+    let saldo=0;
+    lancs.forEach(m=>{
+      if(m.tipo==='fechamento'){
+        if(String(m.carteira)===cid) saldo=0;
+        return;
+      }
+      if(m.tipo==='transferencia'){
+        if(String(m.carteira)===cid) saldo-=m.valor;
+        if(String(m.carteiraDest)===cid) saldo+=m.valor;
+      } else {
+        const t=TIPOS_LANC[m.tipo]; if(!t) return;
+        if(String(m.carteira)===cid) saldo+=t.sinal*m.valor;
+      }
+    });
+    saldos[c.id]=saldo;
+  });
+
+  // 2) RESULTADO / categorias / totais: só o período selecionado
   CAIXA.forEach(m=>{
     const t=TIPOS_LANC[m.tipo]; if(!t) return;
-    // --- SALDO: acumula SEMPRE (todo o histórico), independe do período ---
-    if(m.tipo==='transferencia'){
-      if(saldos[m.carteira]!=null) saldos[m.carteira]-=m.valor;
-      if(saldos[m.carteiraDest]!=null) saldos[m.carteiraDest]+=m.valor;
-    } else {
-      if(saldos[m.carteira]!=null) saldos[m.carteira]+=t.sinal*m.valor;
-    }
-    // --- RESULTADO / categorias: só o que está DENTRO do período selecionado ---
     if(_dentro(m.data)){
       if(t.ehReceita){ receita+=m.valor; porCatReceita[m.categoria]=(porCatReceita[m.categoria]||0)+m.valor; }
       if(t.ehDespesa){ despesa+=m.valor; porCatDespesa[m.categoria]=(porCatDespesa[m.categoria]||0)+m.valor; }
@@ -3106,12 +3129,14 @@ function renderCaixa(pg){
       }
     });
   }
-  // saldo corrente acumulado: geral em "todas"; por carteira quando filtrado
-  let acc = todas ? CARTEIRAS.reduce((s,w)=>s+w.saldoInicial,0)
-                  : ((CARTEIRAS.find(w=>String(w.id)===String(filtro))||{}).saldoInicial||0);
+  // saldo corrente acumulado (linha a linha). Começa em 0 (sem saldo inicial fixo).
+  let acc = 0;
   const body=mov.map(m=>{
     const t=TIPOS_LANC[m.tipo];
-    if(m.tipo==='transferencia'){
+    if(m.tipo==='fechamento'){
+      // fechamento zera o saldo corrente da carteira exibida
+      if(todas || String(m.carteira)===String(filtro)) acc=0;
+    } else if(m.tipo==='transferencia'){
       if(todas){/* neutro no total geral */}
       else if(String(m.carteiraDest)===String(filtro)) acc+=m.valor;   // entrou nesta carteira
       else if(String(m.carteira)===String(filtro)) acc-=m.valor;       // saiu desta carteira
@@ -3154,17 +3179,19 @@ function renderCaixa(pg){
   // cards de saldo por carteira — saldo acumulado real; "Zerar" quando negativo
   const cartCards=CARTEIRAS.map((w,i)=>{
     const saldo=c.saldos[w.id]||0;
-    // Zerar só faz sentido quando negativo. Saldo positivo já é acumulado (passa sozinho p/ o mês seguinte).
+    // Fechar zera o saldo do mês (positivo ou negativo). Só aparece se houver saldo e num mês específico.
     let acaoBtn='';
-    if(saldo<-0.005){
-      acaoBtn=`<button class="btn ghost" style="padding:4px 10px;font-size:11px;margin-top:8px;width:100%" onclick="zerarCarteira('${w.id}')" title="Registrar aporte de fechamento para zerar o saldo negativo atual">Zerar (fechamento)</button>`;
+    const _perC=(typeof periodoSelecionadoIntervalo==='function')?periodoSelecionadoIntervalo():null;
+    const _acumC=_perC&&_perC.acumulado;
+    if(!_acumC && Math.abs(saldo)>0.005){
+      const rotulo = saldo<0 ? 'Fechar (zerar negativo)' : 'Fechar caixa (zerar)';
+      acaoBtn=`<button class="btn ghost" style="padding:4px 10px;font-size:11px;margin-top:8px;width:100%" onclick="zerarCarteira('${w.id}')" title="Fecha o caixa deste mês: zera o saldo e não passa para o próximo mês">${rotulo}</button>`;
     }
-    const nota='';
     return `<div class="tcard" style="animation-delay:${i*60}ms">
       <div class="tc-head">${w.nome}</div>
       <div class="tc-val" style="color:${saldo>=0?'var(--gold)':'var(--red)'}">${BRL(saldo)}</div>
-      <div class="tc-sub">saldo atual${(+w.saldoInicial)?' · iniciou com '+BRL(w.saldoInicial):''}</div>
-      ${nota}${acaoBtn}
+      <div class="tc-sub">saldo do mês</div>
+      ${acaoBtn}
     </div>`;}).join('');
 
   // categorias conforme o filtro: em "todas" usa o cálculo global; filtrado, recalcula só da carteira
@@ -3251,7 +3278,7 @@ function renderCaixa(pg){
       <div style="display:flex;gap:24px;flex-wrap:wrap">
         <div style="flex:1;min-width:240px">
           <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);font-weight:600;margin-bottom:10px">Carteiras</div>
-          ${CARTEIRAS.map(w=>`<div class="rank-row" style="cursor:default"><span class="rank-name">${w.nome}</span><span style="display:flex;gap:8px;align-items:center"><span class="rank-sub">início ${BRL(w.saldoInicial)}</span><button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="editarCarteira('${w.id}')">editar</button>${CARTEIRAS.length>1?`<button class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="delCarteira('${w.id}')">×</button>`:''}</span></div>`).join('')}
+          ${CARTEIRAS.map(w=>`<div class="rank-row" style="cursor:default"><span class="rank-name">${w.nome}</span><span style="display:flex;gap:8px;align-items:center"><button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="editarCarteira('${w.id}')">editar</button>${CARTEIRAS.length>1?`<button class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="delCarteira('${w.id}')">×</button>`:''}</span></div>`).join('')}
         </div>
         <div style="flex:1;min-width:240px">
           <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);font-weight:600;margin-bottom:10px">Categorias de despesa</div>
@@ -3436,32 +3463,32 @@ function lancTipoMudou(){
   if(typeof renderLancItens==='function') renderLancItens();
 }
 // ===== FECHAMENTO DE CAIXA POR CARTEIRA =====
-// Zera uma carteira negativa: cria um lançamento de fechamento (entrada neutra) do valor que faltou.
+// Fecha o caixa da carteira no mês: registra um marcador de fechamento que ZERA o saldo
+// naquele ponto. O saldo não passa para o mês seguinte. Vale para saldo positivo ou negativo.
 async function zerarCarteira(cartId){
   const ym=(mesSelecionadoTopo&&mesSelecionadoTopo())||mesHoje();
   const c=calcCaixa();
   const saldo=c.saldos[cartId]||0;
-  if(saldo>=0){ alert('Esta carteira não está negativa neste mês.'); return; }
-  const falta=Math.abs(saldo);
-  const w=CARTEIRAS.find(x=>x.id==cartId);
-  if(!confirm(`Zerar "${w?w.nome:''}" com um fechamento de ${BRL(falta)}? Isso não conta como receita nem despesa — apenas fecha o caixa do mês.`)) return;
+  if(Math.abs(saldo)<0.005){ alert('Esta carteira já está zerada neste mês.'); return; }
+  const w=CARTEIRAS.find(x=>String(x.id)===String(cartId));
+  const verbo = saldo<0 ? 'cobrir o saldo negativo de '+BRL(Math.abs(saldo)) : 'zerar o saldo de '+BRL(saldo);
+  if(!confirm(`Fechar o caixa de "${w?w.nome:''}" em ${rotuloMes(ym)}? Isso vai ${verbo} — o saldo vai a zero e não passa para o próximo mês. Não conta como receita nem despesa.`)) return;
+  // o valor guardado é o saldo que estava sendo zerado (para registro/histórico); o calcCaixa zera no marcador
   const data=ym+'-'+String(diaFechamento(ym)).padStart(2,'0');
-  const reg={data,tipo:'fechamento',categoria:'Fechamento de caixa',desc:'Fechamento (zerar saldo)',valor:falta,carteira:cartId,carteiraDest:null,itens:[],fechAcao:'zerar'};
+  const reg={data,tipo:'fechamento',categoria:'Fechamento de caixa',desc:'Fechamento de caixa — '+rotuloMes(ym),valor:Math.abs(saldo),carteira:cartId,carteiraDest:null,itens:[],fechAcao:'zerar'};
   if(MODO_NUVEM){
     try{
-      const r = await sbInsert('lancamentos',{data,tipo:'fechamento',categoria:reg.categoria,descricao:reg.desc,valor:falta,carteira_id:cartId,carteira_dest:null,itens:[],fech_acao:'zerar'});
+      const r = await sbInsert('lancamentos',{data,tipo:'fechamento',categoria:reg.categoria,descricao:reg.desc,valor:reg.valor,carteira_id:cartId,carteira_dest:null,itens:[],fech_acao:'zerar'});
       if(r===null || r===false) throw new Error('insert vazio');
     }catch(e){
-      // fallback: tenta sem a coluna fech_acao (caso o SQL ainda não tenha sido rodado)
       try{
-        await sb.from('lancamentos').insert({data,tipo:'fechamento',categoria:reg.categoria,descricao:reg.desc,valor:falta,carteira_id:cartId,carteira_dest:null});
+        await sb.from('lancamentos').insert({data,tipo:'fechamento',categoria:reg.categoria,descricao:reg.desc,valor:reg.valor,carteira_id:cartId,carteira_dest:null});
       }catch(e2){ alert('Não consegui registrar o fechamento na nuvem. Detalhe: '+(e2.message||e2)); return; }
     }
     await carregarTudo();
   } else { CAIXA.push({id:CAIXA_SEQ++,...reg}); }
   go('caixa');
 }
-// Puxa o saldo positivo de uma carteira para o próximo mês (lança fechamento de entrada no mês seguinte).
 // dia de referência do fechamento (último dia do mês, ou hoje se for o mês corrente)
 function diaFechamento(ym){
   const hoje=new Date();
@@ -3494,25 +3521,24 @@ async function excluirCaixa(id){ if(MODO_NUVEM){await sbDelete('lancamentos',id)
 
 function abrirCarteiraForm(){ editarCarteira(0); }
 function editarCarteira(id){
-  const w=id?CARTEIRAS.find(x=>x.id===id):{id:0,nome:'',saldoInicial:''};
+  const w=id?CARTEIRAS.find(x=>x.id===id):{id:0,nome:''};
   const fs='padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink)';
   document.getElementById('cartCatBox').innerHTML=`
     <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:16px;margin-bottom:16px;display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
       <div class="field"><label>Nome da carteira</label><input id="cw_nome" value="${w.nome}" placeholder="Ex: Conta Banco" style="${fs};min-width:200px"></div>
-      <div class="field"><label>Saldo inicial (R$)</label><input type="number" id="cw_saldo" value="${w.saldoInicial}" style="${fs};min-width:140px"></div>
       <button class="btn" onclick="salvarCarteira('${w.id}')">Salvar</button>
       <button class="btn ghost" onclick="document.getElementById('cartCatBox').innerHTML=''">Cancelar</button>
-    </div>`;
+    </div>
+    <div style="font-size:12px;color:var(--grey);font-style:italic;margin-bottom:8px">A carteira começa zerada. Para colocar dinheiro nela, lance um <b>Aporte</b> em Novo lançamento.</div>`;
 }
 async function salvarCarteira(id){
   const nome=document.getElementById('cw_nome').value.trim()||'Carteira';
-  const saldo=+document.getElementById('cw_saldo').value||0;
   if(MODO_NUVEM){
-    if(id && id!=='0') await sbUpdate('carteiras',id,{nome,saldo_inicial:saldo}); else await sbInsert('carteiras',{nome,saldo_inicial:saldo});
+    if(id && id!=='0') await sbUpdate('carteiras',id,{nome}); else await sbInsert('carteiras',{nome});
     await carregarTudo(); go('caixa'); return;
   }
-  if(id && id!=='0' && id!==0){const w=CARTEIRAS.find(x=>x.id==id);w.nome=nome;w.saldoInicial=saldo;}
-  else{CARTEIRAS.push({id:CART_SEQ++,nome,saldoInicial:saldo});}
+  if(id && id!=='0' && id!==0){const w=CARTEIRAS.find(x=>x.id==id);w.nome=nome;}
+  else{CARTEIRAS.push({id:CART_SEQ++,nome});}
   go('caixa');
 }
 async function delCarteira(id){
