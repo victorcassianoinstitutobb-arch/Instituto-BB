@@ -1157,11 +1157,13 @@ function calc(){
     const datas=realizados.map(a=>a.data).sort();
     const ultima=datas[datas.length-1]||'';
     const canal=hist[0]?hist[0].canal:'';
-    // recorrente NAQUELE período = a pessoa já tinha vindo ANTES do início do período.
-    // (dentro do próprio mês, várias visitas não a tornam "recorrente" — só visita de mês anterior conta)
+    // NOVA = esta é a 1ª consulta da história da pessoa.
+    // RECORRENTE = ela já teve QUALQUER consulta antes (em qualquer data — inclusive dias antes no mesmo mês).
+    // No período: se ela veio 2+ vezes no total até o fim do período, já é recorrente.
     const _per2=(typeof periodoSelecionadoIntervalo==='function')?periodoSelecionadoIntervalo():null;
-    const iniPer=_per2?_per2.ini:'';
-    const jaVinhaAntes = iniPer ? datasTotal.some(d=>d < iniPer) : (histTotal.length>1);
+    const fimPer=_per2?_per2.fim:'9999-12-31';
+    const visitasAteFim = datasTotal.filter(d=>d<=fimPer).length; // consultas dela até o fim do período visto
+    const jaVinhaAntes = visitasAteFim>1; // 1ª consulta = nova; da 2ª em diante = recorrente
     return {nome, visitas:realizados.length, valorTotal, ultima, canal,
       procedimentos:[...new Set(realizados.flatMap(a=>procedimentosDe(a).map(p=>p.proc)).filter(Boolean))],
       visitasTotais:histTotal.length, primeiraVisita,
@@ -1170,6 +1172,24 @@ function calc(){
   const totalPacientes=pacientes.length;
   const pacRecorrentes=pacientes.filter(p=>p.recorrente).length;
   const txRecompra= totalPacientes? pacRecorrentes/totalPacientes : 0;
+
+  // ---- ATENDIMENTOS novos x recorrentes (cada CONSULTA, não cada pessoa) ----
+  // Uma consulta é "nova" se é a 1ª da vida daquela pessoa; da 2ª em diante, "recorrente".
+  // Ex: Ana veio dia 01/06 (nova) e voltou dia 05/06 (já recorrente, mesmo mês).
+  const _ordemHist = {}; // nome -> lista de ids ordenados por data (todo o histórico da clínica)
+  DATA.atendimentos.filter(a=>a.agenda==='Compareceu').forEach(a=>{
+    if(!_ordemHist[a.paciente]) _ordemHist[a.paciente]=[];
+    _ordemHist[a.paciente].push(a);
+  });
+  Object.values(_ordemHist).forEach(arr=>arr.sort((a,b)=>a.data.localeCompare(b.data) || String(a.id).localeCompare(String(b.id))));
+  let atendNovos=0, atendRecorrentes=0;
+  const realizadosPeriodo = at.filter(a=>a.agenda==='Compareceu');
+  realizadosPeriodo.forEach(a=>{
+    const seq=_ordemHist[a.paciente]||[];
+    const idx=seq.findIndex(x=>x.id===a.id);
+    if(idx===0) atendNovos++; else atendRecorrentes++;
+  });
+
   // ---- recebimentos por modalidade (+ parcelas no crédito) ----
   // agora itera sobre cada PARTE de pagamento (suporta pagamento dividido)
   const recMap={};
@@ -1259,6 +1279,7 @@ function calc(){
     serieReceita,comp,comandas,ranking,rankPac,nLeads:totLeadsCapt,
     comissaoTotal,comissaoBaseTotal,comissaoPorProc,comissaoPercent:META.comissaoPercent,
     pacientes,totalPacientes,pacRecorrentes,txRecompra,ltv,
+    atendNovos,atendRecorrentes,
     recebimentos,recebTotal,semReceb,
     fatBruna,fatPeleBruto,fatPeleInstituto,fatInstituto,repassePele,custoPele,nAtendPele:atendPele.length,
     parceiros,repasseTotal,resultadoOper,margemOper,procVar,mesVazio:_mesVazio,
@@ -1726,6 +1747,16 @@ function recebLabel(a){
   if(ps.length===1) return formaLabel(ps[0].forma, ps[0].parcelas);
   return `Dividido (${ps.length})`;
 }
+// avança/retrocede um dia no "Ver dia" dos atendimentos
+function mudarDiaAtend(delta){
+  const hoje=new Date().toISOString().slice(0,10);
+  const base = (window.__atendDia && window.__atendDia!=='__todos') ? window.__atendDia : hoje;
+  const [a,m,d] = base.split('-').map(Number);
+  const dt = new Date(a, m-1, d);
+  dt.setDate(dt.getDate()+delta);
+  window.__atendDia = dt.toISOString().slice(0,10);
+  go('atendimentos');
+}
 function renderAtend(pg){
   const todos=[...DATA.atendimentos].sort((a,b)=>(b.data||'').localeCompare(a.data||''));
   const hoje=new Date().toISOString().slice(0,10);
@@ -1795,10 +1826,14 @@ function renderAtend(pg){
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px">
         <span style="font-size:12.5px;color:var(--grey)">Ver dia:</span>
         <button class="btn ghost" style="padding:6px 12px;font-size:12.5px;${window.__atendDia===hoje?'background:var(--gold);color:#0E0D0C;border-color:var(--gold)':''}" onclick="window.__atendDia='${hoje}';go('atendimentos')">Hoje</button>
-        <select onchange="window.__atendDia=this.value;go('atendimentos')" style="padding:7px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);font-size:13px">
-          <option value="" disabled ${dias.includes(window.__atendDia)?'':'selected'}>— escolher dia —</option>
-          ${diaOpts}
-        </select>
+        <div style="display:flex;align-items:center;gap:2px">
+          <button class="btn ghost" style="padding:6px 9px;font-size:13px" onclick="mudarDiaAtend(-1)" title="Dia anterior" ${verTodos?'disabled':''}>‹</button>
+          <select onchange="window.__atendDia=this.value;go('atendimentos')" style="padding:7px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);font-size:13px">
+            <option value="" disabled ${dias.includes(window.__atendDia)?'':'selected'}>— escolher dia —</option>
+            ${diaOpts}
+          </select>
+          <button class="btn ghost" style="padding:6px 9px;font-size:13px" onclick="mudarDiaAtend(1)" title="Próximo dia" ${verTodos?'disabled':''}>›</button>
+        </div>
         <button class="btn ghost" style="padding:6px 12px;font-size:12.5px;${verTodos?'background:var(--gold);color:#0E0D0C;border-color:var(--gold)':''}" onclick="window.__atendDia='__todos';go('atendimentos')">Ver todos</button>
       </div>
       <table class="data">
@@ -2646,12 +2681,17 @@ function linhaPac(p){
 function renderPacientes(pg){
   const k=calc();
   const body=k.pacientes.map(linhaPac).join('');
+  const totAtendPac=k.atendNovos+k.atendRecorrentes;
   pg.innerHTML=`
     <div class="trend-grid" style="grid-template-columns:repeat(4,1fr)">
       <div class="tcard" style="animation-delay:0ms"><div class="tc-head">Total de pacientes</div><div class="tc-val">${k.totalPacientes}</div><div class="tc-sub">na base</div></div>
       <div class="tcard" style="animation-delay:70ms"><div class="tc-head">Recorrentes</div><div class="tc-val" style="color:var(--green)">${k.pacRecorrentes}</div><div class="tc-sub">${PCT0(k.txRecompra)} de recompra</div></div>
       <div class="tcard" style="animation-delay:140ms"><div class="tc-head">Ticket médio por paciente</div><div class="tc-val">${BRL(k.ltv)}</div><div class="tc-sub">valor acumulado por pessoa</div></div>
       <div class="tcard" style="animation-delay:210ms"><div class="tc-head">Ticket por atendimento</div><div class="tc-val">${BRL(k.ticket)}</div><div class="tc-sub">valor médio de cada visita</div></div>
+    </div>
+    <div class="trend-grid" style="grid-template-columns:repeat(2,1fr);margin-top:14px">
+      <div class="tcard" style="animation-delay:0ms"><div class="tc-head">Atendimentos novos</div><div class="tc-val" style="color:var(--gold-d)">${k.atendNovos}</div><div class="tc-sub">${totAtendPac?PCT0(k.atendNovos/totAtendPac):'0%'} das consultas do período — 1ª consulta da pessoa</div></div>
+      <div class="tcard" style="animation-delay:70ms"><div class="tc-head">Atendimentos recorrentes</div><div class="tc-val" style="color:var(--green)">${k.atendRecorrentes}</div><div class="tc-sub">${totAtendPac?PCT0(k.atendRecorrentes/totAtendPac):'0%'} das consultas — pessoa já tinha vindo antes</div></div>
     </div>
     <div id="fichaBox"></div>
     <div class="panel">
@@ -2797,7 +2837,8 @@ function calcIndicadores(ini,fim){
     const hist=comp.filter(a=>a.paciente===nome);
     // histórico completo (todos os meses) para novo vs recorrente
     const histTotal=DATA.atendimentos.filter(a=>a.paciente===nome && a.agenda==='Compareceu');
-    const jaVinhaAntes = histTotal.some(a=>a.data < ini);
+    const visitasAteFim=histTotal.filter(a=>a.data<=fim).length;
+    const jaVinhaAntes = visitasAteFim>1; // 1ª consulta = nova; da 2ª em diante = recorrente
     return {nome, visitas:hist.length, valorTotal:hist.reduce((s,a)=>s+a.valor,0), recorrente:jaVinhaAntes};
   });
   const totalPac=pacientes.length;
