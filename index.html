@@ -1143,17 +1143,29 @@ function calc(){
     .filter(x=>x.qtd>0).sort((a,b)=>b.qtd-a.qtd);
 
   // ---- base de pacientes (consolida atendimentos por pessoa) ----
+  // "recorrente" olha o HISTÓRICO COMPLETO do paciente (todos os meses): se a pessoa já
+  // teve algum atendimento antes (em qualquer data), deixa de ser "novo" e vira recorrente.
   const nomes=[...new Set(at.map(a=>a.paciente))];
   const pacientes = nomes.map(nome=>{
-    const hist=at.filter(a=>a.paciente===nome);
+    const hist=at.filter(a=>a.paciente===nome);           // atendimentos do período (para valores do mês)
     const realizados=hist.filter(a=>a.agenda==='Compareceu');
+    // histórico completo desta pessoa (todos os meses), para saber se é novo ou recorrente
+    const histTotal=DATA.atendimentos.filter(a=>a.paciente===nome && a.agenda==='Compareceu');
+    const datasTotal=histTotal.map(a=>a.data).filter(Boolean).sort();
+    const primeiraVisita=datasTotal[0]||'';
     const valorTotal=realizados.reduce((s,a)=>s+a.valor,0);
     const datas=realizados.map(a=>a.data).sort();
     const ultima=datas[datas.length-1]||'';
     const canal=hist[0]?hist[0].canal:'';
+    // recorrente NAQUELE período = a pessoa já tinha vindo ANTES do início do período.
+    // (dentro do próprio mês, várias visitas não a tornam "recorrente" — só visita de mês anterior conta)
+    const _per2=(typeof periodoSelecionadoIntervalo==='function')?periodoSelecionadoIntervalo():null;
+    const iniPer=_per2?_per2.ini:'';
+    const jaVinhaAntes = iniPer ? datasTotal.some(d=>d < iniPer) : (histTotal.length>1);
     return {nome, visitas:realizados.length, valorTotal, ultima, canal,
       procedimentos:[...new Set(realizados.flatMap(a=>procedimentosDe(a).map(p=>p.proc)).filter(Boolean))],
-      recorrente:realizados.length>1};
+      visitasTotais:histTotal.length, primeiraVisita,
+      recorrente:jaVinhaAntes};
   }).sort((a,b)=>b.valorTotal-a.valorTotal);
   const totalPacientes=pacientes.length;
   const pacRecorrentes=pacientes.filter(p=>p.recorrente).length;
@@ -2783,7 +2795,10 @@ function calcIndicadores(ini,fim){
   const nomes=[...new Set(comp.map(a=>a.paciente))];
   const pacientes=nomes.map(nome=>{
     const hist=comp.filter(a=>a.paciente===nome);
-    return {nome, visitas:hist.length, valorTotal:hist.reduce((s,a)=>s+a.valor,0), recorrente:hist.length>1};
+    // histórico completo (todos os meses) para novo vs recorrente
+    const histTotal=DATA.atendimentos.filter(a=>a.paciente===nome && a.agenda==='Compareceu');
+    const jaVinhaAntes = histTotal.some(a=>a.data < ini);
+    return {nome, visitas:hist.length, valorTotal:hist.reduce((s,a)=>s+a.valor,0), recorrente:jaVinhaAntes};
   });
   const totalPac=pacientes.length;
   const recorrentes=pacientes.filter(p=>p.recorrente).length;
