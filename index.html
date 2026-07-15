@@ -2937,8 +2937,10 @@ function renderRecall(pg){
       </div>`).join('');
     return `<div class="recall-col">
       <div class="recall-col-head" style="border-top:3px solid ${f.cor}">
-        <div class="recall-col-title">${f.label}</div>
-        <div class="recall-col-desc">${f.desc}</div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px">
+          <div><div class="recall-col-title">${f.label}</div><div class="recall-col-desc">${f.desc}</div></div>
+          <button class="btn ghost" style="padding:3px 7px;font-size:10px;flex-shrink:0" onclick="event.stopPropagation();gerarPDFRecall('${f.id}')" title="Gerar PDF só desta coluna">PDF</button>
+        </div>
         <div class="recall-col-count" style="color:${f.cor}">${lista.length}</div>
       </div>
       <div class="recall-col-body">${linhas||'<div class="recall-vazio">Ninguém nesta faixa.</div>'}</div>
@@ -2947,14 +2949,15 @@ function renderRecall(pg){
   pg.innerHTML=`
     <div class="panel" style="margin-bottom:18px">
       <div class="panel-head"><div><h3>Recall de Pacientes</h3><div class="ph-sub">Funil de recontato por tempo sem visita — reposiciona sozinho conforme os atendimentos acontecem. Clique numa paciente para ver o histórico completo.</div></div>
-        <button class="btn ghost" onclick="gerarPDFRecall()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:15px;height:15px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Gerar PDF</button>
+        <button class="btn ghost" onclick="gerarPDFRecall()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:15px;height:15px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Gerar PDF (todas as colunas)</button>
       </div>
       <div class="recall-grid">${colunas}</div>
     </div>
     <div id="fichaBox"></div>`;
 }
-// PDF do funil de Recall: lista por faixa, para trabalho da equipe comercial (contato/retorno)
-function gerarPDFRecall(){
+// PDF do funil de Recall: lista por faixa, para trabalho da equipe comercial (contato/retorno).
+// Sem argumento: gera TODAS as colunas (uma por página). Com faixaId: gera só aquela coluna.
+function gerarPDFRecall(faixaId){
   const todos=pacientesTodos();
   const comFaixa=todos.map(p=>{ const dias=diasDesde(p.ultima); return {...p, dias, faixa:faixaRecall(dias)}; });
   const hojeHora=new Date().toLocaleString('pt-BR');
@@ -2974,8 +2977,10 @@ function gerarPDFRecall(){
       <tbody>${linhas||'<tr><td colspan="5" class="empty">Ninguém nesta faixa.</td></tr>'}</tbody></table>
     </div>`;
   };
-  const body=RECALL_FAIXAS.map(f=>sec(f, comFaixa.filter(p=>p.faixa.id===f.id).sort((a,b)=>b.dias-a.dias))).join('');
-  const totalPacientes=todos.length;
+  const faixasAlvo = faixaId ? RECALL_FAIXAS.filter(f=>f.id===faixaId) : RECALL_FAIXAS;
+  const body=faixasAlvo.map(f=>sec(f, comFaixa.filter(p=>p.faixa.id===f.id).sort((a,b)=>b.dias-a.dias))).join('');
+  const totalPacientes = faixaId ? comFaixa.filter(p=>p.faixa.id===faixaId).length : todos.length;
+  const subtitulo = faixaId ? 'Recall de Pacientes · '+(faixasAlvo[0]?faixasAlvo[0].label:'') : 'Recall de Pacientes · Lista de Trabalho';
   const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Recall de Pacientes · Instituto Bruna Braga</title>
   <style>
     @page{margin:16mm 15mm}
@@ -3003,8 +3008,8 @@ function gerarPDFRecall(){
     .ft{margin-top:24px;padding-top:12px;border-top:1px solid #E8DEC8;font-size:9.5px;color:#9C9384;text-align:center}
   </style></head><body>
     <div class="hd">
-      <div><div class="brand">Instituto Bruna Braga</div><div class="sub">Recall de Pacientes · Lista de Trabalho</div></div>
-      <div class="right"><div class="tot">${totalPacientes} pacientes</div>Emitido em ${hojeHora}</div>
+      <div><div class="brand">Instituto Bruna Braga</div><div class="sub">${subtitulo}</div></div>
+      <div class="right"><div class="tot">${totalPacientes} paciente${totalPacientes===1?'':'s'}</div>Emitido em ${hojeHora}</div>
     </div>
     ${body}
     <div class="ft">Uso interno da equipe comercial · Gerado pelo Sistema de Gestão do Instituto Bruna Braga</div>
