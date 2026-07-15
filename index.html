@@ -2946,10 +2946,70 @@ function renderRecall(pg){
   }).join('');
   pg.innerHTML=`
     <div class="panel" style="margin-bottom:18px">
-      <div class="panel-head"><div><h3>Recall de Pacientes</h3><div class="ph-sub">Funil de recontato por tempo sem visita — reposiciona sozinho conforme os atendimentos acontecem. Clique numa paciente para ver o histórico completo.</div></div></div>
+      <div class="panel-head"><div><h3>Recall de Pacientes</h3><div class="ph-sub">Funil de recontato por tempo sem visita — reposiciona sozinho conforme os atendimentos acontecem. Clique numa paciente para ver o histórico completo.</div></div>
+        <button class="btn ghost" onclick="gerarPDFRecall()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:15px;height:15px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Gerar PDF</button>
+      </div>
       <div class="recall-grid">${colunas}</div>
     </div>
     <div id="fichaBox"></div>`;
+}
+// PDF do funil de Recall: lista por faixa, para trabalho da equipe comercial (contato/retorno)
+function gerarPDFRecall(){
+  const todos=pacientesTodos();
+  const comFaixa=todos.map(p=>{ const dias=diasDesde(p.ultima); return {...p, dias, faixa:faixaRecall(dias)}; });
+  const hojeHora=new Date().toLocaleString('pt-BR');
+  const sec=(f,lista)=>{
+    const linhas=lista.map(p=>`<tr>
+      <td>${p.nome}</td>
+      <td class="n">${p.dias===Infinity?'—':p.dias}</td>
+      <td>${p.ultima?fmtDate(p.ultima):'—'}</td>
+      <td class="n">${p.visitas}</td>
+      <td class="n">${BRL(p.valorTotal)}</td>
+    </tr>`).join('');
+    return `<div class="sec">
+      <div class="sec-h" style="border-left:5px solid ${f.cor};padding-left:10px">
+        <div><h2>${f.label} <span class="cnt">${lista.length}</span></h2><div class="sec-sub">${f.desc}</div></div>
+      </div>
+      <table><thead><tr><th>Paciente</th><th class="n">Dias sem vir</th><th>Última visita</th><th class="n">Visitas</th><th class="n">Valor investido</th></tr></thead>
+      <tbody>${linhas||'<tr><td colspan="5" class="empty">Ninguém nesta faixa.</td></tr>'}</tbody></table>
+    </div>`;
+  };
+  const body=RECALL_FAIXAS.map(f=>sec(f, comFaixa.filter(p=>p.faixa.id===f.id).sort((a,b)=>b.dias-a.dias))).join('');
+  const totalPacientes=todos.length;
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Recall de Pacientes · Instituto Bruna Braga</title>
+  <style>
+    @page{margin:16mm 15mm}
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Georgia','Times New Roman',serif;color:#211C16;font-size:11.5px;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #C9A24B;padding-bottom:16px;margin-bottom:24px}
+    .hd .brand{font-size:23px;font-weight:700;color:#8A6F27}
+    .hd .sub{font-size:9.5px;letter-spacing:2.4px;text-transform:uppercase;color:#8A8175;margin-top:4px}
+    .hd .right{text-align:right;font-size:10px;color:#9C9384}
+    .hd .right .tot{font-size:14px;font-weight:700;color:#211C16;font-family:Georgia,serif}
+    .sec{margin-bottom:22px;page-break-inside:avoid}
+    .sec-h{margin-bottom:9px}
+    h2{font-size:14px;color:#211C16;font-weight:700;display:inline-flex;align-items:center;gap:8px}
+    .cnt{font-family:Arial,sans-serif;font-size:11px;background:#211C16;color:#E9C877;border-radius:10px;padding:1px 9px}
+    .sec-sub{font-size:10px;color:#8A8175;margin-top:1px}
+    table{width:100%;border-collapse:collapse;font-family:'Helvetica Neue',Arial,sans-serif;font-size:10.5px}
+    th{background:#F5EFE0;color:#4A3F2E;text-align:left;padding:7px 9px;font-size:9px;text-transform:uppercase;letter-spacing:.5px;font-weight:700;border-bottom:2px solid #C9A24B}
+    td{padding:6px 9px;border-bottom:1px solid #EFE9DA}
+    td.n,th.n{text-align:right}
+    tr:nth-child(even) td{background:#FBF9F3}
+    td.empty{text-align:center;color:#9C9384;font-style:italic;padding:12px}
+    .ft{margin-top:24px;padding-top:12px;border-top:1px solid #E8DEC8;font-size:9.5px;color:#9C9384;text-align:center}
+  </style></head><body>
+    <div class="hd">
+      <div><div class="brand">Instituto Bruna Braga</div><div class="sub">Recall de Pacientes · Lista de Trabalho</div></div>
+      <div class="right"><div class="tot">${totalPacientes} pacientes</div>Emitido em ${hojeHora}</div>
+    </div>
+    ${body}
+    <div class="ft">Uso interno da equipe comercial · Gerado pelo Sistema de Gestão do Instituto Bruna Braga</div>
+  </body></html>`;
+  const w=window.open('','_blank');
+  if(!w){alert('Permita pop-ups para gerar o PDF.');return;}
+  w.document.write(html); w.document.close();
+  setTimeout(()=>{w.focus();w.print();},400);
 }
 
 /* ============================ DOCUMENTOS ============================ */
