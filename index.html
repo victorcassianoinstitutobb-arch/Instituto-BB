@@ -464,6 +464,12 @@ function mesHoje(){ return new Date().toISOString().slice(0,7); }
 // lê o seletor de período do topo (ex: "Maio 2026") e converte para 'AAAA-MM'.
 // retorna null quando é "Acumulado" (ou não há mês reconhecível).
 function mesSelecionadoTopo(){
+  if(window.__periodoOverride){
+    const o=window.__periodoOverride;
+    // só retorna um "mês" quando o override é de fato um mês inteiro (não intervalo arbitrário nem ano)
+    if(!o.acumulado && o.ini && o.fim && o.ini.slice(0,7)===o.fim.slice(0,7)) return o.ini.slice(0,7);
+    return null;
+  }
   const el=document.getElementById('periodSel'); if(!el) return mesHoje();
   const txt=(el.value||el.options[el.selectedIndex]&&el.options[el.selectedIndex].text||'').trim();
   const meses={'janeiro':'01','fevereiro':'02','março':'03','marco':'03','abril':'04','maio':'05','junho':'06','julho':'07','agosto':'08','setembro':'09','outubro':'10','novembro':'11','dezembro':'12'};
@@ -472,7 +478,10 @@ function mesSelecionadoTopo(){
   return null; // "Acumulado" ou desconhecido
 }
 // intervalo [ini,fim] do período selecionado no topo. Mês → aquele mês; Acumulado → ano todo.
+// O Gerador de Relatório pode definir window.__periodoOverride={ini,fim,acumulado} para calcular
+// um período próprio (mês específico ou intervalo customizado) sem depender do seletor do topo.
 function periodoSelecionadoIntervalo(){
+  if(window.__periodoOverride) return window.__periodoOverride;
   const el=document.getElementById('periodSel');
   const txt = el ? ((el.value||(el.options[el.selectedIndex]&&el.options[el.selectedIndex].text)||'').trim()) : '';
   // "Acumulado 2026" → ano inteiro
@@ -1082,17 +1091,27 @@ function calc(){
       qtd:at.filter(a=>a.canal===c&&a.agenda==='Compareceu').length,
     };
   }).map(x=>({...x,conv:x.leads?x.fechados/x.leads:0}));
-  // ---- contagem de procedimentos reais (a partir da lista de cada atendimento) ----
-  // conta quantas VEZES cada procedimento foi feito, somando os procedimentos de todos
-  // os atendimentos comparecidos. Receita NÃO é atribuída por procedimento (valor é do atendimento).
+  // ---- contagem e receita por procedimento (a partir da lista de cada atendimento) ----
+  // Um atendimento pode ter vários procedimentos com um único valor total. Como não há preço
+  // por procedimento individual, a receita é RATEADA igualmente entre os procedimentos daquele
+  // atendimento — assim qtd e receita ficam consistentes (nunca R$ 0 com qtd > 0).
   const contProc={};
+  const procAgg={};
   compareceu.forEach(a=>{
     const lista=procedimentosDe(a);
-    if(lista.length){ lista.forEach(p=>{ if(p.proc) contProc[p.proc]=(contProc[p.proc]||0)+1; }); }
-    else if(a.proc){ contProc[a.proc]=(contProc[a.proc]||0)+1; }
+    const entradas = lista.length ? lista.filter(p=>p.proc) : (a.proc?[{proc:a.proc}]:[]);
+    if(!entradas.length) return;
+    const valorPorEntrada=(+a.valor||0)/entradas.length;
+    entradas.forEach(p=>{
+      contProc[p.proc]=(contProc[p.proc]||0)+1;
+      if(!procAgg[p.proc]) procAgg[p.proc]={qtd:0,receita:0};
+      procAgg[p.proc].qtd+=1;
+      procAgg[p.proc].receita+=valorPorEntrada;
+    });
   });
-  const porProc = Object.keys(contProc).map(p=>({proc:p, qtd:contProc[p], receita:0, share:0}))
-    .sort((a,b)=>b.qtd-a.qtd);
+  const totReceitaProc = Object.values(procAgg).reduce((s,x)=>s+x.receita,0)||1;
+  const porProc = Object.entries(procAgg).map(([proc,v])=>({proc, qtd:v.qtd, receita:v.receita, share:v.receita/totReceitaProc}))
+    .sort((a,b)=>b.receita-a.receita);
   const cats = [...new Set(cs.map(c=>c.cat))];
   const porCat = cats.map(ca=>({cat:ca,valor:cs.filter(c=>c.cat===ca).reduce((s,c)=>s+c.valor,0)}))
     .sort((a,b)=>b.valor-a.valor);
@@ -2669,13 +2688,15 @@ function setPacBusca(v){PAC_BUSCA=v; const tb=document.getElementById('pacBody')
   tb.innerHTML=filtrados.length?filtrados.map(linhaPac).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--grey);padding:20px">Nenhum paciente encontrado.</td></tr>';
 }
 function linhaPac(p){
-  return `<tr onclick="fichaPaciente('${p.nome.replace(/'/g,"")}')" style="cursor:pointer">
+  const nomeEsc=p.nome.replace(/'/g,"");
+  return `<tr onclick="fichaPaciente('${nomeEsc}')" style="cursor:pointer">
     <td style="font-weight:500">${p.nome}</td>
     <td>${p.canal}</td>
     <td class="ctr">${p.visitas}</td>
     <td class="num">${BRL(p.valorTotal)}</td>
     <td class="ctr">${p.recorrente?'<span class="pill ok">Recorrente</span>':'<span class="pill warn">Novo</span>'}</td>
     <td class="ctr">${fmtDate(p.ultima)}</td>
+    <td class="ctr"><button class="btn ghost" style="padding:4px 10px;font-size:11px" onclick="event.stopPropagation();gerarPDFPaciente('${nomeEsc}')" title="Gerar relatório em PDF para a paciente">PDF</button></td>
   </tr>`;
 }
 function renderPacientes(pg){
@@ -2702,7 +2723,7 @@ function renderPacientes(pg){
         <input id="pacBusca" oninput="setPacBusca(this.value)" placeholder="🔍  Buscar paciente pelo nome..." value="${PAC_BUSCA}" style="width:100%;max-width:360px;padding:10px 14px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-size:14px;background:var(--paper);color:var(--ink)">
       </div>
       <table class="data">
-        <thead><tr><th>Paciente</th><th>Origem</th><th class="ctr">Visitas</th><th class="num">Valor acumulado</th><th class="ctr">Status</th><th class="ctr">Última visita</th></tr></thead>
+        <thead><tr><th>Paciente</th><th>Origem</th><th class="ctr">Visitas</th><th class="num">Valor acumulado</th><th class="ctr">Status</th><th class="ctr">Última visita</th><th class="ctr">Relatório</th></tr></thead>
         <tbody id="pacBody">${body}</tbody>
       </table>
     </div>`;
@@ -2719,10 +2740,13 @@ function fichaPaciente(nome){
   const visitasHTML=dias.map(dia=>{
     const itens=porDia[dia];
     const totalDia=itens.reduce((s,a)=>s+a.valor,0);
-    const procs=itens.map(a=>`
+    const procs=itens.map(a=>{
+      const nomesProc=procedimentosDe(a).map(p=>p.proc).filter(Boolean);
+      const procTxt=nomesProc.length?nomesProc.join(' + '):(a.proc||'—');
+      return `
       <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)">
         <div style="display:flex;align-items:center;gap:10px">
-          <span style="font-size:13px">${a.proc}</span>
+          <span style="font-size:13px">${procTxt}</span>
           ${agPill(a.agenda)}
           ${a.func?`<span style="font-size:11px;color:var(--grey)">· ${a.func}</span>`:''}
         </div>
@@ -2730,7 +2754,7 @@ function fichaPaciente(nome){
           <span style="font-weight:600;font-size:13px">${BRL(a.valor)}</span>
           <button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="go('atendimentos');setTimeout(()=>editarAtend('${a.id}'),200)">editar</button>
         </div>
-      </div>`).join('');
+      </div>`;}).join('');
     return `<div style="margin-bottom:14px;background:var(--cream);border:1px solid var(--line);border-radius:12px;padding:14px 16px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
         <div style="font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:600">${fmtDateFull(dia)}</div>
@@ -2745,7 +2769,10 @@ function fichaPaciente(nome){
       <div><h3>📁 Ficha · ${p.nome}</h3>
         <div class="ph-sub">Origem: ${p.canal} · Cliente desde ${primeira?fmtDate(primeira):'—'}</div>
       </div>
-      <button class="btn ghost" onclick="document.getElementById('fichaBox').innerHTML=''">Fechar ficha</button>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn ghost" onclick="gerarPDFPaciente('${p.nome.replace(/'/g,"")}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:15px;height:15px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Relatório da paciente (PDF)</button>
+        <button class="btn ghost" onclick="document.getElementById('fichaBox').innerHTML=''">Fechar ficha</button>
+      </div>
     </div>
     <div style="display:flex;gap:14px;flex-wrap:wrap;margin:14px 0 18px">
       <div style="flex:1;min-width:120px;text-align:center;padding:12px;border-radius:10px;background:var(--cream);border:1px solid var(--line)"><div style="font-size:22px;font-weight:700;font-family:'Cormorant Garamond',serif">${p.visitas}</div><div style="font-size:11px;color:var(--grey)">visitas</div></div>
@@ -3640,47 +3667,73 @@ function renderRelatorio(pg){
       <input type="checkbox" id="rb_${id}" checked style="width:18px;height:18px;margin-top:1px;accent-color:var(--gold-d)">
       <span><span style="font-weight:600;font-size:14px">${label}</span><br><span style="font-size:12px;color:var(--grey)">${desc}</span></span>
     </label>`;
+  // meses disponíveis para o relatório: mês atual + últimos 12 + meses com dados lançados
+  const hojeYm=mesHoje();
+  const comDados=new Set();
+  DATA.atendimentos.forEach(a=>{ if(a.data) comDados.add(a.data.slice(0,7)); });
+  CAIXA.forEach(l=>{ if(l.data) comDados.add(l.data.slice(0,7)); });
+  const setMeses=new Set([hojeYm]); let cur=hojeYm;
+  for(let i=0;i<12;i++){ setMeses.add(cur); cur=mesAnterior(cur); }
+  comDados.forEach(m=>setMeses.add(m));
+  const mesesRel=[...setMeses].sort((a,b)=>b.localeCompare(a));
+  const mesAtual = mesSelecionadoTopo()||hojeYm;
+  const mesOptsRel = mesesRel.map(m=>`<option value="${m}" ${m===mesAtual?'selected':''}>${rotuloMes(m)}${m===hojeYm?' (atual)':''}</option>`).join('');
+  const fs2='padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink)';
+
   pg.innerHTML=`
     ${relatorioVendasHTML()}
     <div class="panel">
-      <div class="panel-head"><div><h3>Gerador de Relatório</h3><div class="ph-sub">Escolha o que incluir e o período — o PDF é gerado sob medida</div></div></div>
+      <div class="panel-head"><div><h3>Gerador de Relatório</h3><div class="ph-sub">Escolha o período exato e os blocos que quer no PDF — cada relatório é gerado sob medida</div></div></div>
 
       <div style="margin-bottom:22px">
         <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);font-weight:600;margin-bottom:12px">1 · Período do relatório</div>
         <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
-          <div class="field"><label>Agrupar por</label>
-            <select id="rb_grao" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;min-width:140px">
-              <option value="dia">Diário</option><option value="semana">Semanal</option>
-              <option value="mes" selected>Mensal</option><option value="ano">Anual</option>
+          <div class="field"><label>Tipo de período</label>
+            <select id="rb_tipoperiodo" onchange="relPeriodoMudou()" style="${fs2};min-width:190px">
+              <option value="mes">Mês específico</option>
+              <option value="intervalo">Intervalo de datas</option>
             </select>
           </div>
-          <div class="field"><label>Referência</label>
-            <input id="rb_ref" value="Junho 2026" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;min-width:160px">
+          <div class="field" id="rb_mesWrap"><label>Mês</label>
+            <select id="rb_mes" style="${fs2};min-width:180px">${mesOptsRel}</select>
+          </div>
+          <div class="field" id="rb_iniWrap" style="display:none"><label>De</label>
+            <input type="date" id="rb_ini" style="${fs2}">
+          </div>
+          <div class="field" id="rb_fimWrap" style="display:none"><label>Até</label>
+            <input type="date" id="rb_fim" style="${fs2}">
           </div>
         </div>
+        <div style="font-size:11.5px;color:var(--grey);margin-top:8px;font-style:italic">Escolhendo "Mês específico" o relatório traz só aquele mês. Em "Intervalo de datas", você define livremente o início e o fim.</div>
       </div>
 
       <div>
         <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);font-weight:600;margin-bottom:12px">2 · Blocos a incluir</div>
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
-          ${chk('resumo','Resumo executivo','Faturamento, lucro, ticket, atendimentos')}
-          ${chk('faturamento','Faturamento detalhado','Por procedimento e por canal')}
-          ${chk('leads','Leads e conversão','Funil, conversão e desempenho por canal')}
-          ${chk('atendimentos','Atendimentos','Lista de atendimentos do período')}
-          ${chk('comissoes','Metas e bonificações','Bônus por funcionário e faixa atingida')}
-          ${chk('caixa','Fluxo de caixa','Entradas, saídas e saldo')}
-          ${chk('custoop','Custo operacional & hora clínica','Despesas do mês e custo por hora')}
-          ${chk('pacientes','Pacientes','Base, recompra e ticket médio')}
+          ${chk('resumo','Resumo executivo','Faturamento, resultado, ticket, comparecimento e conversão')}
+          ${chk('atendimentos','Atendimentos detalhados','Cada consulta: data, paciente, procedimento, profissional, valor')}
+          ${chk('faturamento','Faturamento por procedimento e canal','Quanto cada procedimento e canal gerou de receita')}
+          ${chk('leads','Leads e conversão','Funil por canal: leads, agendados, conversão')}
+          ${chk('pacientes','Pacientes — novos x recorrentes','Base de pacientes, recompra e ranking por valor')}
+          ${chk('caixa','Fluxo de caixa','Receitas, despesas, resultado e saldo por carteira')}
+          ${chk('custoop','Custo operacional & hora clínica','Despesas do período e custo por hora/atendimento')}
+          ${chk('comissoes','Metas e bonificações','Faixa atingida e bônus por meta — só em mês específico')}
           ${chk('conformidade','Conformidade','Status sanitário e legal')}
         </div>
       </div>
 
-      <div style="display:flex;gap:12px;margin-top:24px">
+      <div style="display:flex;gap:12px;margin-top:24px;align-items:center">
         <button class="btn" onclick="gerarPDF()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Gerar relatório PDF</button>
-        <span style="font-size:12px;color:var(--grey);align-self:center;font-style:italic">Abre a janela de impressão — escolha "Salvar como PDF".</span>
+        <span style="font-size:12px;color:var(--grey);font-style:italic">Abre a janela de impressão — escolha "Salvar como PDF".</span>
       </div>
     </div>`;
   setTimeout(drawVendasCharts,30);
+}
+function relPeriodoMudou(){
+  const tipo=document.getElementById('rb_tipoperiodo').value;
+  document.getElementById('rb_mesWrap').style.display = tipo==='mes' ? '' : 'none';
+  document.getElementById('rb_iniWrap').style.display = tipo==='intervalo' ? '' : 'none';
+  document.getElementById('rb_fimWrap').style.display = tipo==='intervalo' ? '' : 'none';
 }
 
 // ===== Relatório de Vendas — números e gráficos por profissional (respeita mês do topo) =====
@@ -3775,134 +3828,320 @@ function drawVendasCharts(){
   }
 }
 
-function gerarPDF(){
-  const k=calc();
-  const on=id=>{const e=document.getElementById('rb_'+id);return e&&e.checked;};
-  const grao=document.getElementById('rb_grao').value;
-  const ref=document.getElementById('rb_ref').value||'';
-  const hoje=new Date().toLocaleDateString('pt-BR');
-  const sec=(t,inner)=>`<h2>${t}</h2>${inner}`;
-  const tbl=(heads,rows)=>`<table><thead><tr>${heads.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>`;
-  let body='';
+// conta quantos meses (inclusive) um intervalo de datas cobre — usado p/ custo de hora clínica
+function contarMesesPeriodo(ini,fim){
+  const [ai,mi]=ini.slice(0,7).split('-').map(Number);
+  const [af,mf]=fim.slice(0,7).split('-').map(Number);
+  return Math.max(1,(af-ai)*12+(mf-mi)+1);
+}
+// avalia um conjunto de faixas (metas livres) dado um valor realizado
+function avaliarFaixasMeta(real, faixas){
+  const ordenadas=[...(faixas||[])].sort((a,b)=>a.alvo-b.alvo);
+  let atingida=null; ordenadas.forEach(f=>{ if(real>=f.alvo) atingida=f; });
+  let bonus=0;
+  if(atingida) bonus = atingida.bonus.tipo==='fixo' ? atingida.bonus.valor : real*((atingida.bonus.valor||0)/100);
+  return {atingida,bonus};
+}
+// ===== Relatório individual da paciente — elegante, para ser encaminhado a ela =====
+// Mostra só o histórico de consultas e procedimentos realizados (Compareceu). Não inclui
+// nenhum dado financeiro interno (custo, repasse, margem) — é um documento para a paciente.
+function gerarPDFPaciente(nome){
+  const hist = DATA.atendimentos.filter(a=>a.paciente===nome && a.agenda==='Compareceu').sort((a,b)=>a.data.localeCompare(b.data));
+  if(!hist.length){ alert('Esta paciente ainda não tem atendimentos realizados para gerar o relatório.'); return; }
+  const primeira = hist[0].data;
+  const ultima = hist[hist.length-1].data;
+  const procsRealizados = [...new Set(hist.flatMap(a=>{
+    const l=procedimentosDe(a).map(p=>p.proc).filter(Boolean);
+    return l.length?l:(a.proc?[a.proc]:[]);
+  }))];
+  const hojeHora=new Date().toLocaleString('pt-BR');
 
-  if(on('resumo')){
-    const cc=calcCaixa();
-    const mesRef=ref&&/^\d{4}-\d{2}/.test(ref)?ref.slice(0,7):hcMesRef();
-    const despMes=CAIXA.filter(l=>l.tipo==='despesa'&&l.data.slice(0,7)===mesRef);
-    const custoOp=despMes.reduce((s,l)=>s+l.valor,0);
-    const horaClin=(META.horasMes||176)?custoOp/(META.horasMes||176):0;
-    // cards de destaque
-    body+=`<div class="cards">
-      <div class="card"><div class="cl">Faturamento</div><div class="cv">${BRL(k.faturamento)}</div></div>
-      <div class="card"><div class="cl">Resultado da clínica</div><div class="cv" style="color:${cc.resultado>=0?'#2E7D4F':'#B23A3A'}">${BRL(cc.resultado)}</div></div>
-      <div class="card"><div class="cl">Atendimentos</div><div class="cv">${k.nAtend}</div></div>
-      <div class="card"><div class="cl">Ticket médio</div><div class="cv">${BRL(k.ticket)}</div></div>
-      <div class="card"><div class="cl">Custo da hora clínica</div><div class="cv">${BRL(horaClin)}</div></div>
-      <div class="card"><div class="cl">Saldo em caixa</div><div class="cv">${BRL(cc.saldoTotal)}</div></div>
+  // agrupa por dia de visita (uma paciente pode ter feito mais de um procedimento no mesmo dia)
+  const porDia={};
+  hist.forEach(a=>{ (porDia[a.data]=porDia[a.data]||[]).push(a); });
+  const dias=Object.keys(porDia).sort();
+  const linhasVisitas = dias.map((dia,i)=>{
+    const itens=porDia[dia];
+    const nomesProc=[...new Set(itens.flatMap(a=>{
+      const l=procedimentosDe(a).map(p=>p.proc).filter(Boolean);
+      return l.length?l:(a.proc?[a.proc]:[]);
+    }))];
+    const profissional=[...new Set(itens.map(a=>a.func).filter(Boolean))].join(', ');
+    const valorDia=itens.reduce((s,a)=>s+(+a.valor||0),0);
+    return `<div class="visita">
+      <div class="visita-marco"><span class="visita-num">${i+1}</span>${i<dias.length-1?'<span class="visita-linha"></span>':''}</div>
+      <div class="visita-corpo">
+        <div class="visita-data">${fmtDateFull(dia)}</div>
+        <div class="visita-procs">${nomesProc.join(' · ')}</div>
+        ${profissional?`<div class="visita-prof">Realizado por ${profissional}</div>`:''}
+        <div class="visita-valor">${BRL(valorDia)}</div>
+      </div>
     </div>`;
-    body+=sec('Resumo executivo', tbl(['Indicador','Valor'],[
-      ['Faturamento (receita de procedimentos)',BRL(k.faturamento)],
-      ['Custo operacional do mês',BRL(custoOp)],
-      ['Resultado da clínica (receita − despesa)',BRL(cc.resultado)],
-      ['Margem',PCT(k.margem)],
-      ['Ticket médio por atendimento',BRL(k.ticket)],
-      ['Atendimentos realizados',k.nAtend],
-      ['Taxa de comparecimento',PCT(k.txComp)],
-      ['Conversão de leads',PCT(k.txConv)],
-      ['Custo da hora clínica',BRL(horaClin)],
-      ['Saldo total em caixa',BRL(cc.saldoTotal)]
-    ].map(r=>`<tr><td>${r[0]}</td><td class="n">${r[1]}</td></tr>`).join('')));
+  }).join('');
+
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Histórico de Atendimentos · ${nome}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    @page{margin:20mm 18mm}
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',Arial,sans-serif;color:#3A342A;font-size:12px;line-height:1.6;background:#FFFEFB;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .capa{text-align:center;padding:8px 0 28px;border-bottom:1px solid #E8DEC8;margin-bottom:30px}
+    .capa .marca{font-family:'Cormorant Garamond',Georgia,serif;font-size:28px;font-weight:600;color:#8A6F27;letter-spacing:.5px}
+    .capa .tagline{font-size:9.5px;letter-spacing:3px;text-transform:uppercase;color:#B0A48A;margin-top:6px}
+    .capa .titulo{font-family:'Cormorant Garamond',Georgia,serif;font-style:italic;font-size:17px;color:#3A342A;margin-top:22px}
+    .capa .paciente{font-family:'Cormorant Garamond',Georgia,serif;font-size:26px;font-weight:600;color:#211C16;margin-top:6px}
+    .capa .emit{font-size:10px;color:#B0A48A;margin-top:10px}
+    .resumo{display:flex;justify-content:center;gap:0;margin:0 0 34px;border:1px solid #EEE6D4;border-radius:14px;overflow:hidden}
+    .resumo .item{flex:1;text-align:center;padding:16px 10px;border-right:1px solid #EEE6D4}
+    .resumo .item:last-child{border-right:none}
+    .resumo .v{font-family:'Cormorant Garamond',Georgia,serif;font-size:22px;font-weight:600;color:#8A6F27}
+    .resumo .l{font-size:8.5px;text-transform:uppercase;letter-spacing:.6px;color:#B0A48A;margin-top:4px}
+    .bloco-titulo{font-family:'Cormorant Garamond',Georgia,serif;font-style:italic;font-size:16px;color:#211C16;margin-bottom:4px}
+    .bloco-sub{font-size:10.5px;color:#B0A48A;margin-bottom:20px}
+    .chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:32px}
+    .chip{font-size:10.5px;padding:5px 13px;border:1px solid #E8DEC8;border-radius:20px;color:#6B6152;background:#FBF9F3}
+    .visita{display:flex;gap:14px}
+    .visita-marco{display:flex;flex-direction:column;align-items:center;flex-shrink:0}
+    .visita-num{width:26px;height:26px;border-radius:50%;background:#211C16;color:#E9C877;font-family:'Cormorant Garamond',Georgia,serif;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .visita-linha{flex:1;width:1px;background:#E8DEC8;margin:4px 0}
+    .visita-corpo{flex:1;padding-bottom:26px}
+    .visita-data{font-family:'Cormorant Garamond',Georgia,serif;font-size:16px;font-weight:600;color:#211C16}
+    .visita-procs{font-size:12.5px;color:#3A342A;margin-top:3px}
+    .visita-prof{font-size:10.5px;color:#B0A48A;margin-top:3px;font-style:italic}
+    .visita-valor{font-size:11.5px;color:#8A6F27;font-weight:600;margin-top:5px}
+    .encerramento{margin-top:20px;padding-top:20px;border-top:1px solid #E8DEC8;text-align:center}
+    .encerramento .msg{font-family:'Cormorant Garamond',Georgia,serif;font-style:italic;font-size:14.5px;color:#3A342A;max-width:420px;margin:0 auto 14px}
+    .encerramento .assin{font-size:11px;color:#6B6152}
+    .encerramento .assin b{color:#211C16}
+    .ft{margin-top:30px;padding-top:14px;font-size:9px;color:#C9BFA9;text-align:center}
+  </style></head><body>
+    <div class="capa">
+      <div class="marca">Instituto Bruna Braga</div>
+      <div class="tagline">Harmonização Facial</div>
+      <div class="titulo">Histórico de Atendimentos</div>
+      <div class="paciente">${nome}</div>
+      <div class="emit">Documento preparado em ${hojeHora}</div>
+    </div>
+
+    <div class="resumo">
+      <div class="item"><div class="v">${hist.length}</div><div class="l">Atendimento${hist.length>1?'s':''}</div></div>
+      <div class="item"><div class="v">${dias.length}</div><div class="l">Visita${dias.length>1?'s':''}</div></div>
+      <div class="item"><div class="v">${fmtDate(primeira)}</div><div class="l">Cliente desde</div></div>
+      <div class="item"><div class="v">${fmtDate(ultima)}</div><div class="l">Última visita</div></div>
+    </div>
+
+    <div class="bloco-titulo">Cuidados já realizados</div>
+    <div class="bloco-sub">Procedimentos que já fazem parte da sua jornada com a gente</div>
+    <div class="chips">${procsRealizados.map(p=>`<span class="chip">${p}</span>`).join('')}</div>
+
+    <div class="bloco-titulo">Sua linha do tempo</div>
+    <div class="bloco-sub">Cada consulta realizada, em ordem cronológica</div>
+    <div>${linhasVisitas}</div>
+
+    <div class="encerramento">
+      <div class="msg">"Obrigado pela confiança em cada etapa do seu cuidado. Este é o registro da sua jornada conosco — e ela continua."</div>
+      <div class="assin"><b>Instituto Bruna Braga</b> · Harmonização Facial</div>
+    </div>
+    <div class="ft">Documento pessoal e confidencial, preparado especialmente para ${nome.split(' ')[0]}.</div>
+  </body></html>`;
+  const w=window.open('','_blank');
+  if(!w){alert('Permita pop-ups para gerar o relatório.');return;}
+  w.document.write(html); w.document.close();
+  setTimeout(()=>{w.focus();w.print();},500);
+}
+
+function gerarPDF(){
+  const tipoPeriodo=document.getElementById('rb_tipoperiodo').value;
+  let ini,fim,periodoLabel,singleMonth=false,ym=null;
+  if(tipoPeriodo==='mes'){
+    ym=document.getElementById('rb_mes').value;
+    ini=ym+'-01'; fim=ym+'-31'; periodoLabel=rotuloMes(ym); singleMonth=true;
+  } else {
+    ini=document.getElementById('rb_ini').value; fim=document.getElementById('rb_fim').value;
+    if(!ini||!fim){ alert('Selecione as duas datas do intervalo (De / Até).'); return; }
+    if(ini>fim){ const t=ini; ini=fim; fim=t; }
+    periodoLabel=fmtDateFull(ini)+' até '+fmtDateFull(fim);
   }
-  if(on('faturamento')){
-    body+=sec('Faturamento por procedimento', tbl(['Procedimento','Qtd','Receita','%'],
-      k.porProc.map(p=>`<tr><td>${p.proc}</td><td class="n">${p.qtd}</td><td class="n">${BRL(p.receita)}</td><td class="n">${PCT0(p.share)}</td></tr>`).join('')));
-    body+=sec('Faturamento por canal', tbl(['Canal','Receita'],
-      k.porCanal.map(c=>`<tr><td>${c.canal}</td><td class="n">${BRL(c.receita)}</td></tr>`).join('')));
-  }
-  if(on('leads')){
-    body+=sec('Leads e conversão', tbl(['Canal','Leads','Fechados','Conversão','Receita'],
-      k.porCanal.map(c=>`<tr><td>${c.canal}</td><td class="n">${c.leads}</td><td class="n">${c.fechados}</td><td class="n">${PCT0(c.conv)}</td><td class="n">${BRL(c.receita)}</td></tr>`).join('')));
-  }
-  if(on('atendimentos')){
-    body+=sec('Atendimentos do período', tbl(['Data','Paciente','Procedimento','Profissional','Valor','Status'],
-      DATA.atendimentos.map(a=>`<tr><td>${fmtDate(a.data)}</td><td>${a.paciente}</td><td>${a.proc}</td><td>${a.func||'—'}</td><td class="n">${BRL(a.valor)}</td><td>${a.agenda}</td></tr>`).join('')));
-  }
-  if(on('comissoes')){
-    const rows=METAS.map(m=>{const av=avaliarMeta(m);const T=TIPO_META[m.tipo];
-      return `<tr><td>${funcNome(m.funcId)}</td><td>${T.label} (${m.escopo})</td><td class="n">${T.fmt(av.real)}</td><td>${av.atingida?av.atingida.nome:'—'}</td><td class="n">${BRL(av.bonus)}</td></tr>`;}).join('');
-    body+=sec('Metas e bonificações', tbl(['Funcionário','Meta','Realizado','Faixa','Bônus'],rows));
-  }
-  if(on('caixa')){
+  const on=id=>{const e=document.getElementById('rb_'+id);return e&&e.checked;};
+  const hoje=new Date().toLocaleDateString('pt-BR');
+  const hojeHora=new Date().toLocaleString('pt-BR');
+  const sec=(n,t,sub,inner)=>`<div class="sec"><div class="sec-h"><span class="sec-n">${n}</span><div><h2>${t}</h2>${sub?`<div class="sec-sub">${sub}</div>`:''}</div></div>${inner}</div>`;
+  const tbl=(heads,rows,nums)=>`<table><thead><tr>${heads.map((h,i)=>`<th class="${nums&&nums.includes(i)?'n':''}">${h}</th>`).join('')}</tr></thead><tbody>${rows||`<tr><td colspan="${heads.length}" class="empty">Sem dados neste período.</td></tr>`}</tbody></table>`;
+
+  window.__periodoOverride={ini,fim,acumulado:false};
+  let body='';
+  let secN=1;
+  try{
+    const k=calc();
     const cc=calcCaixa();
-    const linhas=[
-      ['Receita (procedimentos)',BRL(cc.receita)],
-      ['Aportes (não-receita)',BRL(cc.aporte)],
-      ['Despesas',BRL(cc.despesa)],
-      ['Retiradas',BRL(cc.retirada)],
-      ['Resultado da clínica (receita − despesa)',BRL(cc.resultado)],
-      ['Saldo total em caixa',BRL(cc.saldoTotal)],
-    ].map(r=>`<tr><td>${r[0]}</td><td class="n">${r[1]}</td></tr>`).join('');
-    body+=sec('Fluxo de caixa', tbl(['Indicador','Valor'],linhas));
-    const cart=CARTEIRAS.map(w=>`<tr><td>${w.nome}</td><td class="n">${BRL(cc.saldos[w.id])}</td></tr>`).join('');
-    body+=sec('Saldo por carteira', tbl(['Carteira','Saldo atual'],cart));
-  }
-  if(on('custoop')){
-    const mesRef=ref&&/^\d{4}-\d{2}/.test(ref)?ref.slice(0,7):hcMesRef();
-    const despMes=CAIXA.filter(l=>l.tipo==='despesa'&&l.data.slice(0,7)===mesRef);
-    const custoOp=despMes.reduce((s,l)=>s+l.valor,0);
-    const horas=META.horasMes||176;
-    const horaClin=horas?custoOp/horas:0;
-    const atendMes=DATA.atendimentos.filter(a=>a.agenda==='Compareceu'&&a.data.slice(0,7)===mesRef);
-    const porCat={}; despMes.forEach(l=>porCat[l.categoria]=(porCat[l.categoria]||0)+l.valor);
-    const catRows=Object.entries(porCat).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<tr><td>${c}</td><td class="n">${BRL(v)}</td></tr>`).join('');
-    body+=sec('Custo operacional & hora clínica', tbl(['Indicador','Valor'],[
-      ['Custo operacional total do mês',BRL(custoOp)],
-      ['Horas clínicas disponíveis',horas+'h'],
-      ['Custo da hora clínica',BRL(horaClin)],
-      ['Custo por atendimento',BRL(atendMes.length?custoOp/atendMes.length:0)]
-    ].map(r=>`<tr><td>${r[0]}</td><td class="n">${r[1]}</td></tr>`).join('')));
-    if(catRows) body+=sec('Composição do custo operacional', tbl(['Categoria','Valor'],catRows));
-  }
-  if(on('pacientes')){
-    body+=sec('Pacientes', tbl(['Indicador','Valor'],[
-      ['Total de pacientes',k.totalPacientes],['Recorrentes',k.pacRecorrentes],
-      ['Taxa de recompra',PCT(k.txRecompra)],['Ticket médio por paciente',BRL(k.ltv)]
-    ].map(r=>`<tr><td>${r[0]}</td><td class="n">${r[1]}</td></tr>`).join('')));
-  }
-  if(on('conformidade')){
-    body+=sec('Conformidade', tbl(['Item','Responsável','Status'],
-      DATA.conformidade.map(c=>`<tr><td>${c.item}</td><td>${c.resp}</td><td>${c.status}</td></tr>`).join('')));
+
+    if(on('resumo')){
+      body+=`<div class="cards">
+        <div class="card"><div class="cl">Faturamento</div><div class="cv">${BRL(k.faturamento)}</div></div>
+        <div class="card"><div class="cl">Resultado da clínica</div><div class="cv" style="color:${cc.resultado>=0?'#2E7D4F':'#B23A3A'}">${BRL(cc.resultado)}</div></div>
+        <div class="card"><div class="cl">Atendimentos</div><div class="cv">${k.nAtend}</div></div>
+        <div class="card"><div class="cl">Ticket médio</div><div class="cv">${BRL(k.ticket)}</div></div>
+        <div class="card"><div class="cl">Comparecimento</div><div class="cv">${PCT0(k.txComp)}</div></div>
+        <div class="card"><div class="cl">Conversão de leads</div><div class="cv">${PCT0(k.txConv)}</div></div>
+      </div>`;
+      body+=sec(secN++,'Resumo executivo','Principais indicadores do período', tbl(['Indicador','Valor'],[
+        ['Faturamento (receita de procedimentos)',BRL(k.faturamento)],
+        ['Resultado da clínica (receita − despesa do período)',BRL(cc.resultado)],
+        ['Margem',PCT(k.margem)],
+        ['Ticket médio por atendimento',BRL(k.ticket)],
+        ['Atendimentos realizados',k.nAtend],
+        ['· dos quais, novos (1ª consulta)',k.atendNovos],
+        ['· dos quais, recorrentes',k.atendRecorrentes],
+        ['Taxa de comparecimento',PCT(k.txComp)],
+        ['Conversão de leads',PCT(k.txConv)],
+        ['Saldo em caixa até o fim do período',BRL(cc.saldoTotal)],
+      ].map(r=>`<tr><td>${r[0]}</td><td class="n">${r[1]}</td></tr>`).join(''),[1]));
+    }
+
+    if(on('atendimentos')){
+      // ordem completa de cada paciente (todo o histórico) p/ marcar novo x recorrente
+      const ordemHist={};
+      DATA.atendimentos.filter(a=>a.agenda==='Compareceu').forEach(a=>{ (ordemHist[a.paciente]=ordemHist[a.paciente]||[]).push(a); });
+      Object.values(ordemHist).forEach(arr=>arr.sort((a,b)=>a.data.localeCompare(b.data)||String(a.id).localeCompare(String(b.id))));
+      const lista=DATA.atendimentos.filter(a=>a.data>=ini&&a.data<=fim).sort((a,b)=>a.data.localeCompare(b.data));
+      const rows=lista.map(a=>{
+        const procs=procedimentosDe(a).map(p=>p.proc).filter(Boolean);
+        const procTxt=procs.length?procs.join(', '):(a.proc||'—');
+        let perfil='—';
+        if(a.agenda==='Compareceu'){
+          const seq=ordemHist[a.paciente]||[];
+          const idx=seq.findIndex(x=>x.id===a.id);
+          perfil = idx===0 ? 'Novo' : 'Recorrente';
+        }
+        const statusCor = a.agenda==='Compareceu'?'#2E7D4F':(a.agenda==='Cancelou'?'#B23A3A':'#9A7B2E');
+        return `<tr><td>${fmtDate(a.data)}</td><td>${a.paciente||'—'}</td><td>${procTxt}</td><td>${a.func||'—'}</td><td>${a.canal||'—'}</td><td class="n">${BRL(a.valor||0)}</td><td><span style="color:${statusCor};font-weight:600">${a.agenda||'—'}</span></td><td>${perfil}</td></tr>`;
+      }).join('');
+      body+=sec(secN++,'Atendimentos detalhados',`${lista.length} atendimento(s) entre ${fmtDate(ini)} e ${fmtDate(fim)}`,
+        tbl(['Data','Paciente','Procedimento(s)','Profissional','Canal','Valor','Status','Perfil'],rows,[5]));
+    }
+
+    if(on('faturamento')){
+      const rowsProc=k.porProc.map(p=>`<tr><td>${p.proc}</td><td class="n">${p.qtd}</td><td class="n">${BRL(p.receita)}</td><td class="n">${PCT0(p.share)}</td></tr>`).join('');
+      body+=sec(secN++,'Faturamento por procedimento','Quanto cada procedimento gerou no período', tbl(['Procedimento','Qtd','Receita','% do faturamento'],rowsProc,[1,2,3])
+        +`<div class="nota">Quando um atendimento reúne mais de um procedimento, a receita é distribuída igualmente entre eles (o valor é sempre único por atendimento).</div>`);
+      const rowsCanal=k.porCanal.map(c=>`<tr><td>${c.canal}</td><td class="n">${c.qtd}</td><td class="n">${BRL(c.receita)}</td></tr>`).join('');
+      body+=sec(secN++,'Faturamento por canal','De onde vieram os pacientes que geraram receita', tbl(['Canal','Atendimentos','Receita'],rowsCanal,[1,2]));
+    }
+
+    if(on('leads')){
+      const rows=k.porCanal.map(c=>`<tr><td>${c.canal}</td><td class="n">${c.leads}</td><td class="n">${c.fechados}</td><td class="n">${PCT0(c.conv)}</td><td class="n">${BRL(c.receita)}</td></tr>`).join('');
+      body+=sec(secN++,'Leads e conversão','Funil de captação por canal no período', tbl(['Canal','Leads','Agendados','Conversão','Receita gerada'],rows,[1,2,3,4]));
+    }
+
+    if(on('pacientes')){
+      body+=sec(secN++,'Pacientes — visão geral','Base de pacientes atendidos no período', tbl(['Indicador','Valor'],[
+        ['Pacientes únicos atendidos',k.totalPacientes],
+        ['Pacientes recorrentes (já vieram antes)',k.pacRecorrentes],
+        ['Taxa de recompra',PCT(k.txRecompra)],
+        ['Ticket médio por paciente',BRL(k.ltv)],
+        ['Atendimentos novos (1ª consulta)',k.atendNovos],
+        ['Atendimentos recorrentes',k.atendRecorrentes],
+      ].map(r=>`<tr><td>${r[0]}</td><td class="n">${r[1]}</td></tr>`).join(''),[1]));
+      const top=k.pacientes.slice(0,40);
+      const rowsPac=top.map(p=>`<tr><td>${p.nome}</td><td class="n">${p.visitas}</td><td class="n">${BRL(p.valorTotal)}</td><td>${p.recorrente?'Recorrente':'Novo'}</td></tr>`).join('');
+      body+=sec(secN++,'Ranking de pacientes',`Maior valor no período${k.pacientes.length>40?' · mostrando os 40 maiores':''}`, tbl(['Paciente','Visitas','Valor total','Perfil'],rowsPac,[1,2]));
+    }
+
+    if(on('caixa')){
+      body+=sec(secN++,'Fluxo de caixa','Entradas e saídas registradas no período', tbl(['Indicador','Valor'],[
+        ['Receita (procedimentos)',BRL(cc.receita)],
+        ['Aportes (não-receita)',BRL(cc.aporte)],
+        ['Despesas',BRL(cc.despesa)],
+        ['Retiradas',BRL(cc.retirada)],
+        ['Resultado da clínica (receita − despesa)',BRL(cc.resultado)],
+      ].map(r=>`<tr><td>${r[0]}</td><td class="n">${r[1]}</td></tr>`).join(''),[1]));
+      const cart=CARTEIRAS.map(w=>`<tr><td>${w.nome}</td><td class="n">${BRL(cc.saldos[w.id]||0)}</td></tr>`).join('');
+      body+=sec(secN++,'Saldo por carteira',`Saldo acumulado até ${fmtDate(fim)} (arrasta de meses anteriores até o último fechamento)`, tbl(['Carteira','Saldo'],cart,[1]));
+    }
+
+    if(on('custoop')){
+      const nMeses=contarMesesPeriodo(ini,fim);
+      const horas=(META.horasMes||176)*nMeses;
+      const custoOp=cc.despesa;
+      const horaClin=horas?custoOp/horas:0;
+      body+=sec(secN++,'Custo operacional & hora clínica','Despesas do período e custo de operação', tbl(['Indicador','Valor'],[
+        ['Custo operacional total do período',BRL(custoOp)],
+        ['Horas clínicas disponíveis no período',horas+'h'],
+        ['Custo da hora clínica',BRL(horaClin)],
+        ['Custo por atendimento',BRL(k.nAtend?custoOp/k.nAtend:0)]
+      ].map(r=>`<tr><td>${r[0]}</td><td class="n">${r[1]}</td></tr>`).join(''),[1]));
+      const rowsCat=(cc.catDespesaArr||[]).map(c=>`<tr><td>${c.cat}</td><td class="n">${BRL(c.valor)}</td></tr>`).join('');
+      body+=sec(secN++,'Composição do custo operacional','Despesas do período por categoria', tbl(['Categoria','Valor'],rowsCat,[1]));
+    }
+
+    if(on('comissoes')){
+      if(!singleMonth){
+        body+=sec(secN++,'Metas e bonificações',null,`<div class="nota">Este bloco só é calculado quando o período é um "Mês específico" — selecione um mês para ver metas e bônus.</div>`);
+      } else {
+        const metas=metasDoMes(ym);
+        const rows=metas.map(m=>{
+          const real=valorMetaLivre(m,k);
+          const T=META_TIPOS[m.tipo]||{fmt:v=>v};
+          const {atingida,bonus}=avaliarFaixasMeta(real,m.faixas);
+          const suf=(m.filtroTipo&&m.filtroTipo!=='todos'&&m.filtroValor)?` (${m.filtroValor})`:'';
+          return `<tr><td>${m.nome||T.label}${suf}</td><td class="n">${T.fmt(real)}</td><td>${atingida?atingida.nome:'—'}</td><td class="n">${BRL(bonus)}</td></tr>`;
+        }).join('');
+        body+=sec(secN++,'Metas e bonificações',`Metas de ${rotuloMes(ym)} — faixa atingida e bônus`, tbl(['Meta','Realizado','Faixa atingida','Bônus'],rows,[1,3]));
+      }
+    }
+
+    if(on('conformidade')){
+      const rows=(DATA.conformidade||[]).map(c=>`<tr><td>${c.item}</td><td>${c.resp}</td><td>${c.status}</td></tr>`).join('');
+      body+=sec(secN++,'Conformidade','Situação sanitária e legal da clínica', tbl(['Item','Responsável','Status'],rows));
+    }
+  } finally {
+    window.__periodoOverride=null;
   }
 
-  const graoLabel={dia:'Diário',semana:'Semanal',mes:'Mensal',ano:'Anual'}[grao];
   const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Relatório · Instituto Bruna Braga</title>
   <style>
-    @page{margin:18mm}
+    @page{margin:16mm 15mm}
     *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:Georgia,'Times New Roman',serif;color:#211C16;font-size:12px;line-height:1.5}
-    .hd{border-bottom:3px solid #C9A24B;padding-bottom:14px;margin-bottom:22px}
-    .hd .brand{font-size:24px;font-weight:700;color:#9A7B2E;letter-spacing:.5px}
-    .hd .sub{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#8A8175;margin-top:4px}
-    .hd .meta{margin-top:10px;font-size:11px;color:#555}
-    h2{font-size:15px;color:#9A7B2E;border-bottom:1px solid #E8DEC8;padding-bottom:6px;margin:22px 0 10px}
-    table{width:100%;border-collapse:collapse;margin-bottom:6px;font-family:Arial,sans-serif;font-size:11px}
-    th{background:#211C16;color:#fff;text-align:left;padding:7px 9px;font-size:10px;text-transform:uppercase;letter-spacing:.5px}
-    td{padding:6px 9px;border-bottom:1px solid #eee}
+    body{font-family:'Georgia','Times New Roman',serif;color:#211C16;font-size:11.5px;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #C9A24B;padding-bottom:16px;margin-bottom:26px}
+    .hd .brand{font-size:25px;font-weight:700;color:#8A6F27;letter-spacing:.3px}
+    .hd .sub{font-size:9.5px;letter-spacing:2.6px;text-transform:uppercase;color:#8A8175;margin-top:5px}
+    .hd .right{text-align:right}
+    .hd .right .tag{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:#8A8175}
+    .hd .right .per{font-size:15px;font-weight:700;color:#211C16;margin-top:2px}
+    .hd .right .emit{font-size:10px;color:#9C9384;margin-top:5px}
+    .sec{margin-bottom:26px;page-break-inside:avoid}
+    .sec-h{display:flex;gap:12px;align-items:baseline;border-bottom:1px solid #E8DEC8;padding-bottom:7px;margin-bottom:11px}
+    .sec-n{flex:none;width:22px;height:22px;border-radius:50%;background:#211C16;color:#E9C877;font-family:Arial,sans-serif;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+    h2{font-size:14.5px;color:#211C16;font-weight:700}
+    .sec-sub{font-size:10.5px;color:#8A8175;margin-top:1px}
+    table{width:100%;border-collapse:collapse;margin-bottom:4px;font-family:'Helvetica Neue',Arial,sans-serif;font-size:10.5px}
+    thead{display:table-header-group}
+    th{background:#F5EFE0;color:#4A3F2E;text-align:left;padding:8px 10px;font-size:9px;text-transform:uppercase;letter-spacing:.6px;font-weight:700;border-bottom:2px solid #C9A24B}
+    td{padding:7px 10px;border-bottom:1px solid #EFE9DA;font-variant-numeric:tabular-nums}
     td.n,th.n{text-align:right}
-    tr:nth-child(even) td{background:#FBF8F1}
-    .ft{margin-top:30px;padding-top:12px;border-top:1px solid #E8DEC8;font-size:10px;color:#999;text-align:center}
-    .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:6px 0 14px}
-    .card{border:1px solid #E8DEC8;border-radius:8px;padding:12px 14px;background:#FBF8F1}
-    .card .cl{font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:#8A8175;font-weight:bold}
-    .card .cv{font-size:19px;font-weight:bold;color:#211C16;margin-top:4px;font-family:Georgia,serif}
+    tr:nth-child(even) td{background:#FBF9F3}
+    td.empty{text-align:center;color:#9C9384;font-style:italic;padding:14px}
+    .nota{font-size:10px;color:#8A8175;font-style:italic;margin-top:6px;padding:0 2px}
+    .ft{margin-top:34px;padding-top:12px;border-top:1px solid #E8DEC8;font-size:9.5px;color:#9C9384;text-align:center}
+    .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:2px 0 26px}
+    .card{border:1px solid #E8DEC8;border-radius:9px;padding:13px 15px;background:#FBF9F3}
+    .card .cl{font-size:8.5px;text-transform:uppercase;letter-spacing:.7px;color:#8A8175;font-weight:700;font-family:Arial,sans-serif}
+    .card .cv{font-size:19px;font-weight:700;color:#211C16;margin-top:5px;font-family:Georgia,serif}
   </style></head><body>
     <div class="hd">
-      <div class="brand">Instituto Bruna Braga</div>
-      <div class="sub">Harmonização Facial · Relatório Gerencial</div>
-      <div class="meta">Período: <b>${ref}</b> · Agrupamento: ${graoLabel} · Emitido em ${hoje}</div>
+      <div>
+        <div class="brand">Instituto Bruna Braga</div>
+        <div class="sub">Harmonização Facial · Relatório Gerencial</div>
+      </div>
+      <div class="right">
+        <div class="tag">Período do relatório</div>
+        <div class="per">${periodoLabel}</div>
+        <div class="emit">Emitido em ${hojeHora}</div>
+      </div>
     </div>
-    ${body||'<p>Nenhum bloco selecionado.</p>'}
-    <div class="ft">Documento gerado pelo Sistema de Gestão · Instituto Bruna Braga</div>
+    ${body||'<p style="color:#9C9384;font-style:italic">Nenhum bloco selecionado.</p>'}
+    <div class="ft">Documento confidencial de uso interno · Gerado pelo Sistema de Gestão do Instituto Bruna Braga</div>
   </body></html>`;
   const w=window.open('','_blank');
   if(!w){alert('Permita pop-ups para gerar o relatório.');return;}
