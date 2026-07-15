@@ -234,6 +234,22 @@ table.data tbody tr:hover{background:var(--cream)}
   .kpi .val,.tcard .tc-val{font-size:24px}
 }
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+/* ---------- Recall de Pacientes (funil por tempo sem visita) ---------- */
+.recall-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;align-items:start}
+.recall-col{background:var(--cream);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;max-height:640px}
+.recall-col-head{padding:14px 14px 12px;background:var(--paper);border-bottom:1px solid var(--line)}
+.recall-col-title{font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:600;color:var(--ink)}
+.recall-col-desc{font-size:11px;color:var(--grey);margin-top:2px}
+.recall-col-count{font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:700;margin-top:6px}
+.recall-col-body{padding:10px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px}
+.recall-card{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;transition:.15s}
+.recall-card:hover{border-color:var(--gold-l);transform:translateY(-1px)}
+.recall-nome{font-size:13px;font-weight:600;color:var(--ink)}
+.recall-meta{font-size:11px;color:var(--grey);margin-top:3px}
+.recall-meta2{font-size:10.5px;color:var(--gold-d);margin-top:2px}
+.recall-vazio{font-size:12px;color:var(--grey);font-style:italic;text-align:center;padding:16px 6px}
+@media (max-width:1100px){ .recall-grid{grid-template-columns:repeat(2,1fr)} }
+
 /* ---------- CRM trend cards ---------- */
 .trend-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:22px}
 .tcard{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);
@@ -346,6 +362,7 @@ table.data tbody tr:hover{background:var(--cream)}
         <button class="ng-head"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 11l18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg><span class="t">Marketing</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="9 6 15 12 9 18"/></svg></button>
         <div class="ng-items">
           <button data-page="leads">Captação de Leads</button>
+          <button data-page="recall">Recall de Pacientes</button>
         </div>
       </div>
       <div class="nav-group" data-group="analise">
@@ -1493,6 +1510,7 @@ function initNav(){
 let currentPage='painel';
 const TITLES={painel:['Painel','Visão Geral da Clínica'],atendimentos:['Cadastros','Registro de Atendimentos'],
   leads:['Marketing','Captação de Leads'],custos:['Financeiro','Custos & Despesas'],
+  recall:['Marketing','Recall de Pacientes'],
   conformidade:['Controle','Conformidade & Regularização'],
   comissoes:['Financeiro','Metas & Bonificações'],pacientes:['Cadastros','Base de Pacientes'],
   documentos:['Controle','Documentos & Arquivo'],analise:['Relatórios','Análise Avançada de Dados'],
@@ -1513,7 +1531,7 @@ function go(page){
   C.innerHTML='<div class="page active" id="pg"></div>';
   const pg=document.getElementById('pg');
   ({painel:renderPainel,atendimentos:renderAtend,leads:renderLeads,custos:renderCustos,
-    conformidade:renderConf,comissoes:renderComissoes,pacientes:renderPacientes,
+    conformidade:renderConf,comissoes:renderComissoes,pacientes:renderPacientes,recall:renderRecall,
     documentos:renderDocumentos,analise:renderAnalise,
     funcionarios:renderFuncionarios,caixa:renderCaixa,relatorio:renderRelatorio,config:renderConfig,horaclinica:renderHoraClinica,contas:renderContas,estoque:renderEstoque,comparativo:renderComparativo,checkup:renderCheckup,materialparc:renderMaterialParc}[page])(pg);
 }
@@ -2799,6 +2817,58 @@ function fichaPaciente(nome){
     ${visitasHTML||'<div style="color:var(--grey);font-size:13px">Sem visitas registradas.</div>'}
   </div>`;
   box.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+/* ============================ RECALL DE PACIENTES ============================ */
+// Funil de recontato: NÃO fica atrelado a procedimento — é só sobre manter o relacionamento
+// e a recorrência. Cada paciente é posicionada automaticamente conforme os dias desde a
+// ÚLTIMA visita (Compareceu). Não há estado salvo: é recalculado toda vez a partir dos
+// atendimentos reais, então nunca desincroniza — a paciente volta pro início sozinha ao
+// voltar a atender, e um atendimento novo já reflete aqui na mesma hora.
+function diasDesde(dataISO){
+  if(!dataISO) return Infinity;
+  const hoje=new Date(); hoje.setHours(0,0,0,0);
+  const [a,m,d]=dataISO.split('-').map(Number);
+  const dt=new Date(a,m-1,d);
+  return Math.floor((hoje-dt)/86400000);
+}
+const RECALL_FAIXAS=[
+  {id:'emdia', label:'Em dia', desc:'menos de 30 dias', min:0,  max:29,  cor:'var(--green,#3b7a57)'},
+  {id:'d30',   label:'30 dias', desc:'30 a 44 dias sem vir',   min:30, max:44,  cor:'var(--gold-d)'},
+  {id:'d45',   label:'45 dias', desc:'45 a 59 dias sem vir',   min:45, max:59,  cor:'var(--amber)'},
+  {id:'d60',   label:'60 dias', desc:'60 a 89 dias sem vir',   min:60, max:89,  cor:'#C77B3B'},
+  {id:'d90',   label:'90+ dias', desc:'90 dias ou mais sem vir',min:90, max:Infinity, cor:'var(--red)'},
+];
+function faixaRecall(dias){ return RECALL_FAIXAS.find(f=>dias>=f.min&&dias<=f.max) || RECALL_FAIXAS[0]; }
+function renderRecall(pg){
+  const todos=pacientesTodos(); // histórico completo, independente do mês selecionado no topo
+  const comFaixa=todos.map(p=>{
+    const dias=diasDesde(p.ultima);
+    return {...p, dias, faixa:faixaRecall(dias)};
+  });
+  const colunas=RECALL_FAIXAS.map(f=>{
+    const lista=comFaixa.filter(p=>p.faixa.id===f.id).sort((a,b)=>b.dias-a.dias);
+    const linhas=lista.map(p=>`
+      <div class="recall-card" onclick="fichaPaciente('${p.nome.replace(/'/g,"")}')">
+        <div class="recall-nome">${p.nome}</div>
+        <div class="recall-meta">${p.dias===Infinity?'sem visitas':p.dias+' dia'+(p.dias===1?'':'s')+' sem vir'} · última em ${p.ultima?fmtDate(p.ultima):'—'}</div>
+        <div class="recall-meta2">${p.visitas} visita${p.visitas===1?'':'s'} · ${BRL(p.valorTotal)} investido</div>
+      </div>`).join('');
+    return `<div class="recall-col">
+      <div class="recall-col-head" style="border-top:3px solid ${f.cor}">
+        <div class="recall-col-title">${f.label}</div>
+        <div class="recall-col-desc">${f.desc}</div>
+        <div class="recall-col-count" style="color:${f.cor}">${lista.length}</div>
+      </div>
+      <div class="recall-col-body">${linhas||'<div class="recall-vazio">Ninguém nesta faixa.</div>'}</div>
+    </div>`;
+  }).join('');
+  pg.innerHTML=`
+    <div class="panel" style="margin-bottom:18px">
+      <div class="panel-head"><div><h3>Recall de Pacientes</h3><div class="ph-sub">Funil de recontato por tempo sem visita — reposiciona sozinho conforme os atendimentos acontecem. Clique numa paciente para ver o histórico completo.</div></div></div>
+      <div class="recall-grid">${colunas}</div>
+    </div>
+    <div id="fichaBox"></div>`;
 }
 
 /* ============================ DOCUMENTOS ============================ */
