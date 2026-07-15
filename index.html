@@ -383,7 +383,7 @@ table.data tbody tr:hover{background:var(--cream)}
         </div>
       </div>
     </nav>
-    <div class="side-foot">Sistema de Gestão<br><b>versão 1.0</b><br><span id="userEmail" style="font-size:10px;color:var(--grey)"></span><br><button onclick="fazerLogout()" style="margin-top:8px;background:none;border:1px solid var(--line);color:var(--grey);font-family:inherit;font-size:11px;padding:5px 12px;border-radius:8px;cursor:pointer">Sair</button></div>
+    <div class="side-foot">Sistema de Gestão<br><b>versão 1.0</b><br><span id="userEmail" style="font-size:10px;color:var(--grey)"></span><br><span id="perfilTag" style="display:none;margin-top:5px;font-size:10px;padding:2px 9px;border-radius:20px;background:var(--cream);color:var(--gold-d);border:1px solid var(--gold-l)"></span><br><button onclick="fazerLogout()" style="margin-top:8px;background:none;border:1px solid var(--line);color:var(--grey);font-family:inherit;font-size:11px;padding:5px 12px;border-radius:8px;cursor:pointer">Sair</button></div>
   </aside>
   <main class="main">
     <div class="topbar">
@@ -641,6 +641,8 @@ const DOC_CATS = ['Contratos','TCLE','Licenças','Profissional','Sanitário','Se
    funcao: livre (quem atende, apoio, parceiro)
    atende: true se realiza procedimentos (entra no cálculo de meta de faturamento/agendamento individual)
    ============================================================ */
+let PERFIS_ACESSO = [];   // perfis cadastrados (ex: Comercial, Recepção...)
+let USUARIOS_VINC = [];   // vínculos login → perfil
 let FUNCIONARIOS = [
   {id:1, nome:'Dra. Bruna Braga', funcao:'Cirurgiã-Dentista (RT)', tipo:'Profissional', atende:true,
    registro:'CRO-PE 0000', contato:'(87) 90000-0000', admissao:'2024-01-10', ativo:true},
@@ -1347,6 +1349,35 @@ try {
   }
 } catch(e){ console.warn('Supabase não configurado, rodando em modo local (dados de exemplo).'); }
 
+// ===== PERFIS DE ACESSO (permissões) =====
+// Por padrão (sem login restrito, ou modo local) o usuário é ADMIN: vê tudo, edita tudo.
+// Isso preserva o comportamento atual — só muda quando existe um vínculo em "usuarios"
+// apontando pra um perfil com somente_leitura=true.
+const TODAS_PAGINAS=['painel','custos','caixa','contas','horaclinica','materialparc','comissoes',
+  'funcionarios','pacientes','atendimentos','estoque','leads','recall','analise','comparativo',
+  'checkup','relatorio','config','conformidade','documentos'];
+let PERMISSOES = { admin:true, nome:'Administrador', paginas:TODAS_PAGINAS, somenteLeitura:false, dashboard:null };
+// carrega as permissões do usuário logado (se houver um vínculo em "usuarios")
+async function carregarPermissoes(){
+  if(!MODO_NUVEM){ return; } // modo local sempre admin
+  try{
+    const { data:{ user } } = await sb.auth.getUser();
+    if(!user){ return; }
+    const { data:linha } = await sb.from('usuarios').select('*, perfis_acesso(*)').eq('id',user.id).eq('ativo',true).maybeSingle();
+    if(!linha || !linha.perfis_acesso){ return; } // sem vínculo = admin (dono da conta)
+    const perfil=linha.perfis_acesso;
+    PERMISSOES = {
+      admin: perfil.somente_leitura!==true,
+      nome: perfil.nome,
+      paginas: Array.isArray(perfil.paginas)&&perfil.paginas.length ? perfil.paginas : ['painel'],
+      somenteLeitura: perfil.somente_leitura===true,
+      dashboard: perfil.dashboard || null,
+    };
+  }catch(e){ console.warn('Não consegui carregar permissões, seguindo como admin.', e); }
+}
+// a página é permitida para o usuário atual?
+function paginaPermitida(page){ return PERMISSOES.admin || (PERMISSOES.paginas||[]).includes(page); }
+
 window.addEventListener('DOMContentLoaded', async ()=>{
   initNav();
   if (MODO_NUVEM) {
@@ -1385,14 +1416,41 @@ async function iniciarApp(){
   document.getElementById('appRoot').style.display='flex';
   const { data:{ user } } = await sb.auth.getUser();
   if (user) document.getElementById('userEmail').textContent = user.email;
+  await carregarPermissoes();
+  aplicarPermissoesNoMenu();
   await carregarTudo();
   preencherSeletorMes();
-  go('painel');
+  go(paginaPermitida('painel') ? 'painel' : (PERMISSOES.paginas[0]||'painel'));
+}
+// esconde do menu as páginas que o perfil atual não pode ver
+function aplicarPermissoesNoMenu(){
+  if(PERMISSOES.admin) return; // admin vê tudo, nada a esconder
+  document.querySelectorAll('#nav button[data-page]').forEach(b=>{
+    const pg=b.dataset.page;
+    b.style.display = paginaPermitida(pg) ? '' : 'none';
+  });
+  // esconde grupos do menu que ficaram totalmente vazios
+  document.querySelectorAll('.nav-group').forEach(g=>{
+    const algumVisivel=[...g.querySelectorAll('button[data-page]')].some(b=>b.style.display!=='none');
+    g.style.display = algumVisivel ? '' : 'none';
+  });
+  // mostra uma etiqueta com o nome do perfil, se existir o elemento
+  const tag=document.getElementById('perfilTag');
+  if(tag){ tag.textContent=PERMISSOES.nome; tag.style.display='inline-flex'; }
 }
 
 /* ---- carga inicial: lê todas as tabelas para os globais ---- */
 async function carregarTudo(){
   try {
+    // perfis de acesso: só o admin precisa (tela de Configurações → Perfis de Acesso)
+    if(PERMISSOES.admin){
+      const [perf, usu] = await Promise.all([
+        sb.from('perfis_acesso').select('*').order('criado_em'),
+        sb.from('usuarios').select('*').order('criado_em'),
+      ]);
+      PERFIS_ACESSO = perf.data||[];
+      USUARIOS_VINC = usu.data||[];
+    }
     const [func, cart, cat, lanc, atend, capt, met, conf, docs] = await Promise.all([
       sb.from('funcionarios').select('*').order('criado_em'),
       sb.from('carteiras').select('*').order('criado_em'),
@@ -1518,6 +1576,7 @@ const TITLES={painel:['Painel','Visão Geral da Clínica'],atendimentos:['Cadast
   relatorio:['Relatórios','Gerador de Relatório PDF'],config:['Controle','Configurações'],horaclinica:['Financeiro','Custo Operacional & Hora Clínica'],contas:['Financeiro','Contas a Pagar e Receber'],estoque:['Cadastros','Controle de Estoque'],comparativo:['Relatórios','Comparativo Mensal'],checkup:['Relatórios','Check-up da Clínica'],materialparc:['Financeiro','Material de Parceiros']};
 
 function go(page){
+  if(!paginaPermitida(page)){ page = paginaPermitida('painel') ? 'painel' : (PERMISSOES.paginas[0]||'painel'); }
   currentPage=page;
   if(typeof fecharMenu==='function') fecharMenu();
   document.querySelectorAll('#nav button[data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===page));
@@ -1537,7 +1596,28 @@ function go(page){
 }
 
 /* ============================ PAINEL ============================ */
+// versão RESTRITA do painel: usada para perfis não-admin. É intencionalmente um
+// bloco pequeno e isolado (em vez de filtrar o painel completo pedaço por pedaço),
+// para não haver risco de algum trecho financeiro vazar por engano.
+function renderPainelRestrito(pg,k){
+  const d = PERMISSOES.dashboard || {};
+  const card=(titulo,valor,cor)=>`<div class="tcard"><div class="tc-head">${titulo}</div><div class="tc-val" ${cor?`style="color:${cor}"`:''}>${valor}</div></div>`;
+  let cards='';
+  if(d.faturamento) cards+=card('Faturamento', BRL(k.faturamento));
+  if(d.atendimentos) cards+=card('Atendimentos', k.nAtend);
+  if(d.ticket) cards+=card('Ticket médio', BRL(k.ticket));
+  if(d.comparecimento) cards+=card('Comparecimento', PCT0(k.txComp));
+  if(d.conversao) cards+=card('Conversão de leads', PCT0(k.txConv));
+  pg.innerHTML=`
+    <div class="trend-grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr))">${cards||'<div style="color:var(--grey);font-size:13px">Nenhum indicador liberado para o seu perfil.</div>'}</div>
+    <div style="margin-top:16px;font-size:12px;color:var(--grey);font-style:italic">Você está vendo o painel com o perfil "${PERMISSOES.nome}". Alguns indicadores financeiros não fazem parte deste acesso.</div>`;
+}
 function renderPainel(pg){
+  const k=calc();
+  if(!PERMISSOES.admin){ renderPainelRestrito(pg,k); return; }
+  renderPainelCompleto(pg);
+}
+function renderPainelCompleto(pg){
   const k=calc();
   const cmpTag=(v)=>{
     const up=v>=0; const arrow=up?'<polyline points="18 15 12 9 6 15"/>':'<polyline points="6 9 12 15 18 9"/>';
@@ -1838,7 +1918,7 @@ function renderAtend(pg){
     <td>${a.canal}</td><td class="num">${BRL(a.valor)}</td>
     <td style="font-size:12px" title="${pagamentosDe(a).map(p=>formaLabel(p.forma,p.parcelas)+': '+BRL(p.valor)).join(' · ')}">${recebLabel(a)}</td>
     <td class="ctr">${pagPill(a.pag)}</td><td class="ctr">${agPill(a.agenda)}</td>
-    <td class="ctr"><button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="editarAtend('${a.id}')">editar</button> <button class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="excluirAtend('${a.id}')">×</button></td>
+    <td class="ctr">${PERMISSOES.somenteLeitura?'<span style="color:var(--grey);font-size:11px">— leitura —</span>':`<button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="editarAtend('${a.id}')">editar</button> <button class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="excluirAtend('${a.id}')">×</button>`}</td>
   </tr>`).join('');
   const fLabel = filtro==='bruna'?'Dra. Bruna':filtro==='parceiro'?'parceiros':'todos';
   const subtitulo = verTodos
@@ -1848,10 +1928,11 @@ function renderAtend(pg){
   pg.innerHTML=`
     <div class="panel">
       <div class="toolbar">
-        <div><h3>Atendimentos</h3><div class="ph-sub">${subtitulo}</div></div>
+        <div><h3>Atendimentos</h3><div class="ph-sub">${subtitulo}${PERMISSOES.somenteLeitura?' · modo somente leitura':''}</div></div>
         <div style="display:flex;gap:8px">
+          ${PERMISSOES.somenteLeitura?'':`
           <button class="btn" onclick="abrirAtendForm('bruna')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo (Bruna)</button>
-          <button class="btn ghost" onclick="abrirAtendForm('parceiro')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo (parceiro)</button>
+          <button class="btn ghost" onclick="abrirAtendForm('parceiro')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo (parceiro)</button>`}
         </div>
       </div>
       <div id="atendFormBox"></div>
@@ -2751,7 +2832,7 @@ function renderPacientes(pg){
     <div id="fichaBox"></div>
     <div class="panel">
       <div class="toolbar"><div><h3>Base de pacientes</h3><div class="ph-sub">Clique em um paciente para ver a ficha completa · ${todos.length} cadastrados · busca não depende do mês selecionado</div></div>
-        <button class="btn" onclick="go('atendimentos')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo atendimento</button>
+        ${PERMISSOES.somenteLeitura?'':`<button class="btn" onclick="go('atendimentos')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo atendimento</button>`}
       </div>
       <div style="position:relative;margin-bottom:16px">
         <input id="pacBusca" oninput="setPacBusca(this.value)" placeholder="🔍  Buscar paciente pelo nome... (todo o histórico)" value="${PAC_BUSCA}" style="width:100%;max-width:360px;padding:10px 14px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-size:14px;background:var(--paper);color:var(--ink)">
@@ -2786,7 +2867,7 @@ function fichaPaciente(nome){
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <span style="font-weight:600;font-size:13px">${BRL(a.valor)}</span>
-          <button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="go('atendimentos');setTimeout(()=>editarAtend('${a.id}'),200)">editar</button>
+          ${PERMISSOES.somenteLeitura?'':`<button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="go('atendimentos');setTimeout(()=>editarAtend('${a.id}'),200)">editar</button>`}
         </div>
       </div>`;}).join('');
     return `<div style="margin-bottom:14px;background:var(--cream);border:1px solid var(--line);border-radius:12px;padding:14px 16px">
@@ -4243,6 +4324,130 @@ const CONFIG_LISTAS = {
   canais:{label:'Canais de origem',desc:'De onde o paciente veio',get:()=>CANAIS,set:v=>{CANAIS=v;}},
 };
 
+// ===== PERFIS DE ACESSO — tela de administração (só visível para admin) =====
+const PAGINA_LABEL={painel:'Principal (Painel)',custos:'Custos & Despesas',caixa:'Livro-Caixa',
+  contas:'Contas a Pagar/Receber',horaclinica:'Custo Operacional',materialparc:'Material de Parceiros',
+  comissoes:'Metas & Bonificações',funcionarios:'Funcionários',pacientes:'Pacientes',atendimentos:'Atendimentos',
+  estoque:'Estoque',leads:'Captação de Leads',recall:'Recall de Pacientes',analise:'Análise Avançada',
+  comparativo:'Comparativo Mensal',checkup:'Check-up da Clínica',relatorio:'Relatório PDF',config:'Configurações',
+  conformidade:'Conformidade',documentos:'Documentos'};
+function addPerfil(){
+  PERFIS_ACESSO.push({id:null,nome:'Novo perfil',paginas:['painel'],somente_leitura:true,
+    dashboard:{faturamento:true,atendimentos:true,ticket:true,comparecimento:false,conversao:false}});
+  go('config');
+}
+function togglePerfilPagina(i,pageId){
+  const p=PERFIS_ACESSO[i]; if(!p)return;
+  p.paginas=p.paginas||[];
+  const idx=p.paginas.indexOf(pageId);
+  if(idx>=0) p.paginas.splice(idx,1); else p.paginas.push(pageId);
+  go('config');
+}
+function togglePerfilDash(i,campo){
+  const p=PERFIS_ACESSO[i]; if(!p)return;
+  p.dashboard=p.dashboard||{};
+  p.dashboard[campo]=!p.dashboard[campo];
+  go('config');
+}
+function updPerfilCampo(i,campo,val){
+  const p=PERFIS_ACESSO[i]; if(!p)return;
+  if(campo==='somente_leitura') p[campo]=val==='true'||val===true;
+  else p[campo]=val;
+}
+async function salvarPerfil(i){
+  const p=PERFIS_ACESSO[i]; if(!p)return;
+  if(!MODO_NUVEM){ toast('Perfil salvo (modo local)'); return; }
+  const reg={nome:p.nome,paginas:p.paginas||[],somente_leitura:!!p.somente_leitura,dashboard:p.dashboard||{}};
+  if(p.id){ await sb.from('perfis_acesso').update(reg).eq('id',p.id); }
+  else { const {data}=await sb.from('perfis_acesso').insert(reg).select(); if(data&&data[0]) p.id=data[0].id; }
+  toast('Perfil "'+p.nome+'" salvo');
+  go('config');
+}
+async function excluirPerfil(i){
+  const p=PERFIS_ACESSO[i]; if(!p)return;
+  if(!confirm('Excluir o perfil "'+p.nome+'"? Usuários vinculados a ele perdem acesso.')) return;
+  if(MODO_NUVEM && p.id) await sb.from('perfis_acesso').delete().eq('id',p.id);
+  PERFIS_ACESSO.splice(i,1);
+  go('config');
+}
+async function vincularUsuario(){
+  const uuid=document.getElementById('vinc_uuid').value.trim();
+  const nome=document.getElementById('vinc_nome').value.trim()||'Sem nome';
+  const perfilId=document.getElementById('vinc_perfil').value;
+  if(!uuid||!perfilId){ alert('Preencha o UUID do usuário e escolha um perfil.'); return; }
+  if(!MODO_NUVEM){ alert('Vínculos de usuário só funcionam com o Supabase conectado.'); return; }
+  const { error } = await sb.from('usuarios').upsert({id:uuid,nome,perfil_id:perfilId,ativo:true});
+  if(error){ alert('Não consegui vincular. Verifique se o UUID está correto.\n'+error.message); return; }
+  toast('Usuário vinculado');
+  await carregarTudo(); go('config');
+}
+async function desvincularUsuario(id){
+  if(!confirm('Remover o acesso deste usuário?')) return;
+  if(MODO_NUVEM) await sb.from('usuarios').delete().eq('id',id);
+  USUARIOS_VINC=USUARIOS_VINC.filter(u=>u.id!==id);
+  go('config');
+}
+function perfisAcessoHTML(){
+  const fsm='padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink)';
+  const grupos={
+    'Principal':['painel'],
+    'Financeiro':['custos','caixa','contas','horaclinica','materialparc','comissoes'],
+    'Cadastros':['funcionarios','pacientes','atendimentos','estoque'],
+    'Marketing':['leads','recall'],
+    'Relatórios':['analise','comparativo','checkup','relatorio'],
+    'Controle':['config','conformidade','documentos'],
+  };
+  const perfisHTML=PERFIS_ACESSO.map((p,i)=>{
+    const paginasChk=Object.entries(grupos).map(([grupo,pags])=>`
+      <div style="margin-bottom:8px">
+        <div style="font-size:10.5px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">${grupo}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${pags.map(pg=>`<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;background:${(p.paginas||[]).includes(pg)?'var(--gold-l)':'var(--paper)'};border:1px solid var(--line);border-radius:8px;padding:4px 9px;cursor:pointer">
+            <input type="checkbox" ${(p.paginas||[]).includes(pg)?'checked':''} onchange="togglePerfilPagina(${i},'${pg}')" style="accent-color:var(--gold-d)">${PAGINA_LABEL[pg]||pg}
+          </label>`).join('')}
+        </div>
+      </div>`).join('');
+    const dash=p.dashboard||{};
+    const dashChk=[['faturamento','Faturamento'],['atendimentos','Atendimentos'],['ticket','Ticket médio'],['comparecimento','Comparecimento'],['conversao','Conversão de leads']]
+      .map(([campo,label])=>`<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;margin-right:12px"><input type="checkbox" ${dash[campo]?'checked':''} onchange="togglePerfilDash(${i},'${campo}')" style="accent-color:var(--gold-d)">${label}</label>`).join('');
+    return `<div style="border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px;background:var(--paper)">
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+        <input value="${(p.nome||'').replace(/"/g,'&quot;')}" oninput="updPerfilCampo(${i},'nome',this.value)" placeholder="Nome do perfil (ex: Comercial)" style="${fsm};flex:1;min-width:180px;font-weight:600">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--grey)"><input type="checkbox" ${p.somente_leitura?'checked':''} onchange="updPerfilCampo(${i},'somente_leitura',this.checked)" style="accent-color:var(--gold-d)">Somente leitura (não cadastra/edita/exclui)</label>
+        <button class="btn" style="padding:6px 14px;font-size:12.5px" onclick="salvarPerfil(${i})">Salvar</button>
+        <button class="btn ghost" style="padding:6px 12px;font-size:12.5px" onclick="excluirPerfil(${i})">Excluir</button>
+      </div>
+      <div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Páginas que este perfil pode ver</div>
+      ${paginasChk}
+      <div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">O que aparece no Painel (se "Principal" estiver marcado acima)</div>
+      <div>${dashChk}</div>
+    </div>`;
+  }).join('');
+  const perfilOpts=PERFIS_ACESSO.filter(p=>p.id).map(p=>`<option value="${p.id}">${p.nome}</option>`).join('');
+  const vincHTML=USUARIOS_VINC.map(u=>{
+    const perfil=PERFIS_ACESSO.find(p=>p.id===u.perfil_id);
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border:1px solid var(--line);border-radius:9px;margin-bottom:6px;background:var(--paper)">
+      <div><b style="font-size:13px">${u.nome||'Sem nome'}</b> <span style="font-size:11px;color:var(--grey)">· ${perfil?perfil.nome:'perfil removido'} · ${u.id.slice(0,8)}…</span></div>
+      <button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="desvincularUsuario('${u.id}')">remover acesso</button>
+    </div>`;
+  }).join('');
+  return `<div class="panel" style="margin-bottom:18px;border:1px solid var(--gold-l)">
+    <div class="panel-head"><div><h3>Perfis de Acesso</h3><div class="ph-sub">Controle o que cada login pode ver e se pode cadastrar/editar. O bloqueio é real — aplicado no banco de dados, não só na tela.</div></div>
+      <button class="btn ghost" onclick="addPerfil()">+ Novo perfil</button></div>
+    ${perfisHTML || '<div style="color:var(--grey);font-size:13px">Nenhum perfil cadastrado ainda.</div>'}
+    <div style="border-top:1px solid var(--line);padding-top:16px;margin-top:6px">
+      <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);font-weight:600;margin-bottom:10px">Vincular um login a um perfil</div>
+      <div style="font-size:12px;color:var(--grey);margin-bottom:10px;line-height:1.6">1. Crie o login no Supabase: <b>Authentication → Users → Add user</b>. 2. Copie o "User UID" gerado. 3. Cole abaixo e escolha o perfil.</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+        <input id="vinc_uuid" placeholder="UUID do usuário (Supabase)" style="${fsm};min-width:260px;flex:1">
+        <input id="vinc_nome" placeholder="Nome (ex: Cecília)" style="${fsm};min-width:160px">
+        <select id="vinc_perfil" style="${fsm};min-width:160px"><option value="">Escolher perfil...</option>${perfilOpts}</select>
+        <button class="btn" onclick="vincularUsuario()">Vincular</button>
+      </div>
+      ${vincHTML || '<div style="color:var(--grey);font-size:13px">Nenhum acesso restrito criado ainda — todos os logins são administradores.</div>'}
+    </div>
+  </div>`;
+}
 function renderConfig(pg){
   const blocos=Object.entries(CONFIG_LISTAS).map(([chave,cfg])=>{
     const itens=cfg.get();
@@ -4372,6 +4577,7 @@ function renderConfig(pg){
       </div>
     </div>`;
   pg.innerHTML=`
+    ${PERMISSOES.admin ? perfisAcessoHTML() : ''}
     ${paletaBlock}
     <div class="panel" style="margin-bottom:18px">
       <div class="panel-head"><div><h3>Configurações gerais</h3><div class="ph-sub">Crie e edite as listas do sistema — sem precisar mexer no código</div></div></div>
