@@ -2435,19 +2435,27 @@ async function salvarCaptDia(){
     if(leads||agendadas||segDaPlataforma) registros.push({plataforma:p, seguidores:segDaPlataforma, leads, agendadas});
   });
   if(!registros.length){ alert('Preencha ao menos uma plataforma antes de salvar.'); return; }
-  for(const r of registros){
-    const existente = CAPTACAO.find(c=>c.data===data && c.plataforma===r.plataforma);
-    if(existente){
-      existente.seguidores = r.seguidores||existente.seguidores||0;
-      existente.leads = r.leads; existente.agendadas = r.agendadas;
-      if(MODO_NUVEM) await sbUpdate('captacao', existente.id, {data, plataforma:r.plataforma, seguidores:existente.seguidores, leads:existente.leads, agendadas:existente.agendadas, investido:existente.investido||0, gasto:existente.gasto||0, campanhas:existente.campanhas||0});
-    } else if(MODO_NUVEM){
-      await sbInsert('captacao', {data, plataforma:r.plataforma, seguidores:r.seguidores, leads:r.leads, agendadas:r.agendadas, investido:0, gasto:0, campanhas:0});
-    } else {
-      CAPTACAO.push({id:CAPT_SEQ++, data, plataforma:r.plataforma, seguidores:r.seguidores, leads:r.leads, agendadas:r.agendadas, investido:0, gasto:0, campanhas:0});
+  try{
+    for(const r of registros){
+      const existente = CAPTACAO.find(c=>c.data===data && c.plataforma===r.plataforma);
+      if(existente){
+        existente.seguidores = r.seguidores||existente.seguidores||0;
+        existente.leads = r.leads; existente.agendadas = r.agendadas;
+        if(MODO_NUVEM){
+          const ok = await sbUpdate('captacao', existente.id, {data, plataforma:r.plataforma, seguidores:existente.seguidores, leads:existente.leads, agendadas:existente.agendadas, investido:existente.investido||0, gasto:existente.gasto||0, campanhas:existente.campanhas||0});
+        }
+      } else if(MODO_NUVEM){
+        const ok = await sbInsert('captacao', {data, plataforma:r.plataforma, seguidores:r.seguidores, leads:r.leads, agendadas:r.agendadas, investido:0, gasto:0, campanhas:0});
+        if(ok===null) throw new Error('Supabase recusou o lançamento de "'+r.plataforma+'" (veja o alerta anterior para o motivo exato).');
+      } else {
+        CAPTACAO.push({id:CAPT_SEQ++, data, plataforma:r.plataforma, seguidores:r.seguidores, leads:r.leads, agendadas:r.agendadas, investido:0, gasto:0, campanhas:0});
+      }
     }
+    if(MODO_NUVEM) await carregarTudo();
+  }catch(e){
+    alert('Não consegui concluir o salvamento.\n\nMotivo: '+(e.message||JSON.stringify(e)));
+    return;
   }
-  if(MODO_NUVEM) await carregarTudo();
   toast('Captação de '+fmtDate(data)+' salva ('+registros.length+' plataforma'+(registros.length>1?'s':'')+')');
   go('leads');
 }
