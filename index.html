@@ -2351,8 +2351,11 @@ function renderLeads(pg){
     </div>
 
     <div class="panel" style="margin-bottom:18px">
-      <div class="toolbar"><div><h3>Lançar captação</h3><div class="ph-sub">Registre os números que a comercial te envia — por dia e plataforma. Preencha só o que tiver.</div></div>
-        <button class="btn" onclick="abrirCaptForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo lançamento</button>
+      <div class="toolbar"><div><h3>Lançar captação</h3><div class="ph-sub">Registre os números que a comercial te envia — o dia inteiro de uma vez, todas as plataformas juntas</div></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn" onclick="abrirCaptDiaForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Lançar o dia</button>
+          <button class="btn ghost" onclick="abrirCaptForm()" title="Lançar ou corrigir uma única plataforma">+ avulso</button>
+        </div>
       </div>
       <div id="captFormBox"></div>
       <table class="data">
@@ -2375,8 +2378,64 @@ function renderLeads(pg){
     </div>`;
 }
 
-function abrirCaptForm(){ editarCapt(0); }
 function dataHojeLocal(){ const h=new Date(); return h.getFullYear()+'-'+String(h.getMonth()+1).padStart(2,'0')+'-'+String(h.getDate()).padStart(2,'0'); }
+// ===== Lançar o dia inteiro de uma vez (todas as plataformas no mesmo formulário) =====
+// Espelha o checklist que a comercial manda: uma data, seguidores novos do Instagram,
+// e leads/agendadas de cada plataforma — tudo salvo junto, sem precisar repetir a data.
+function abrirCaptDiaForm(){
+  const hoje=dataHojeLocal();
+  const fs='padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;width:100%;background:var(--paper);color:var(--ink)';
+  const linhasPlat = PLATAFORMAS.map((p,i)=>`
+    <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:10px;align-items:end;padding:10px 0;border-bottom:1px solid var(--line)">
+      <div style="font-weight:600;font-size:13.5px;align-self:center">${p}</div>
+      <div class="field" style="margin:0"><label style="font-size:10.5px">Leads iniciados</label><input type="number" id="cd_leads_${i}" placeholder="opcional" style="${fs}"></div>
+      <div class="field" style="margin:0"><label style="font-size:10.5px">Consultas agendadas</label><input type="number" id="cd_agend_${i}" placeholder="opcional" style="${fs}"></div>
+    </div>`).join('');
+  document.getElementById('captFormBox').innerHTML=`
+    <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div class="field"><label>Data</label><input type="date" id="cd_data" value="${hoje}" style="${fs}"></div>
+        <div class="field"><label>Seguidores novos do Instagram</label><input type="number" id="cd_seg" placeholder="opcional" style="${fs}"></div>
+      </div>
+      <div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Leads e agendamentos por plataforma — preencha só o que tiver</div>
+      ${linhasPlat}
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn" onclick="salvarCaptDia()">Salvar o dia inteiro</button>
+        <button class="btn ghost" onclick="document.getElementById('captFormBox').innerHTML=''">Cancelar</button>
+      </div>
+      <div style="margin-top:10px;font-size:12px;color:var(--grey);font-style:italic">Isso salva um lançamento para cada plataforma preenchida — tudo de uma vez, sem repetir a data.</div>
+    </div>`;
+}
+async function salvarCaptDia(){
+  const data=document.getElementById('cd_data').value;
+  if(!data){ alert('Escolha a data.'); return; }
+  const seg=+document.getElementById('cd_seg').value||0;
+  const registros=[];
+  PLATAFORMAS.forEach((p,i)=>{
+    const leadsEl=document.getElementById('cd_leads_'+i), agendEl=document.getElementById('cd_agend_'+i);
+    const leads=leadsEl&&leadsEl.value!==''?+leadsEl.value:0;
+    const agendadas=agendEl&&agendEl.value!==''?+agendEl.value:0;
+    const segDaPlataforma = /instagram/i.test(p) ? seg : 0;
+    if(leads||agendadas||segDaPlataforma) registros.push({plataforma:p, seguidores:segDaPlataforma, leads, agendadas});
+  });
+  if(!registros.length){ alert('Preencha ao menos uma plataforma antes de salvar.'); return; }
+  for(const r of registros){
+    const existente = CAPTACAO.find(c=>c.data===data && c.plataforma===r.plataforma);
+    if(existente){
+      existente.seguidores = r.seguidores||existente.seguidores||0;
+      existente.leads = r.leads; existente.agendadas = r.agendadas;
+      if(MODO_NUVEM) await sbUpdate('captacao', existente.id, {data, plataforma:r.plataforma, seguidores:existente.seguidores, leads:existente.leads, agendadas:existente.agendadas, investido:existente.investido||0, gasto:existente.gasto||0, campanhas:existente.campanhas||0});
+    } else if(MODO_NUVEM){
+      await sbInsert('captacao', {data, plataforma:r.plataforma, seguidores:r.seguidores, leads:r.leads, agendadas:r.agendadas, investido:0, gasto:0, campanhas:0});
+    } else {
+      CAPTACAO.push({id:CAPT_SEQ++, data, plataforma:r.plataforma, seguidores:r.seguidores, leads:r.leads, agendadas:r.agendadas, investido:0, gasto:0, campanhas:0});
+    }
+  }
+  if(MODO_NUVEM) await carregarTudo();
+  toast('Captação de '+fmtDate(data)+' salva ('+registros.length+' plataforma'+(registros.length>1?'s':'')+')');
+  go('leads');
+}
+function abrirCaptForm(){ editarCapt(0); }
 function editarCapt(id){
   const c = (id && id!=='0')? CAPTACAO.find(x=>x.id==id) : {id:0,data:dataHojeLocal(),plataforma:PLATAFORMAS[0],seguidores:'',leads:'',agendadas:'',investido:'',gasto:'',campanhas:''};
   const fs='padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;width:100%';
