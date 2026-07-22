@@ -413,6 +413,22 @@ table.data tbody tr:hover{background:var(--cream)}
    troque os arrays DATA.* por consultas e mantenha calc()/render*.
    ============================================================ */
 
+// aviso rápido no canto da tela (some sozinho) — usado após salvar algo
+function toast(msg){
+  try{
+    let el=document.getElementById('__toast');
+    if(!el){
+      el=document.createElement('div');
+      el.id='__toast';
+      el.style.cssText='position:fixed;bottom:26px;left:50%;transform:translateX(-50%);background:#211C16;color:#E9C877;padding:11px 22px;border-radius:30px;font-family:Inter,Arial,sans-serif;font-size:13px;font-weight:500;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:99999;opacity:0;transition:opacity .25s ease;pointer-events:none';
+      document.body.appendChild(el);
+    }
+    el.textContent=msg;
+    el.style.opacity='1';
+    clearTimeout(window.__toastTimer);
+    window.__toastTimer=setTimeout(()=>{ if(el) el.style.opacity='0'; }, 2400);
+  }catch(e){ console.log('[aviso]', msg); }
+}
 const BRL = n => { let v = Math.round(+n||0); if(v===0) v=0; /* elimina -0 */ return 'R$ ' + v.toLocaleString('pt-BR'); };
 const BRL2 = n => { let v=+n||0; if(Object.is(v,-0)) v=0; return v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); };
 const PCT = n => (n*100).toFixed(1).replace('.',',') + '%';
