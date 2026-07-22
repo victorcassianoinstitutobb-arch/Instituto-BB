@@ -2376,8 +2376,9 @@ function renderLeads(pg){
 }
 
 function abrirCaptForm(){ editarCapt(0); }
+function dataHojeLocal(){ const h=new Date(); return h.getFullYear()+'-'+String(h.getMonth()+1).padStart(2,'0')+'-'+String(h.getDate()).padStart(2,'0'); }
 function editarCapt(id){
-  const c = (id && id!=='0')? CAPTACAO.find(x=>x.id==id) : {id:0,data:'2026-06-10',plataforma:PLATAFORMAS[0],seguidores:'',leads:'',agendadas:'',investido:'',gasto:'',campanhas:''};
+  const c = (id && id!=='0')? CAPTACAO.find(x=>x.id==id) : {id:0,data:dataHojeLocal(),plataforma:PLATAFORMAS[0],seguidores:'',leads:'',agendadas:'',investido:'',gasto:'',campanhas:''};
   const fs='padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;width:100%';
   const platOpts=PLATAFORMAS.map(p=>`<option ${p===c.plataforma?'selected':''}>${p}</option>`).join('');
   document.getElementById('captFormBox').innerHTML=`
