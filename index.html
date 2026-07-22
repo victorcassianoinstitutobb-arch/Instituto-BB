@@ -910,7 +910,7 @@ const DATA = {
   ]
 };
 
-let CANAIS = ['WhatsApp','Tráfego Pago','Instagram Orgânico','Indicação','Retorno/Recompra','Não informou'];
+let CANAIS = ['Não informou','WhatsApp','Tráfego Pago','Instagram Orgânico','Indicação','Retorno/Recompra'];
 // custo mensal por canal (investimento) — usado para CAC/ROI por canal
 let CANAL_CUSTO = {'WhatsApp':0,'Tráfego Pago':245,'Instagram Orgânico':0,'Indicação':0,'Retorno/Recompra':0,'Não informou':0};
 
@@ -2280,6 +2280,24 @@ function renderLeads(pg){
   const convGeral=totLeads?totAgend/totLeads:0;
   const cpl=totLeads&&totGasto?totGasto/totLeads:0;
 
+  // ---- detalhamento por DIA (uma linha por data, uma coluna leads/agend. por plataforma) ----
+  const platsPresentes = [...new Set(CAPT_MES.map(c=>c.plataforma))]
+    .sort((a,b)=>PLATAFORMAS.indexOf(a)-PLATAFORMAS.indexOf(b));
+  const porDiaMap={};
+  CAPT_MES.forEach(c=>{
+    if(!porDiaMap[c.data]) porDiaMap[c.data]={data:c.data,seguidores:0,porPlat:{}};
+    const d=porDiaMap[c.data];
+    d.seguidores+=c.seguidores||0;
+    if(!d.porPlat[c.plataforma]) d.porPlat[c.plataforma]={leads:0,agendadas:0};
+    d.porPlat[c.plataforma].leads+=c.leads||0;
+    d.porPlat[c.plataforma].agendadas+=c.agendadas||0;
+  });
+  const porDia=Object.values(porDiaMap).sort((a,b)=>b.data.localeCompare(a.data)).map(d=>{
+    const totLeadsDia=Object.values(d.porPlat).reduce((s,p)=>s+p.leads,0);
+    const totAgendDia=Object.values(d.porPlat).reduce((s,p)=>s+p.agendadas,0);
+    return {...d, totLeadsDia, totAgendDia, convDia: totLeadsDia?totAgendDia/totLeadsDia:0};
+  });
+
   // tabela de lançamentos (linha a linha, editável)
   const linhas=[...CAPT_MES].sort((a,b)=>b.data.localeCompare(a.data)).map(c=>{
     const conv=c.leads?(c.agendadas/c.leads):0;
@@ -2303,6 +2321,33 @@ function renderLeads(pg){
       <div class="tcard" style="animation-delay:70ms"><div class="tc-head">Conversão</div><div class="tc-val" style="color:var(--green)">${PCT0(convGeral)}</div><div class="tc-sub">leads que agendaram</div></div>
       <div class="tcard" style="animation-delay:140ms"><div class="tc-head">Seguidores novos</div><div class="tc-val">${totSeg}</div><div class="tc-sub">no período</div></div>
       <div class="tcard" style="animation-delay:210ms"><div class="tc-head">Custo por lead</div><div class="tc-val">${cpl?BRL(cpl):'—'}</div><div class="tc-sub">gasto ${BRL(totGasto)}</div></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:18px">
+      <div class="toolbar"><div><h3>Detalhamento por dia</h3><div class="ph-sub">Cada dia, com leads e agendadas por plataforma — igual ao checklist que você recebe</div></div></div>
+      <div style="overflow-x:auto">
+        <table class="data">
+          <thead>
+            <tr>
+              <th rowspan="2" style="vertical-align:bottom">Data</th>
+              <th rowspan="2" class="ctr" style="vertical-align:bottom">Seguidores</th>
+              ${platsPresentes.map(p=>`<th colspan="2" class="ctr" style="border-bottom:1px solid var(--line)">${p}</th>`).join('')}
+              <th rowspan="2" class="ctr" style="vertical-align:bottom">Total leads</th>
+              <th rowspan="2" class="ctr" style="vertical-align:bottom">Total agend.</th>
+              <th rowspan="2" class="ctr" style="vertical-align:bottom">Conv. dia</th>
+            </tr>
+            <tr>${platsPresentes.map(()=>`<th class="ctr" style="font-size:10.5px">Leads</th><th class="ctr" style="font-size:10.5px">Agend.</th>`).join('')}</tr>
+          </thead>
+          <tbody>${porDia.length?porDia.map(d=>`<tr>
+            <td>${fmtDate(d.data)}</td>
+            <td class="ctr">${d.seguidores||'—'}</td>
+            ${platsPresentes.map(p=>{const v=d.porPlat[p]; return `<td class="ctr">${v&&v.leads?v.leads:'—'}</td><td class="ctr">${v&&v.agendadas?v.agendadas:'—'}</td>`;}).join('')}
+            <td class="ctr" style="font-weight:600">${d.totLeadsDia||'—'}</td>
+            <td class="ctr" style="font-weight:600">${d.totAgendDia||'—'}</td>
+            <td class="ctr" style="font-weight:600;color:${d.convDia>=0.3?'var(--green)':d.convDia>0?'var(--ink)':'var(--grey)'}">${d.totLeadsDia?PCT0(d.convDia):'—'}</td>
+          </tr>`).join('') : `<tr><td colspan="${3+platsPresentes.length*2}" style="text-align:center;color:var(--grey);padding:20px">Nenhum lançamento neste período.</td></tr>`}</tbody>
+        </table>
+      </div>
     </div>
 
     <div class="panel" style="margin-bottom:18px">
