@@ -1886,7 +1886,7 @@ function recebLabel(a){
 // avança/retrocede um dia no "Ver dia" dos atendimentos
 function mudarDiaAtend(delta){
   const hoje=new Date().toISOString().slice(0,10);
-  const base = (window.__atendDia && window.__atendDia!=='__todos') ? window.__atendDia : hoje;
+  const base = (window.__atendDia && window.__atendDia!=='__todos' && window.__atendDia!=='__mes') ? window.__atendDia : hoje;
   const [a,m,d] = base.split('-').map(Number);
   const dt = new Date(a, m-1, d);
   dt.setDate(dt.getDate()+delta);
@@ -1896,25 +1896,28 @@ function mudarDiaAtend(delta){
 function renderAtend(pg){
   const todosGlobal=[...DATA.atendimentos].sort((a,b)=>(b.data||'').localeCompare(a.data||''));
   const hoje=new Date().toISOString().slice(0,10);
-  // TUDO nesta tela respeita o mês (ou "Acumulado") selecionado no topo — inclusive "Ver todos".
+  // "Ver dia" e "Ver mês" respeitam o mês (ou "Acumulado") selecionado no topo.
+  // "Ver todos" é a exceção deliberada: mostra literalmente TODO o histórico, sem filtro de período.
   const _per=(typeof periodoSelecionadoIntervalo==='function')?periodoSelecionadoIntervalo():null;
   const _dentroPer=(d)=> !_per || (d && d>=_per.ini && d<=_per.fim);
-  const todos = todosGlobal.filter(a=>_dentroPer(a.data));
+  const todosDoMes = todosGlobal.filter(a=>_dentroPer(a.data));
   // filtro por origem: 'todos' | 'bruna' | 'parceiro'
   if(window.__atendFiltro===undefined) window.__atendFiltro='todos';
   const filtro=window.__atendFiltro;
   // dia selecionado: default = hoje se estiver dentro do período e houver atendimento; senão o mais
-  // recente do período. Se o dia guardado ficou fora do período (ex: trocou o mês no topo), redefine.
-  if(window.__atendDia===undefined || (window.__atendDia!=='__todos' && !_dentroPer(window.__atendDia))){
-    const temHoje = _dentroPer(hoje) && todos.some(a=>a.data===hoje);
-    window.__atendDia = temHoje ? hoje : (todos[0]?todos[0].data : (_per?_per.ini:hoje));
+  // recente do período. Se o dia guardado ficou fora do período (ex: trocou o mês no topo), redefine
+  // — mas isso só vale nos modos "dia" e "mês"; "Ver todos" (__todos) fica sempre disponível.
+  if(window.__atendDia===undefined || (window.__atendDia!=='__todos' && window.__atendDia!=='__mes' && !_dentroPer(window.__atendDia))){
+    const temHoje = _dentroPer(hoje) && todosDoMes.some(a=>a.data===hoje);
+    window.__atendDia = temHoje ? hoje : (todosDoMes[0]?todosDoMes[0].data : (_per?_per.ini:hoje));
   }
   const verTodos = window.__atendDia==='__todos';
-  let rows = verTodos ? todos : todos.filter(a=>a.data===window.__atendDia);
+  const verMes = window.__atendDia==='__mes';
+  let rows = verTodos ? todosGlobal : verMes ? todosDoMes : todosGlobal.filter(a=>a.data===window.__atendDia);
   if(filtro==='bruna') rows=rows.filter(a=>!funcEhPele(a.func));
   else if(filtro==='parceiro') rows=rows.filter(a=>funcEhPele(a.func));
-  // dias distintos com atendimento (para o seletor)
-  const dias=[...new Set(todos.map(a=>a.data))].sort((a,b)=>b.localeCompare(a));
+  // dias distintos com atendimento DENTRO DO MÊS selecionado (para o seletor "escolher dia")
+  const dias=[...new Set(todosDoMes.map(a=>a.data))].sort((a,b)=>b.localeCompare(a));
   const diaOpts=dias.map(d=>`<option value="${d}" ${d===window.__atendDia?'selected':''}>${fmtDateFull(d)}${d===hoje?' (hoje)':''}</option>`).join('');
   const recDia=rows.filter(a=>a.agenda==='Compareceu').reduce((s,a)=>s+a.valor,0);
   // resumo de parceiros (do mês selecionado no topo) — repasse, instituto, gasto material
@@ -1945,8 +1948,11 @@ function renderAtend(pg){
     <td class="ctr">${PERMISSOES.somenteLeitura?'<span style="color:var(--grey);font-size:11px">— leitura —</span>':`<button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="editarAtend('${a.id}')">editar</button> <button class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="excluirAtend('${a.id}')">×</button>`}</td>
   </tr>`).join('');
   const fLabel = filtro==='bruna'?'Dra. Bruna':filtro==='parceiro'?'parceiros':'todos';
+  const rotuloPeriodoTopo = (typeof rotuloMes==='function' && typeof mesSelecionadoTopo==='function' && mesSelecionadoTopo()) ? rotuloMes(mesSelecionadoTopo()) : 'período selecionado';
   const subtitulo = verTodos
-    ? `Todos os atendimentos · ${rows.length} registros (${fLabel}) · receita ${BRL(recDia)}`
+    ? `Todo o histórico (todos os meses) · ${rows.length} registros (${fLabel}) · receita ${BRL(recDia)}`
+    : verMes
+    ? `${rotuloPeriodoTopo} (mês inteiro) · ${rows.length} atendimento(s) (${fLabel}) · receita ${BRL(recDia)}`
     : `${fmtDateFull(window.__atendDia)} · ${rows.length} atendimento(s) (${fLabel}) · receita ${BRL(recDia)}`;
   const fbtn=(v,txt)=>`<button class="btn ghost" style="padding:6px 12px;font-size:12.5px;${filtro===v?'background:var(--gold);color:#0E0D0C;border-color:var(--gold)':''}" onclick="window.__atendFiltro='${v}';go('atendimentos')">${txt}</button>`;
   pg.innerHTML=`
@@ -1969,18 +1975,19 @@ function renderAtend(pg){
         <span style="font-size:12.5px;color:var(--grey)">Ver dia:</span>
         <button class="btn ghost" style="padding:6px 12px;font-size:12.5px;${window.__atendDia===hoje?'background:var(--gold);color:#0E0D0C;border-color:var(--gold)':''}" onclick="window.__atendDia='${hoje}';go('atendimentos')" ${_dentroPer(hoje)?'':'disabled'} title="${_dentroPer(hoje)?'':'Hoje está fora do mês selecionado no topo'}">Hoje</button>
         <div style="display:flex;align-items:center;gap:2px">
-          <button class="btn ghost" style="padding:6px 9px;font-size:13px" onclick="mudarDiaAtend(-1)" title="Dia anterior" ${verTodos?'disabled':''}>‹</button>
+          <button class="btn ghost" style="padding:6px 9px;font-size:13px" onclick="mudarDiaAtend(-1)" title="Dia anterior" ${verTodos||verMes?'disabled':''}>‹</button>
           <select onchange="window.__atendDia=this.value;go('atendimentos')" style="padding:7px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:var(--paper);color:var(--ink);font-size:13px">
             <option value="" disabled ${dias.includes(window.__atendDia)?'':'selected'}>— escolher dia —</option>
             ${diaOpts}
           </select>
-          <button class="btn ghost" style="padding:6px 9px;font-size:13px" onclick="mudarDiaAtend(1)" title="Próximo dia" ${verTodos?'disabled':''}>›</button>
+          <button class="btn ghost" style="padding:6px 9px;font-size:13px" onclick="mudarDiaAtend(1)" title="Próximo dia" ${verTodos||verMes?'disabled':''}>›</button>
         </div>
-        <button class="btn ghost" style="padding:6px 12px;font-size:12.5px;${verTodos?'background:var(--gold);color:#0E0D0C;border-color:var(--gold)':''}" onclick="window.__atendDia='__todos';go('atendimentos')">Ver todos</button>
+        <button class="btn ghost" style="padding:6px 12px;font-size:12.5px;${verMes?'background:var(--gold);color:#0E0D0C;border-color:var(--gold)':''}" onclick="window.__atendDia='__mes';go('atendimentos')" title="Todos os atendimentos do mês selecionado no topo">Ver mês</button>
+        <button class="btn ghost" style="padding:6px 12px;font-size:12.5px;${verTodos?'background:var(--gold);color:#0E0D0C;border-color:var(--gold)':''}" onclick="window.__atendDia='__todos';go('atendimentos')" title="Todo o histórico, de todos os meses">Ver todos</button>
       </div>
       <table class="data">
         <thead><tr><th>Data</th><th>Paciente</th><th>Procedimento</th><th>Realizado por</th><th>Canal</th><th class="num">Valor</th><th>Recebimento</th><th class="ctr">Pagamento</th><th class="ctr">Agenda</th><th class="ctr">Ações</th></tr></thead>
-        <tbody>${body||`<tr><td colspan="10" style="text-align:center;color:var(--grey);padding:24px">Nenhum atendimento ${verTodos?'cadastrado':'neste dia'} ${filtro!=='todos'?'('+fLabel+')':''}. Clique em "Novo" para cadastrar.</td></tr>`}</tbody>
+        <tbody>${body||`<tr><td colspan="10" style="text-align:center;color:var(--grey);padding:24px">Nenhum atendimento ${verTodos?'cadastrado em todo o histórico':verMes?'neste mês':'neste dia'} ${filtro!=='todos'?'('+fLabel+')':''}. Clique em "Novo" para cadastrar.</td></tr>`}</tbody>
       </table>
     </div>`;
 }
