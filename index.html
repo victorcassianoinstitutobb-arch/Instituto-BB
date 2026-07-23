@@ -485,6 +485,8 @@ let META = {
   conversao:0, imposto:0.06, horasMes:176, duracaoMedia:1.0,
   comissaoPercent:0.30, comissaoBase:'bruto', profissionalPadrao:'Dra. Bruna Braga'
 };
+// Dados cadastrais do Instituto — usados nos recibos individuais de atendimento.
+let INSTITUTO = { cnpj:'', endereco:'', telefone:'', responsavel:'Dra. Bruna Braga' };
 // Metas da clínica, organizadas POR MÊS. Cada meta:
 //   {id, nome, tipo, alvo, filtroTipo:'todos'|'procedimento'|'canal', filtroValor}
 // O "realizado" é calculado pelo app a partir de calc() — o usuário não digita.
@@ -1522,6 +1524,7 @@ async function carregarTudo(){
         META.comparecimento=row.valores.comparecimento||0; META.conversao=row.valores.conversao||0; META.ocupacao=row.valores.ocupacao||0;
       }
       if(row.chave==='horas_mes' && row.valores && row.valores.horas){ META.horasMes=row.valores.horas; }
+      if(row.chave==='instituto_dados' && row.valores){ INSTITUTO = {...INSTITUTO, ...row.valores}; }
       if(row.chave==='metas_livres' && Array.isArray(row.valores) && row.valores.length){
         // formato ANTIGO (array único) → migra para o mês atual
         METAS_POR_MES[mesHoje()] = row.valores;
@@ -2996,6 +2999,7 @@ function fichaPaciente(nome){
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <span style="font-weight:600;font-size:13px">${BRL(a.valor)}</span>
+          ${a.agenda==='Compareceu'?`<button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="gerarReciboAtendimento('${a.id}')" title="Gerar recibo deste atendimento">recibo</button>`:''}
           ${PERMISSOES.somenteLeitura?'':`<button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="go('atendimentos');setTimeout(()=>editarAtend('${a.id}'),200)">editar</button>`}
         </div>
       </div>`;}).join('');
@@ -4209,6 +4213,108 @@ function avaliarFaixasMeta(real, faixas){
 // ===== Relatório individual da paciente — elegante, para ser encaminhado a ela =====
 // Mostra só o histórico de consultas e procedimentos realizados (Compareceu). Não inclui
 // nenhum dado financeiro interno (custo, repasse, margem) — é um documento para a paciente.
+// converte um valor em reais para texto por extenso (padrão de recibo formal)
+function valorPorExtenso(valor){
+  const unidades=['zero','um','dois','três','quatro','cinco','seis','sete','oito','nove','dez','onze','doze','treze','quatorze','quinze','dezesseis','dezessete','dezoito','dezenove'];
+  const dezenas=['','dez','vinte','trinta','quarenta','cinquenta','sessenta','setenta','oitenta','noventa'];
+  const centenas=['','cento','duzentos','trezentos','quatrocentos','quinhentos','seiscentos','setecentos','oitocentos','novecentos'];
+  function grupo(n){
+    if(n===0) return '';
+    if(n===100) return 'cem';
+    if(n<20) return unidades[n];
+    if(n<100){ const d=Math.floor(n/10), u=n%10; return dezenas[d]+(u?' e '+unidades[u]:''); }
+    const c=Math.floor(n/100), r=n%100;
+    return centenas[c]+(r?' e '+grupo(r):'');
+  }
+  function inteiro(n){
+    if(n===0) return 'zero';
+    const milhoes=Math.floor(n/1000000), milhares=Math.floor((n%1000000)/1000), resto=n%1000;
+    const partes=[];
+    if(milhoes) partes.push(grupo(milhoes)+(milhoes>1?' milhões':' milhão'));
+    if(milhares) partes.push(milhares===1?'mil':grupo(milhares)+' mil');
+    if(resto) partes.push(grupo(resto));
+    return partes.join(' e ');
+  }
+  const reais=Math.floor(Math.abs(valor));
+  const centavos=Math.round((Math.abs(valor)-reais)*100);
+  let txt=inteiro(reais)+(reais===1?' real':' reais');
+  if(centavos>0) txt+=' e '+inteiro(centavos)+(centavos===1?' centavo':' centavos');
+  return txt.charAt(0).toUpperCase()+txt.slice(1);
+}
+// Recibo elegante de UM atendimento específico — para entregar/enviar à paciente.
+function gerarReciboAtendimento(id){
+  const a = DATA.atendimentos.find(x=>String(x.id)===String(id));
+  if(!a){ alert('Atendimento não encontrado.'); return; }
+  const nomesProc=procedimentosDe(a).map(p=>p.proc).filter(Boolean);
+  const procTxt=nomesProc.length?nomesProc.join(', '):(a.proc||'Procedimento estético');
+  const hojeHora=new Date().toLocaleString('pt-BR');
+  const numeroRecibo=(a.data||'').replace(/-/g,'')+'-'+String(a.id).replace(/[^A-Za-z0-9]/g,'').slice(-4).toUpperCase();
+  const valorExtenso=valorPorExtenso(a.valor||0);
+  const linhaCnpj = INSTITUTO.cnpj ? `CNPJ ${INSTITUTO.cnpj}` : '';
+  const linhaEnd = INSTITUTO.endereco || '';
+  const linhaTel = INSTITUTO.telefone ? `Tel. ${INSTITUTO.telefone}` : '';
+  const rodapeInfo=[linhaCnpj,linhaEnd,linhaTel].filter(Boolean).join(' · ');
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Recibo · ${a.paciente}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    @page{margin:22mm 20mm}
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',Arial,sans-serif;color:#3A342A;font-size:12.5px;line-height:1.7;background:#FFFEFB;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .capa{text-align:center;padding-bottom:20px;border-bottom:1px solid #E8DEC8;margin-bottom:30px}
+    .marca{font-family:'Cormorant Garamond',Georgia,serif;font-size:26px;font-weight:600;color:#8A6F27}
+    .tagline{font-size:9.5px;letter-spacing:3px;text-transform:uppercase;color:#B0A48A;margin-top:5px}
+    .rodape-info{font-size:9.5px;color:#B0A48A;margin-top:8px}
+    .titulo{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:26px}
+    .titulo h1{font-family:'Cormorant Garamond',Georgia,serif;font-style:italic;font-size:22px;color:#211C16;font-weight:600}
+    .titulo .num{font-size:11px;color:#B0A48A}
+    .valor-box{text-align:center;border:1px solid #E8DEC8;border-radius:14px;padding:22px;margin-bottom:30px;background:#FBF9F3}
+    .valor-box .v{font-family:'Cormorant Garamond',Georgia,serif;font-size:38px;font-weight:600;color:#8A6F27}
+    .valor-box .ext{font-size:12px;color:#6B6152;margin-top:6px;font-style:italic}
+    .corpo{font-size:13.5px;line-height:2;color:#3A342A;text-align:justify;margin-bottom:36px}
+    .corpo b{color:#211C16}
+    .assinatura{margin-top:56px;text-align:center}
+    .linha-assin{width:280px;border-top:1px solid #211C16;margin:0 auto 8px}
+    .assinatura .nome{font-size:12.5px;font-weight:600;color:#211C16}
+    .assinatura .cargo{font-size:10.5px;color:#B0A48A;margin-top:2px}
+    .emitido{text-align:right;font-size:10.5px;color:#B0A48A;margin-top:34px}
+    .ft{margin-top:26px;padding-top:12px;border-top:1px solid #E8DEC8;font-size:9px;color:#C9BFA9;text-align:center}
+  </style></head><body>
+    <div class="capa">
+      <div class="marca">Instituto Bruna Braga</div>
+      <div class="tagline">Harmonização Facial</div>
+      ${rodapeInfo?`<div class="rodape-info">${rodapeInfo}</div>`:''}
+    </div>
+
+    <div class="titulo">
+      <h1>Recibo</h1>
+      <div class="num">Nº ${numeroRecibo}</div>
+    </div>
+
+    <div class="valor-box">
+      <div class="v">${BRL(a.valor||0)}</div>
+      <div class="ext">${valorExtenso}</div>
+    </div>
+
+    <div class="corpo">
+      Recebemos de <b>${a.paciente}</b> a quantia de <b>${BRL(a.valor||0)}</b> (${valorExtenso}), referente à prestação do serviço de <b>${procTxt}</b>, realizado em <b>${fmtDateFull(a.data)}</b>${a.func?`, sob responsabilidade de <b>${a.func}</b>`:''}, nas dependências do Instituto Bruna Braga — Harmonização Facial.
+      <br><br>
+      Para clareza e efeitos legais, firmamos o presente recibo.
+    </div>
+
+    <div class="assinatura">
+      <div class="linha-assin"></div>
+      <div class="nome">${INSTITUTO.responsavel||'Dra. Bruna Braga'}</div>
+      <div class="cargo">Instituto Bruna Braga${linhaCnpj?' · '+linhaCnpj:''}</div>
+    </div>
+
+    <div class="emitido">Emitido em ${hojeHora}</div>
+    <div class="ft">Documento gerado pelo Sistema de Gestão do Instituto Bruna Braga</div>
+  </body></html>`;
+  const w=window.open('','_blank');
+  if(!w){alert('Permita pop-ups para gerar o recibo.');return;}
+  w.document.write(html); w.document.close();
+  setTimeout(()=>{w.focus();w.print();},500);
+}
 function gerarPDFPaciente(nome){
   const hist = DATA.atendimentos.filter(a=>a.paciente===nome && a.agenda==='Compareceu').sort((a,b)=>a.data.localeCompare(b.data));
   if(!hist.length){ alert('Esta paciente ainda não tem atendimentos realizados para gerar o relatório.'); return; }
@@ -4776,6 +4882,7 @@ function renderConfig(pg){
     </div>`;
   pg.innerHTML=`
     ${PERMISSOES.admin ? perfisAcessoHTML() : ''}
+    ${institutoDadosHTML()}
     ${paletaBlock}
     <div class="panel" style="margin-bottom:18px">
       <div class="panel-head"><div><h3>Configurações gerais</h3><div class="ph-sub">Crie e edite as listas do sistema — sem precisar mexer no código</div></div></div>
@@ -4784,6 +4891,32 @@ function renderConfig(pg){
     ${metasLivres}
     ${peleBlock}
     ${blocos}`;
+}
+function institutoDadosHTML(){
+  const fsm='padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink);width:100%';
+  return `<div class="panel" style="margin-bottom:18px">
+    <div class="panel-head"><div><h3>Dados do Instituto</h3><div class="ph-sub">Usados nos recibos individuais de atendimento gerados na ficha da paciente</div></div></div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:12px">
+      <div class="field"><label>CNPJ</label><input id="inst_cnpj" value="${(INSTITUTO.cnpj||'').replace(/"/g,'&quot;')}" placeholder="00.000.000/0000-00" style="${fsm}"></div>
+      <div class="field"><label>Telefone</label><input id="inst_tel" value="${(INSTITUTO.telefone||'').replace(/"/g,'&quot;')}" placeholder="(00) 00000-0000" style="${fsm}"></div>
+      <div class="field" style="grid-column:1/3"><label>Endereço</label><input id="inst_end" value="${(INSTITUTO.endereco||'').replace(/"/g,'&quot;')}" placeholder="Rua, número, bairro, cidade — UF" style="${fsm}"></div>
+      <div class="field"><label>Responsável técnico</label><input id="inst_resp" value="${(INSTITUTO.responsavel||'').replace(/"/g,'&quot;')}" placeholder="Dra. Bruna Braga" style="${fsm}"></div>
+    </div>
+    <button class="btn" onclick="salvarInstitutoDados()">Salvar</button>
+  </div>`;
+}
+async function salvarInstitutoDados(){
+  INSTITUTO = {
+    cnpj: document.getElementById('inst_cnpj').value.trim(),
+    telefone: document.getElementById('inst_tel').value.trim(),
+    endereco: document.getElementById('inst_end').value.trim(),
+    responsavel: document.getElementById('inst_resp').value.trim()||'Dra. Bruna Braga',
+  };
+  if(MODO_NUVEM){
+    const { data:{ user } } = await sb.auth.getUser();
+    await sb.from('configuracoes').upsert({user_id:user.id,chave:'instituto_dados',valores:INSTITUTO},{onConflict:'user_id,chave'});
+  }
+  toast('Dados do Instituto salvos');
 }
 // ---- procedimentos de pele ----
 function addProcPele(){ PROCS_PELE.push({id:Date.now()+Math.random(),nome:'',func:'',valor:0,custo:0,repasse:0.5,custoTipo:'fixado'}); go('config'); }
