@@ -1896,10 +1896,15 @@ function formaLabel(forma, parcelas){
 // "data" é a data em que aquele pagamento específico foi recebido — se não informada,
 // assume a data do atendimento (compatível com todos os registros já existentes).
 function pagamentosDe(a){
+  // "Pendente" = NADA foi recebido ainda. O formulário pode ter uma forma/valor pré-preenchidos
+  // (é só a intenção de como vai ser pago), mas isso NUNCA conta como dinheiro recebido — mesmo
+  // que já exista algo salvo em a.pagamentos de um cadastro antigo. Corrige o problema onde um
+  // atendimento "Pendente" aparecia como já recebido (some da cobrança, infla o "Recebido").
+  if(a.pag==='Pendente') return [];
   if(Array.isArray(a.pagamentos) && a.pagamentos.length){
     return a.pagamentos.map(p=>({forma:p.forma||'',valor:+p.valor||0,parcelas:ehCredito(p.forma)?(+p.parcelas||1):1,data:p.data||a.data}));
   }
-  if(a.recebimento) return [{forma:a.recebimento,valor:+a.valor||0,parcelas:ehCredito(a.recebimento)?(+a.parcelas||1):1,data:a.data}];
+  if(a.recebimento && a.pag==='Pago') return [{forma:a.recebimento,valor:+a.valor||0,parcelas:ehCredito(a.recebimento)?(+a.parcelas||1):1,data:a.data}];
   return [];
 }
 // rótulo curto para a tabela: uma forma → "Crédito CPF 10x"; várias → "Dividido (2)"
@@ -2265,9 +2270,13 @@ function renderPagamentos(){
 async function salvarAtend(id){
   const v=i=>document.getElementById(i).value;
   const valor=+v('naValor')||0;
-  // monta a lista de pagamentos
+  const pagStatus=v('naPag')||'Pago';
+  // monta a lista de pagamentos — se o status é "Pendente", NADA foi recebido ainda,
+  // mesmo que o formulário tenha uma forma pré-preenchida (isso é só a intenção futura).
   let pagamentos;
-  if(__atendPagDividido){
+  if(pagStatus==='Pendente'){
+    pagamentos=[];
+  } else if(__atendPagDividido){
     pagamentos=(__atendPagamentos||[]).filter(p=>p.forma && p.valor>0)
       .map(p=>({forma:p.forma,valor:+p.valor||0,parcelas:ehCredito(p.forma)?(+p.parcelas||1):1}));
   } else {
