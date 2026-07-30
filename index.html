@@ -2974,14 +2974,22 @@ function pendenciasAtendimentos(){
     const saldo = Math.max(0,(+a.valor||0)-recebido);
     return {a, recebido, saldo};
   });
-  // A) Fechado com sinal, SEM data de execução definida ainda
-  const semData = comSaldo.filter(x=>x.a.pag==='Parcial' && x.saldo>0 && !x.a.dataExecucao);
-  // B) Data de execução já confirmada — lembrete de contrato/documentação + cobrar o restante
-  const comData = comSaldo.filter(x=>x.a.pag==='Parcial' && x.saldo>0 && x.a.dataExecucao)
+  // A regra agora é baseada em SALDO e DATA DE EXECUÇÃO — não no status Parcial/Pendente/Pago.
+  // Isso evita perder casos como: paciente com 0% pago (Pendente) que já tem data marcada
+  // para o procedimento — antes só pegava quem estava "Parcial", e ela sumia do lembrete.
+  //
+  // A) tem saldo em aberto e AINDA NÃO tem data marcada — mostra as duas ações (confirmar
+  //    data OU já registrar o recebimento), porque não dá pra saber qual se aplica sem perguntar.
+  const semData = comSaldo.filter(x=>x.saldo>0 && !x.a.dataExecucao);
+  // B) tem saldo em aberto E já tem data marcada — lembrete de contrato/documentação + cobrar
+  const comData = comSaldo.filter(x=>x.saldo>0 && x.a.dataExecucao)
     .sort((x,y)=>(x.a.dataExecucao||'').localeCompare(y.a.dataExecucao||''));
-  // C) Pagamento pendente (nada retido como sinal específico) — cobrança geral
-  const pendentes = comSaldo.filter(x=>x.a.pag==='Pendente' && x.saldo>0);
-  return {semData, comData, pendentes};
+  // C) DIAGNÓSTICO: atendimentos marcados como "Pago" mas o valor recebido não bate com o
+  //    valor total (sinal de erro de digitação ou de que o pagamento não foi realmente lançado).
+  //    Isso é o que normalmente explica uma diferença entre Faturamento e Recebido que não
+  //    aparece em nenhuma pendência — porque "Pago" nunca entrava nessa conta antes.
+  const divergentesPago = comSaldo.filter(x=>x.a.pag==='Pago' && x.saldo>0.005);
+  return {semData, comData, divergentesPago};
 }
 // ---- ações rápidas a partir do alerta do Painel ----
 function toggleConfirmarData(id){
@@ -3015,8 +3023,8 @@ async function confirmarConclusaoPagamento(id){
   go('painel');
 }
 function pendenciasHTML(){
-  const {semData, comData, pendentes} = pendenciasAtendimentos();
-  const total = semData.length + comData.length + pendentes.length;
+  const {semData, comData, divergentesPago} = pendenciasAtendimentos();
+  const total = semData.length + comData.length + divergentesPago.length;
   if(!total) return '';
   const formaOpts=RECEBIMENTOS.map(r=>`<option>${r}</option>`).join('');
   const linhaConcluir=(id,saldo)=>`
@@ -3030,12 +3038,18 @@ function pendenciasHTML(){
       <div class="field" style="margin:0"><label style="font-size:10.5px">Data do procedimento</label><input id="dataExecInput_${id}" type="date" value="${atual||''}" style="padding:6px 9px;border:1px solid var(--line);border-radius:7px;background:var(--cream);color:var(--ink);font-family:inherit"></div>
       <button class="btn" style="padding:6px 14px;font-size:12.5px" onclick="salvarDataExecucaoRapido('${id}')">Confirmar data</button>
     </div>`;
+  // Sem data ainda: mostra as DUAS ações — não dá pra saber se ela vai voltar num dia marcado
+  // (precisa só confirmar a data) ou se é uma cobrança direta (precisa só registrar o recebimento).
   const itemA=(x)=>`<div style="padding:11px 13px;border:1px solid var(--line);border-radius:10px;background:var(--cream);margin-bottom:8px">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-      <div><b style="font-size:13px">${x.a.paciente}</b> <span style="font-size:11.5px;color:var(--grey)">· fechado em ${fmtDate(x.a.data)} · falta ${BRL(x.saldo)}</span></div>
-      <button class="btn ghost" style="padding:4px 11px;font-size:11.5px" onclick="toggleConfirmarData('${x.a.id}')">Confirmar data</button>
+      <div><b style="font-size:13px">${x.a.paciente}</b> <span style="font-size:11.5px;color:var(--grey)">· ${fmtDate(x.a.data)} · status ${x.a.pag} · falta ${BRL(x.saldo)}</span></div>
+      <div style="display:flex;gap:6px">
+        <button class="btn ghost" style="padding:4px 11px;font-size:11.5px" onclick="toggleConfirmarData('${x.a.id}')">Confirmar data</button>
+        <button class="btn ghost" style="padding:4px 11px;font-size:11.5px" onclick="toggleConcluirPagamento('${x.a.id}')">Registrar recebimento</button>
+      </div>
     </div>
     ${linhaData(x.a.id, x.a.dataExecucao)}
+    ${linhaConcluir(x.a.id, x.saldo)}
   </div>`;
   const itemB=(x)=>`<div style="padding:11px 13px;border:1px solid var(--line);border-radius:10px;background:var(--cream);margin-bottom:8px">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
@@ -3044,18 +3058,18 @@ function pendenciasHTML(){
     </div>
     ${linhaConcluir(x.a.id, x.saldo)}
   </div>`;
-  const itemC=(x)=>`<div style="padding:11px 13px;border:1px solid var(--line);border-radius:10px;background:var(--cream);margin-bottom:8px">
+  const itemDiv=(x)=>`<div style="padding:11px 13px;border:1px solid var(--red);border-radius:10px;background:var(--cream);margin-bottom:8px">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-      <div><b style="font-size:13px">${x.a.paciente}</b> <span style="font-size:11.5px;color:var(--red)">· pagamento pendente</span> <span style="font-size:11.5px;color:var(--grey)">· ${fmtDate(x.a.data)} · ${BRL(x.saldo)}</span></div>
-      <button class="btn ghost" style="padding:4px 11px;font-size:11.5px" onclick="toggleConcluirPagamento('${x.a.id}')">Registrar recebimento</button>
+      <div><b style="font-size:13px">${x.a.paciente}</b> <span style="font-size:11.5px;color:var(--red)">· marcado como Pago, mas falta ${BRL(x.saldo)}</span> <span style="font-size:11.5px;color:var(--grey)">· ${fmtDate(x.a.data)} · vendido ${BRL(x.a.valor)}, recebido ${BRL(x.recebido)}</span></div>
+      <button class="btn ghost" style="padding:4px 11px;font-size:11.5px" onclick="toggleConcluirPagamento('${x.a.id}')">Corrigir / lançar diferença</button>
     </div>
     ${linhaConcluir(x.a.id, x.saldo)}
   </div>`;
   return `<div class="panel" style="margin-bottom:18px;border:1px solid var(--gold-l)">
     <div class="panel-head"><div><h3>Pendências</h3><div class="ph-sub">Procedimentos fechados com sinal e cobranças em aberto — não depende do mês selecionado</div></div></div>
-    ${semData.length?`<div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);font-weight:600;margin-bottom:8px">Aguardando data do procedimento (${semData.length})</div>${semData.map(itemA).join('')}`:''}
+    ${semData.length?`<div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);font-weight:600;margin-bottom:8px">Sem data marcada (${semData.length})</div>${semData.map(itemA).join('')}`:''}
     ${comData.length?`<div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);font-weight:600;margin:${semData.length?'16px':'0'} 0 8px">Data marcada — levar contrato e documentação (${comData.length})</div>${comData.map(itemB).join('')}`:''}
-    ${pendentes.length?`<div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);font-weight:600;margin:${(semData.length||comData.length)?'16px':'0'} 0 8px">Pagamentos pendentes — cobrar (${pendentes.length})</div>${pendentes.map(itemC).join('')}`:''}
+    ${divergentesPago.length?`<div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--red);font-weight:600;margin:${(semData.length||comData.length)?'16px':'0'} 0 8px">⚠ Marcados como Pago com valor faltando (${divergentesPago.length}) — provável causa da diferença entre Faturamento e Recebido</div>${divergentesPago.map(itemDiv).join('')}`:''}
   </div>`;
 }
 function pacientesTodos(){
