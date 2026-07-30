@@ -1044,7 +1044,16 @@ function calc(){
   const ld = DATA.leads.filter(l=>_dentro(l.data));
   const cs = DATA.custos.filter(c=>_dentro(c.data));
   const compareceu = at.filter(a=>a.agenda==='Compareceu');
-  const faturamento = compareceu.reduce((s,a)=>s+a.valor,0); // bruto total (tudo que entrou)
+  const faturamento = compareceu.reduce((s,a)=>s+a.valor,0); // bruto total (tudo que foi VENDIDO no período)
+  // "Recebido" = dinheiro que realmente entrou no período, olhando a DATA DE CADA PAGAMENTO
+  // (não a data do atendimento) — assim, um sinal fechado em junho e quitado em julho conta
+  // certo em cada mês: os R$3.000 em junho, os R$7.000 em julho.
+  let recebidoPeriodo=0;
+  DATA.atendimentos.forEach(a=>{ pagamentosDe(a).forEach(p=>{ if(_dentro(p.data)) recebidoPeriodo+=(+p.valor||0); }); });
+  // "A receber" total (todo o histórico, não só o período) — soma do que falta em atendimentos
+  // Parcial/Pendente. É um saldo, não um número de mês — por isso não é filtrado por período.
+  const aReceberTotal = DATA.atendimentos.filter(a=>a.agenda==='Compareceu' && (a.pag==='Parcial'||a.pag==='Pendente'))
+    .reduce((s,a)=>{ const recebido=pagamentosDe(a).reduce((s2,p)=>s2+p.valor,0); return s+Math.max(0,(+a.valor||0)-recebido); },0);
   // ---- separação Bruna x Pele (profissional com repasse) ----
   const atendPele = compareceu.filter(a=>funcEhPele(a.func));
   const atendBruna = compareceu.filter(a=>!funcEhPele(a.func));
@@ -1335,7 +1344,7 @@ function calc(){
     serieReceita,comp,comandas,ranking,rankPac,nLeads:totLeadsCapt,
     comissaoTotal,comissaoBaseTotal,comissaoPorProc,comissaoPercent:META.comissaoPercent,
     pacientes,totalPacientes,pacRecorrentes,txRecompra,ltv,
-    atendNovos,atendRecorrentes,
+    atendNovos,atendRecorrentes,recebidoPeriodo,aReceberTotal,
     recebimentos,recebTotal,semReceb,
     fatBruna,fatPeleBruto,fatPeleInstituto,fatInstituto,repassePele,custoPele,nAtendPele:atendPele.length,
     parceiros,repasseTotal,resultadoOper,margemOper,procVar,mesVazio:_mesVazio,
@@ -1488,7 +1497,7 @@ async function carregarTudo(){
     CAT_DESPESA = (cat.data||[]).filter(c=>c.tipo==='despesa').map(c=>c.nome);
     CAIXA = (lanc.data||[]).map(l=>({id:l.id,data:l.data,tipo:l.tipo,categoria:l.categoria,desc:l.descricao,valor:+l.valor,carteira:l.carteira_id,carteiraDest:l.carteira_dest,itens:Array.isArray(l.itens)?l.itens:[],fechAcao:l.fech_acao||null}));
     CAIXA.forEach(l=>{ if(l.itens&&l.itens.length) registrarItens(l.itens); });
-    DATA.atendimentos = (atend.data||[]).map(a=>({id:a.id,data:a.data,paciente:a.paciente,proc:a.procedimento,func:a.funcionario,canal:a.canal,valor:+a.valor,custo:+a.custo,pag:a.pagamento,agenda:a.agenda,recebimento:a.recebimento||'',parcelas:+a.parcelas||1,pagamentos:Array.isArray(a.pagamentos)?a.pagamentos:null,procedimentos:Array.isArray(a.procedimentos)?a.procedimentos:null,baixaAplicada:(a.baixa_aplicada&&typeof a.baixa_aplicada==='object')?a.baixa_aplicada:{}}));
+    DATA.atendimentos = (atend.data||[]).map(a=>({id:a.id,data:a.data,paciente:a.paciente,proc:a.procedimento,func:a.funcionario,canal:a.canal,valor:+a.valor,custo:+a.custo,pag:a.pagamento,agenda:a.agenda,dataExecucao:a.data_execucao||'',recebimento:a.recebimento||'',parcelas:+a.parcelas||1,pagamentos:Array.isArray(a.pagamentos)?a.pagamentos:null,procedimentos:Array.isArray(a.procedimentos)?a.procedimentos:null,baixaAplicada:(a.baixa_aplicada&&typeof a.baixa_aplicada==='object')?a.baixa_aplicada:{}}));
     CAPTACAO = (capt.data||[]).map(c=>({id:c.id,data:c.data,plataforma:c.plataforma,seguidores:c.seguidores,leads:c.leads,agendadas:c.agendadas,investido:+c.investido,gasto:+c.gasto,campanhas:c.campanhas}));
     METAS_MES = {};
     (met.data||[]).forEach(m=>{
@@ -1629,7 +1638,8 @@ function renderPainelRestrito(pg,k){
   if(d.conversao) cards+=card('Conversão de leads', PCT0(k.txConv));
   pg.innerHTML=`
     <div class="trend-grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr))">${cards||'<div style="color:var(--grey);font-size:13px">Nenhum indicador liberado para o seu perfil.</div>'}</div>
-    <div style="margin-top:16px;font-size:12px;color:var(--grey);font-style:italic">Você está vendo o painel com o perfil "${PERMISSOES.nome}". Alguns indicadores financeiros não fazem parte deste acesso.</div>`;
+    <div style="margin-top:16px;font-size:12px;color:var(--grey);font-style:italic">Você está vendo o painel com o perfil "${PERMISSOES.nome}". Alguns indicadores financeiros não fazem parte deste acesso.</div>
+    <div style="margin-top:18px">${pendenciasHTML()}</div>`;
 }
 function renderPainel(pg){
   const k=calc();
@@ -1643,6 +1653,7 @@ function renderPainelCompleto(pg){
     return `<span class="tag-cmp ${up?'up':'down'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor">${arrow}</svg>${PCT0(Math.abs(v))} vs período anterior</span>`;
   };
   pg.innerHTML=`
+    ${pendenciasHTML()}
     <div class="trend-grid">
       <div class="tcard" style="animation-delay:0ms">
         <div class="tc-head"><span class="tc-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4"/></svg></span> Faturamento</div>
@@ -1663,6 +1674,19 @@ function renderPainelCompleto(pg){
         <div class="tc-sub">${k.comandas} atendimento(s) pago(s) no período</div>
         <div class="tc-spark"><canvas id="spk3"></canvas></div>
         ${cmpTag(k.comp.atend)}
+      </div>
+    </div>
+
+    <div class="trend-grid" style="grid-template-columns:repeat(2,1fr);margin-top:14px">
+      <div class="tcard" style="animation-delay:0ms">
+        <div class="tc-head">Recebido no período</div>
+        <div class="tc-val" style="color:var(--green,#3b7a57)">${BRL(k.recebidoPeriodo)}</div>
+        <div class="tc-sub">Dinheiro que realmente entrou (pela data de cada pagamento) — diferente do faturamento quando há sinal + restante depois</div>
+      </div>
+      <div class="tcard" style="animation-delay:70ms">
+        <div class="tc-head">A receber (saldo em aberto)</div>
+        <div class="tc-val" style="color:${k.aReceberTotal>0?'var(--amber)':'var(--grey)'}">${BRL(k.aReceberTotal)}</div>
+        <div class="tc-sub">Soma do que falta em procedimentos parciais/pendentes — todo o histórico, não só este mês</div>
       </div>
     </div>
 
@@ -1867,13 +1891,15 @@ function formaLabel(forma, parcelas){
   if(!forma) return '—';
   return ehCredito(forma) && parcelas>1 ? `${forma} ${parcelas}x` : forma;
 }
-// normaliza os pagamentos de um atendimento numa lista [{forma,valor,parcelas}]
-// aceita tanto o formato novo (a.pagamentos) quanto o antigo (a.recebimento/a.parcelas)
+// normaliza os pagamentos de um atendimento numa lista [{forma,valor,parcelas,data}]
+// aceita tanto o formato novo (a.pagamentos) quanto o antigo (a.recebimento/a.parcelas).
+// "data" é a data em que aquele pagamento específico foi recebido — se não informada,
+// assume a data do atendimento (compatível com todos os registros já existentes).
 function pagamentosDe(a){
   if(Array.isArray(a.pagamentos) && a.pagamentos.length){
-    return a.pagamentos.map(p=>({forma:p.forma||'',valor:+p.valor||0,parcelas:ehCredito(p.forma)?(+p.parcelas||1):1}));
+    return a.pagamentos.map(p=>({forma:p.forma||'',valor:+p.valor||0,parcelas:ehCredito(p.forma)?(+p.parcelas||1):1,data:p.data||a.data}));
   }
-  if(a.recebimento) return [{forma:a.recebimento,valor:+a.valor||0,parcelas:ehCredito(a.recebimento)?(+a.parcelas||1):1}];
+  if(a.recebimento) return [{forma:a.recebimento,valor:+a.valor||0,parcelas:ehCredito(a.recebimento)?(+a.parcelas||1):1,data:a.data}];
   return [];
 }
 // rótulo curto para a tabela: uma forma → "Crédito CPF 10x"; várias → "Dividido (2)"
@@ -2030,7 +2056,9 @@ function editarAtend(id, tipo){
         <div class="field"><label>Valor total (R$)</label><input id="naValor" type="number" value="${a.valor}" oninput="atendValorMudou()" style="${fs};width:100%"></div>
         <div class="field"><label>Pagamento</label><select id="naPag" style="${fs};width:100%">${pagOpts}</select></div>
         <div class="field"><label>Status</label><select id="naAg" style="${fs};width:100%">${agOpts}</select></div>
+        <div class="field"><label>Data de execução do procedimento</label><input id="naDataExec" type="date" value="${a.dataExecucao||''}" style="${fs};width:100%"></div>
       </div>
+      <div style="font-size:12px;color:var(--grey);font-style:italic;margin:-8px 0 14px">Preencha só se o procedimento foi <b>fechado hoje mas será realizado em outra data</b> (sinal + restante depois). Se ainda não sabe o dia, deixe em branco — ele aparece nas pendências do Painel para você confirmar depois.</div>
 
       <div style="border-top:1px solid var(--gold-l);padding-top:14px;margin-bottom:14px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -2268,11 +2296,11 @@ async function salvarAtend(id){
   const reg={data:v('naData')||new Date().toISOString().slice(0,10),
     paciente:v('naPac')||'Sem nome',func:v('naFunc')||'',
     proc:procResumo,canal:v('naCanal'),valor,custo:Math.round(valor*0.3),
-    pag:v('naPag')||'Pago',agenda,
+    pag:v('naPag')||'Pago',agenda,dataExecucao:v('naDataExec')||'',
     recebimento:principal.forma,parcelas:principal.parcelas,pagamentos,procedimentos:procs,
     baixaAplicada:baixaNova}; // consumo deste atendimento, por produto
   if(MODO_NUVEM){
-    const reg2={data:reg.data,paciente:reg.paciente,procedimento:reg.proc,funcionario:reg.func,canal:reg.canal,valor:reg.valor,custo:reg.custo,pagamento:reg.pag,agenda:reg.agenda,recebimento:reg.recebimento,parcelas:reg.parcelas,pagamentos:reg.pagamentos,procedimentos:reg.procedimentos,baixa_aplicada:reg.baixaAplicada};
+    const reg2={data:reg.data,paciente:reg.paciente,procedimento:reg.proc,funcionario:reg.func,canal:reg.canal,valor:reg.valor,custo:reg.custo,pagamento:reg.pag,agenda:reg.agenda,data_execucao:reg.dataExecucao,recebimento:reg.recebimento,parcelas:reg.parcelas,pagamentos:reg.pagamentos,procedimentos:reg.procedimentos,baixa_aplicada:reg.baixaAplicada};
     if(ehEdicao) await sbUpdate('atendimentos',id,reg2); else await sbInsert('atendimentos',reg2);
     window.__atendDia=reg.data; await carregarTudo(); go('atendimentos'); return;
   }
@@ -2927,6 +2955,100 @@ async function excluirMeta(id){
 let PAC_BUSCA='';
 // Base de pacientes (cadastro/busca): SEMPRE o histórico completo, independente do mês
 // selecionado no topo. Buscar uma paciente não pode depender de "estar no mês certo".
+// ===== Pendências (procedimentos programados com sinal + pagamentos em aberto) =====
+// Independente do mês selecionado no topo — como pacientesTodos(), é sempre a visão completa,
+// porque cobrança e confirmação de data não podem depender de qual mês você está olhando.
+function pendenciasAtendimentos(){
+  const compareceu = DATA.atendimentos.filter(a=>a.agenda==='Compareceu');
+  const comSaldo = compareceu.map(a=>{
+    const recebido = pagamentosDe(a).reduce((s,p)=>s+p.valor,0);
+    const saldo = Math.max(0,(+a.valor||0)-recebido);
+    return {a, recebido, saldo};
+  });
+  // A) Fechado com sinal, SEM data de execução definida ainda
+  const semData = comSaldo.filter(x=>x.a.pag==='Parcial' && x.saldo>0 && !x.a.dataExecucao);
+  // B) Data de execução já confirmada — lembrete de contrato/documentação + cobrar o restante
+  const comData = comSaldo.filter(x=>x.a.pag==='Parcial' && x.saldo>0 && x.a.dataExecucao)
+    .sort((x,y)=>(x.a.dataExecucao||'').localeCompare(y.a.dataExecucao||''));
+  // C) Pagamento pendente (nada retido como sinal específico) — cobrança geral
+  const pendentes = comSaldo.filter(x=>x.a.pag==='Pendente' && x.saldo>0);
+  return {semData, comData, pendentes};
+}
+// ---- ações rápidas a partir do alerta do Painel ----
+function toggleConfirmarData(id){
+  const box=document.getElementById('confData_'+id); if(!box) return;
+  box.style.display = box.style.display==='none' ? 'flex' : 'none';
+}
+async function salvarDataExecucaoRapido(id){
+  const input=document.getElementById('dataExecInput_'+id);
+  const data=input.value; if(!data){ alert('Escolha uma data.'); return; }
+  const a=DATA.atendimentos.find(x=>String(x.id)===String(id)); if(!a) return;
+  a.dataExecucao=data;
+  if(MODO_NUVEM){ await sbUpdate('atendimentos',id,{data_execucao:data}); await carregarTudo(); }
+  toast('Data confirmada: '+fmtDate(data));
+  go('painel');
+}
+function toggleConcluirPagamento(id){
+  const box=document.getElementById('concluirBox_'+id); if(!box) return;
+  box.style.display = box.style.display==='none' ? 'flex' : 'none';
+}
+async function confirmarConclusaoPagamento(id){
+  const a=DATA.atendimentos.find(x=>String(x.id)===String(id)); if(!a) return;
+  const forma=document.getElementById('concForma_'+id).value;
+  const valor=+document.getElementById('concValor_'+id).value||0;
+  if(valor<=0){ alert('Informe um valor válido.'); return; }
+  const novaLista=[...pagamentosDe(a), {forma, valor, parcelas:1, data:dataHojeLocal()}];
+  const totalRecebido=novaLista.reduce((s,p)=>s+p.valor,0);
+  const novoPag = totalRecebido>=(+a.valor||0) ? 'Pago' : 'Parcial';
+  a.pagamentos=novaLista; a.pag=novoPag;
+  if(MODO_NUVEM){ await sbUpdate('atendimentos',id,{pagamentos:novaLista,pagamento:novoPag}); await carregarTudo(); }
+  toast('Pagamento de '+BRL(valor)+' registrado');
+  go('painel');
+}
+function pendenciasHTML(){
+  const {semData, comData, pendentes} = pendenciasAtendimentos();
+  const total = semData.length + comData.length + pendentes.length;
+  if(!total) return '';
+  const formaOpts=RECEBIMENTOS.map(r=>`<option>${r}</option>`).join('');
+  const linhaConcluir=(id,saldo)=>`
+    <div id="concluirBox_${id}" style="display:none;gap:8px;align-items:end;flex-wrap:wrap;margin-top:8px;padding:10px;border:1px solid var(--gold-l);border-radius:10px;background:var(--paper)">
+      <div class="field" style="margin:0"><label style="font-size:10.5px">Forma de pagamento</label><select id="concForma_${id}" style="padding:6px 9px;border:1px solid var(--line);border-radius:7px;background:var(--cream);color:var(--ink);font-family:inherit">${formaOpts}</select></div>
+      <div class="field" style="margin:0"><label style="font-size:10.5px">Valor recebido (R$)</label><input id="concValor_${id}" type="number" value="${saldo}" style="padding:6px 9px;border:1px solid var(--line);border-radius:7px;background:var(--cream);color:var(--ink);font-family:inherit;width:110px"></div>
+      <button class="btn" style="padding:6px 14px;font-size:12.5px" onclick="confirmarConclusaoPagamento('${id}')">Confirmar recebimento</button>
+    </div>`;
+  const linhaData=(id,atual)=>`
+    <div id="confData_${id}" style="display:none;gap:8px;align-items:end;flex-wrap:wrap;margin-top:8px;padding:10px;border:1px solid var(--gold-l);border-radius:10px;background:var(--paper)">
+      <div class="field" style="margin:0"><label style="font-size:10.5px">Data do procedimento</label><input id="dataExecInput_${id}" type="date" value="${atual||''}" style="padding:6px 9px;border:1px solid var(--line);border-radius:7px;background:var(--cream);color:var(--ink);font-family:inherit"></div>
+      <button class="btn" style="padding:6px 14px;font-size:12.5px" onclick="salvarDataExecucaoRapido('${id}')">Confirmar data</button>
+    </div>`;
+  const itemA=(x)=>`<div style="padding:11px 13px;border:1px solid var(--line);border-radius:10px;background:var(--cream);margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <div><b style="font-size:13px">${x.a.paciente}</b> <span style="font-size:11.5px;color:var(--grey)">· fechado em ${fmtDate(x.a.data)} · falta ${BRL(x.saldo)}</span></div>
+      <button class="btn ghost" style="padding:4px 11px;font-size:11.5px" onclick="toggleConfirmarData('${x.a.id}')">Confirmar data</button>
+    </div>
+    ${linhaData(x.a.id, x.a.dataExecucao)}
+  </div>`;
+  const itemB=(x)=>`<div style="padding:11px 13px;border:1px solid var(--line);border-radius:10px;background:var(--cream);margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <div><b style="font-size:13px">${x.a.paciente}</b> <span style="font-size:11.5px;color:var(--amber)">· procedimento em ${fmtDate(x.a.dataExecucao)}</span> <span style="font-size:11.5px;color:var(--grey)">· falta ${BRL(x.saldo)} · leve contrato e documentação</span></div>
+      <button class="btn ghost" style="padding:4px 11px;font-size:11.5px" onclick="toggleConcluirPagamento('${x.a.id}')">Concluir</button>
+    </div>
+    ${linhaConcluir(x.a.id, x.saldo)}
+  </div>`;
+  const itemC=(x)=>`<div style="padding:11px 13px;border:1px solid var(--line);border-radius:10px;background:var(--cream);margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <div><b style="font-size:13px">${x.a.paciente}</b> <span style="font-size:11.5px;color:var(--red)">· pagamento pendente</span> <span style="font-size:11.5px;color:var(--grey)">· ${fmtDate(x.a.data)} · ${BRL(x.saldo)}</span></div>
+      <button class="btn ghost" style="padding:4px 11px;font-size:11.5px" onclick="toggleConcluirPagamento('${x.a.id}')">Registrar recebimento</button>
+    </div>
+    ${linhaConcluir(x.a.id, x.saldo)}
+  </div>`;
+  return `<div class="panel" style="margin-bottom:18px;border:1px solid var(--gold-l)">
+    <div class="panel-head"><div><h3>Pendências</h3><div class="ph-sub">Procedimentos fechados com sinal e cobranças em aberto — não depende do mês selecionado</div></div></div>
+    ${semData.length?`<div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);font-weight:600;margin-bottom:8px">Aguardando data do procedimento (${semData.length})</div>${semData.map(itemA).join('')}`:''}
+    ${comData.length?`<div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);font-weight:600;margin:${semData.length?'16px':'0'} 0 8px">Data marcada — levar contrato e documentação (${comData.length})</div>${comData.map(itemB).join('')}`:''}
+    ${pendentes.length?`<div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);font-weight:600;margin:${(semData.length||comData.length)?'16px':'0'} 0 8px">Pagamentos pendentes — cobrar (${pendentes.length})</div>${pendentes.map(itemC).join('')}`:''}
+  </div>`;
+}
 function pacientesTodos(){
   const compareceu = DATA.atendimentos.filter(a=>a.agenda==='Compareceu');
   const nomes=[...new Set(compareceu.map(a=>a.paciente).filter(Boolean))];
