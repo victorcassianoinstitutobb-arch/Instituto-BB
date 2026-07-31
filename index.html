@@ -2309,7 +2309,7 @@ async function salvarAtend(id){
     recebimento:principal.forma,parcelas:principal.parcelas,pagamentos,procedimentos:procs,
     baixaAplicada:baixaNova}; // consumo deste atendimento, por produto
   if(MODO_NUVEM){
-    const reg2={data:reg.data,paciente:reg.paciente,procedimento:reg.proc,funcionario:reg.func,canal:reg.canal,valor:reg.valor,custo:reg.custo,pagamento:reg.pag,agenda:reg.agenda,data_execucao:reg.dataExecucao,recebimento:reg.recebimento,parcelas:reg.parcelas,pagamentos:reg.pagamentos,procedimentos:reg.procedimentos,baixa_aplicada:reg.baixaAplicada};
+    const reg2={data:reg.data,paciente:reg.paciente,procedimento:reg.proc,funcionario:reg.func,canal:reg.canal,valor:reg.valor,custo:reg.custo,pagamento:reg.pag,agenda:reg.agenda,data_execucao:reg.dataExecucao||null,recebimento:reg.recebimento,parcelas:reg.parcelas,pagamentos:reg.pagamentos,procedimentos:reg.procedimentos,baixa_aplicada:reg.baixaAplicada};
     if(ehEdicao) await sbUpdate('atendimentos',id,reg2); else await sbInsert('atendimentos',reg2);
     window.__atendDia=reg.data; await carregarTudo(); go('atendimentos'); return;
   }
