@@ -1916,7 +1916,7 @@ function recebLabel(a){
 }
 // avança/retrocede um dia no "Ver dia" dos atendimentos
 function mudarDiaAtend(delta){
-  const hoje=new Date().toISOString().slice(0,10);
+  const hoje=dataHojeLocal();
   const base = (window.__atendDia && window.__atendDia!=='__todos' && window.__atendDia!=='__mes') ? window.__atendDia : hoje;
   const [a,m,d] = base.split('-').map(Number);
   const dt = new Date(a, m-1, d);
@@ -1926,7 +1926,7 @@ function mudarDiaAtend(delta){
 }
 function renderAtend(pg){
   const todosGlobal=[...DATA.atendimentos].sort((a,b)=>(b.data||'').localeCompare(a.data||''));
-  const hoje=new Date().toISOString().slice(0,10);
+  const hoje=dataHojeLocal();
   // "Ver dia" e "Ver mês" respeitam o mês (ou "Acumulado") selecionado no topo.
   // "Ver todos" é a exceção deliberada: mostra literalmente TODO o histórico, sem filtro de período.
   const _per=(typeof periodoSelecionadoIntervalo==='function')?periodoSelecionadoIntervalo():null;
@@ -2024,7 +2024,7 @@ function renderAtend(pg){
 }
 function abrirAtendForm(tipo){ editarAtend(0, tipo||'bruna'); }
 function editarAtend(id, tipo){
-  const a = (id && id!=='0')? DATA.atendimentos.find(x=>x.id==id) : {id:0,data:new Date().toISOString().slice(0,10),paciente:'',func:'',proc:'',canal:'',valor:'',pag:'Pago',agenda:'Compareceu'};
+  const a = (id && id!=='0')? DATA.atendimentos.find(x=>x.id==id) : {id:0,data:dataHojeLocal(),paciente:'',func:'',proc:'',canal:'',valor:'',pag:'Pago',agenda:'Compareceu'};
   // tipo: 'bruna' (não-parceiras) | 'parceiro' (parceiras). Em edição, deduz do registro.
   const tp = tipo || (funcEhPele(a.func)?'parceiro':'bruna');
   const fs='padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink)';
@@ -2059,7 +2059,7 @@ function editarAtend(id, tipo){
         <div class="field"><label>${tp==='parceiro'?'Profissional parceira':'Profissional'}</label><select id="naFunc" onchange="renderAtendProcs()" style="${fs};width:100%"><option value="">—</option>${funcDisp.map(f=>`<option ${f.nome===funcAuto?'selected':''}>${f.nome}</option>`).join('')}</select></div>
         <div class="field"><label>Canal</label><select id="naCanal" style="${fs};width:100%">${canalOpts}</select></div>
         <div class="field"><label>Valor total (R$)</label><input id="naValor" type="number" value="${a.valor}" oninput="atendValorMudou()" style="${fs};width:100%"></div>
-        <div class="field"><label>Pagamento</label><select id="naPag" style="${fs};width:100%">${pagOpts}</select></div>
+        <div class="field"><label>Pagamento</label><select id="naPag" onchange="atendPagStatusMudou()" style="${fs};width:100%">${pagOpts}</select></div>
         <div class="field"><label>Status</label><select id="naAg" style="${fs};width:100%">${agOpts}</select></div>
         <div class="field"><label>Data de execução do procedimento</label><input id="naDataExec" type="date" value="${a.dataExecucao||''}" style="${fs};width:100%"></div>
       </div>
@@ -2199,15 +2199,38 @@ function removePagamento(i){ __atendPagamentos.splice(i,1); if(__atendPagamentos
 function updPagamento(i,campo,val){
   __atendPagamentos[i][campo] = campo==='valor' ? (+val||0) : (campo==='parcelas'?(+val||1):val);
   if(campo==='forma'){ if(!ehCredito(val)) __atendPagamentos[i].parcelas=1; renderPagamentos(); }
-  else atualizaAvisoPag();
+  else { atualizaAvisoPag(); atualizaSaldoAberto(); }
 }
 function atendValorMudou(){
-  // no modo único, espelha o valor total na única forma
-  if(!__atendPagDividido && __atendPagamentos.length===1){
+  // só espelha o valor total na forma de pagamento quando o status é "Pago" — em "Parcial"
+  // o valor recebido é digitado à parte, porque é menor que o total de propósito.
+  const status=(document.getElementById('naPag')||{}).value;
+  if(!__atendPagDividido && __atendPagamentos.length===1 && status==='Pago'){
     __atendPagamentos[0].valor = +(document.getElementById('naValor')||{}).value||0;
   }
   atualizaAvisoPag();
+  atualizaSaldoAberto();
   atualizaRepassePreview();
+}
+// quando o status de pagamento muda (Pago/Parcial/Pendente), a seção de "como recebeu" se adapta
+function atendPagStatusMudou(){
+  const status=document.getElementById('naPag').value;
+  if(!__atendPagDividido && __atendPagamentos.length===1 && status==='Pago'){
+    // volta a espelhar o valor total quando muda pra Pago
+    __atendPagamentos[0].valor = +(document.getElementById('naValor')||{}).value||0;
+  }
+  renderPagamentos();
+  atualizaSaldoAberto();
+}
+// mostra "falta receber R$X" em tempo real quando o pagamento é Parcial
+function atualizaSaldoAberto(){
+  const box=document.getElementById('naSaldoAberto'); if(!box) return;
+  const status=(document.getElementById('naPag')||{}).value;
+  if(status!=='Parcial'){ box.innerHTML=''; return; }
+  const total=valorTotalAtend();
+  const recebido=(__atendPagamentos||[]).reduce((s,p)=>s+(+p.valor||0),0);
+  const saldo=Math.max(0,total-recebido);
+  box.innerHTML=`<div style="margin-top:8px;font-size:13px"><span style="color:var(--grey)">Recebido hoje: <b style="color:var(--ink)">${BRL(recebido)}</b></span> · <span style="color:var(--amber)">Fica em aberto: <b>${BRL(saldo)}</b></span> <span style="color:var(--grey);font-style:italic">— quando ela vier pagar o restante, use "Concluir" nas Pendências do Painel</span></div>`;
 }
 // preview em tempo real do rateio (repasse) no formulário de atendimento de parceiro
 function atualizaRepassePreview(){
@@ -2240,19 +2263,38 @@ function atualizaAvisoPag(){
 }
 function renderPagamentos(){
   const box=document.getElementById('naPagBox'); if(!box) return;
+  const status=(document.getElementById('naPag')||{}).value||'Pago';
   const fs='padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink);font-size:13px';
   const formaSel=(sel)=>`<option value="">—</option>`+RECEBIMENTOS.map(r=>`<option ${r===sel?'selected':''}>${r}</option>`).join('');
   const parcSel=(sel)=>Array.from({length:18},(_,i)=>i+1).map(n=>`<option value="${n}" ${(+sel||1)===n?'selected':''}>${n}x</option>`).join('');
+  if(status==='Pendente'){
+    box.innerHTML=`<div style="font-size:12.5px;color:var(--grey);font-style:italic">Nada foi recebido ainda — este atendimento fica como pendência no Painel até você registrar o pagamento.</div>`;
+    const av=document.getElementById('naPagAviso'); if(av) av.innerHTML='';
+    const sb=document.getElementById('naSaldoAberto'); if(sb) sb.innerHTML='';
+    return;
+  }
   if(!__atendPagDividido){
-    // modo único: 1 forma + (parcelas se crédito). Valor vem do campo Valor total.
+    // modo único: 1 forma + (parcelas se crédito).
+    // "Pago" → o valor é sempre o total (não editável aqui, já sincroniza com "Valor total").
+    // "Parcial" → o valor recebido é digitado à parte, porque é menor que o total de propósito.
     const p=__atendPagamentos[0]||{forma:'',valor:0,parcelas:1};
     if(!__atendPagamentos.length) __atendPagamentos=[p];
     const mostraParc=ehCredito(p.forma);
-    box.innerHTML=`<div style="display:grid;grid-template-columns:2fr 1fr;gap:10px">
-      <div class="field" style="margin:0"><label>Como recebeu</label><select onchange="updPagamento(0,'forma',this.value)" style="${fs};width:100%">${formaSel(p.forma)}</select></div>
-      <div class="field" style="margin:0;${mostraParc?'':'visibility:hidden'}"><label>Parcelas</label><select onchange="updPagamento(0,'parcelas',this.value)" style="${fs};width:100%">${parcSel(p.parcelas)}</select></div>
-    </div>`;
+    if(status==='Parcial'){
+      box.innerHTML=`<div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:10px">
+        <div class="field" style="margin:0"><label>Como recebeu (hoje)</label><select onchange="updPagamento(0,'forma',this.value)" style="${fs};width:100%">${formaSel(p.forma)}</select></div>
+        <div class="field" style="margin:0"><label>Valor recebido hoje (R$)</label><input type="number" value="${p.valor||''}" oninput="updPagamento(0,'valor',this.value)" placeholder="0,00" style="${fs};width:100%"></div>
+        <div class="field" style="margin:0;${mostraParc?'':'visibility:hidden'}"><label>Parcelas</label><select onchange="updPagamento(0,'parcelas',this.value)" style="${fs};width:100%">${parcSel(p.parcelas)}</select></div>
+      </div>
+      <div id="naSaldoAberto"></div>`;
+    } else {
+      box.innerHTML=`<div style="display:grid;grid-template-columns:2fr 1fr;gap:10px">
+        <div class="field" style="margin:0"><label>Como recebeu</label><select onchange="updPagamento(0,'forma',this.value)" style="${fs};width:100%">${formaSel(p.forma)}</select></div>
+        <div class="field" style="margin:0;${mostraParc?'':'visibility:hidden'}"><label>Parcelas</label><select onchange="updPagamento(0,'parcelas',this.value)" style="${fs};width:100%">${parcSel(p.parcelas)}</select></div>
+      </div>`;
+    }
     atualizaAvisoPag();
+    atualizaSaldoAberto();
     return;
   }
   // modo dividido: várias linhas com valor por forma
@@ -2264,8 +2306,9 @@ function renderPagamentos(){
       <div class="field" style="margin:0;${mostraParc?'':'visibility:hidden'}"><label>Parcelas</label><select onchange="updPagamento(${i},'parcelas',this.value)" style="${fs};width:100%">${parcSel(p.parcelas)}</select></div>
       <button type="button" class="btn ghost" style="padding:7px 9px;font-size:12px" onclick="removePagamento(${i})" title="Remover">×</button>
     </div>`;
-  }).join('') + `<button type="button" class="btn ghost" style="padding:4px 10px;font-size:12px;margin-top:2px" onclick="addPagamento()">+ adicionar forma</button>`;
+  }).join('') + `<button type="button" class="btn ghost" style="padding:4px 10px;font-size:12px;margin-top:2px" onclick="addPagamento()">+ adicionar forma</button><div id="naSaldoAberto"></div>`;
   atualizaAvisoPag();
+  atualizaSaldoAberto();
 }
 async function salvarAtend(id){
   const v=i=>document.getElementById(i).value;
@@ -2281,7 +2324,10 @@ async function salvarAtend(id){
       .map(p=>({forma:p.forma,valor:+p.valor||0,parcelas:ehCredito(p.forma)?(+p.parcelas||1):1}));
   } else {
     const p=__atendPagamentos[0];
-    pagamentos = (p && p.forma) ? [{forma:p.forma,valor:valor,parcelas:ehCredito(p.forma)?(+p.parcelas||1):1}] : [];
+    // "Pago" = sempre o valor total (a forma cobre tudo). "Parcial" = o valor que foi
+    // realmente digitado como recebido hoje (pode — e deve — ser menor que o total).
+    const valorPago = pagStatus==='Parcial' ? (+p?.valor||0) : valor;
+    pagamentos = (p && p.forma && valorPago>0) ? [{forma:p.forma,valor:valorPago,parcelas:ehCredito(p.forma)?(+p.parcelas||1):1}] : [];
   }
   // campos de compatibilidade: forma "principal" = a de maior valor
   const principal = pagamentos.slice().sort((a,b)=>b.valor-a.valor)[0] || {forma:'',parcelas:1};
@@ -2302,7 +2348,7 @@ async function salvarAtend(id){
   }
   const ehEdicao = id && id!=='0';
   const atendAntigo = ehEdicao ? DATA.atendimentos.find(x=>x.id==id) : null;
-  const reg={data:v('naData')||new Date().toISOString().slice(0,10),
+  const reg={data:v('naData')||dataHojeLocal(),
     paciente:v('naPac')||'Sem nome',func:v('naFunc')||'',
     proc:procResumo,canal:v('naCanal'),valor,custo:Math.round(valor*0.3),
     pag:v('naPag')||'Pago',agenda,dataExecucao:v('naDataExec')||'',
@@ -3358,7 +3404,7 @@ function setGrao(g){GRAO_ANALISE=g; go('analise');}
 // retorna o intervalo de datas do período selecionado, baseado no dado mais recente
 function periodoAtual(grao){
   const datas=DATA.atendimentos.map(a=>a.data).filter(Boolean).sort();
-  const ref = datas.length? datas[datas.length-1] : new Date().toISOString().slice(0,10);
+  const ref = datas.length? datas[datas.length-1] : dataHojeLocal();
   const d=new Date(ref+'T00:00:00');
   if(grao==='dia'){
     return {ini:ref, fim:ref, label:fmtDateFull(ref)};
@@ -3973,7 +4019,7 @@ function editarLanc(id){
     </div>`;
     return;
   }
-  const m = (id && id!=='0')? CAIXA.find(x=>x.id==id) : {id:0,data:new Date().toISOString().slice(0,10),tipo:'receita',categoria:'Procedimento',desc:'',valor:'',carteira:CARTEIRAS[0].id,carteiraDest:CARTEIRAS[1]?CARTEIRAS[1].id:CARTEIRAS[0].id};
+  const m = (id && id!=='0')? CAIXA.find(x=>x.id==id) : {id:0,data:dataHojeLocal(),tipo:'receita',categoria:'Procedimento',desc:'',valor:'',carteira:CARTEIRAS[0].id,carteiraDest:CARTEIRAS[1]?CARTEIRAS[1].id:CARTEIRAS[0].id};
   const fs='padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;width:100%;background:var(--paper);color:var(--ink)';
   const tipoOpts=Object.keys(TIPOS_LANC).map(t=>`<option value="${t}" ${t===m.tipo?'selected':''}>${TIPOS_LANC[t].label}</option>`).join('');
   const cartOpts=CARTEIRAS.map(w=>`<option value="${w.id}" ${w.id==m.carteira?'selected':''}>${w.nome}</option>`).join('');
@@ -5557,7 +5603,7 @@ function setContasMes(v){ CONTAS_MES=v; go('contas'); }
 function renderContas(pg){
   // resumo
   let aPagar=0, aReceber=0, vencidoPagar=0, prox=[];
-  const hoje=new Date().toISOString().slice(0,10);
+  const hoje=dataHojeLocal();
   const mesRef=contasMesRef();
   CONTAS.forEach(c=>{
     (c.parcelas||[]).forEach(p=>{
@@ -5677,7 +5723,7 @@ function abrirContaForm(){
         <div class="field"><label>Carteira (de onde sai/entra)</label><select id="ct_cart" style="${fs}">${cartOpts}</select></div>
         <div class="field"><label>Valor da parcela (R$)</label><input type="number" id="ct_valor" placeholder="0,00" style="${fs}"></div>
         <div class="field" id="ct_nparcWrap"><label>Nº de parcelas</label><input type="number" id="ct_nparc" value="10" style="${fs}"></div>
-        <div class="field"><label>1º vencimento</label><input type="date" id="ct_venc" value="${new Date().toISOString().slice(0,10)}" style="${fs}"></div>
+        <div class="field"><label>1º vencimento</label><input type="date" id="ct_venc" value="${dataHojeLocal()}" style="${fs}"></div>
       </div>
       <div style="display:flex;gap:10px">
         <button class="btn" onclick="salvarConta()">Salvar conta</button>
@@ -5743,7 +5789,7 @@ async function excluirConta(id){
 async function quitarParcela(contaId, n){
   const c=CONTAS.find(x=>x.id==contaId); if(!c)return;
   const p=(c.parcelas||[]).find(x=>x.n===n); if(!p||p.pago)return;
-  const hoje=new Date().toISOString().slice(0,10);
+  const hoje=dataHojeLocal();
   const tipoLanc = c.tipo==='pagar'?'despesa':'receita';
   const desc=`${c.descricao} (${n}/${c.numParcelas})`;
   if(MODO_NUVEM){
@@ -6212,7 +6258,7 @@ function renderCheckup(pg){
   }
 
   // 4. Contas vencidas
-  const hoje=new Date().toISOString().slice(0,10);
+  const hoje=dataHojeLocal();
   let vencidas=0, valVencido=0;
   CONTAS.forEach(c=>{(c.parcelas||[]).forEach(p=>{if(!p.pago && c.tipo==='pagar' && p.vencimento<hoje){vencidas++;valVencido+=c.valorParcela;}});});
   if(vencidas>0){
