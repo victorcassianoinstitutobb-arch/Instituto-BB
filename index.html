@@ -6,32 +6,32 @@
 <title>Instituto Bruna Braga · Sistema de Gestão</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
-  /* DARK (padrão) — grafite quente, menos preto puro, mais suave à vista */
-  --black:#1E1B18; --ink:#F2EEE6; --gold:#D8B468; --gold-l:#EAD49A; --gold-d:#C09A4C;
-  --ivory:#1A1815; --ivory2:#252119; --cream:#221F1A; --paper:#252220;
-  --grey:#B0A899; --grey-l:#332E27; --line:#383229;
-  --sage:#93A48F; --sage-bg:#202519;
-  --green:#74B98C; --green-bg:#1B2A20; --red:#D9928A; --red-bg:#2E2019;
-  --amber:#DAB163; --amber-bg:#2E2517;
-  --shadow:0 1px 3px rgba(0,0,0,.25), 0 8px 28px rgba(0,0,0,.28);
-  --shadow-sm:0 1px 2px rgba(0,0,0,.2);
+  /* ESCURO — azul-noite (variação escura do layout do CRM) */
+  --black:#0A1B4A; --ink:#E4EAF5; --gold:#5B8DEF; --gold-l:#2C4A8C; --gold-d:#8DB0F5;
+  --ivory:#0B1220; --ivory2:#121B2E; --cream:#111A2C; --paper:#151F33;
+  --grey:#93A0B8; --grey-l:#1C2740; --line:#24314D;
+  --sage:#8FB3A4; --sage-bg:#13241F;
+  --green:#4ADE80; --green-bg:#12291D; --red:#F59E7B; --red-bg:#2E1A12;
+  --amber:#E5B94E; --amber-bg:#2A2210;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 12px 32px -14px rgba(0,0,0,.6);
+  --shadow-sm:0 1px 2px rgba(0,0,0,.25);
   --radius:18px; --radius-sm:12px;
 }
 body.light{
-  /* CLARO — off-white quente, dourado suave, sage; descansado e elegante */
-  --black:#2B2620; --ink:#33302A; --gold:#B8923F; --gold-l:#D9BE7E; --gold-d:#8F6E2C;
-  --ivory:#FBF9F5; --ivory2:#F1ECE3; --cream:#F6F2EA; --paper:#FFFFFF;
-  --grey:#8A8175; --grey-l:#EDE8DF; --line:#E7E0D4;
-  --sage:#6F8270; --sage-bg:#EDF1EC;
-  --green:#4E7C5C; --green-bg:#EAF1EC; --red:#B5685F; --red-bg:#F6EBE9;
-  --amber:#B0852F; --amber-bg:#F7EFDD;
-  --shadow:0 1px 3px rgba(58,53,46,.05), 0 6px 20px rgba(58,53,46,.07);
-  --shadow-sm:0 1px 2px rgba(58,53,46,.05);
+  /* CLARO (padrão) — mesmo visual do CRM Instituto: fundo cinza-azulado, cartões brancos, azul */
+  --black:#0F2D73; --ink:#0F172A; --gold:#2563EB; --gold-l:#BFD2FF; --gold-d:#1D4ED8;
+  --ivory:#F3F5FA; --ivory2:#EDF1F8; --cream:#F6F8FC; --paper:#FFFFFF;
+  --grey:#5B6478; --grey-l:#EDF1F8; --line:#E3E8F1;
+  --sage:#4F7A6A; --sage-bg:#E8F3EE;
+  --green:#15803D; --green-bg:#DCFCE7; --red:#C2410C; --red-bg:#FFEDD5;
+  --amber:#A16207; --amber-bg:#FEF3C7;
+  --shadow:0 1px 2px rgba(15,23,42,.04), 0 6px 20px -12px rgba(15,23,42,.14);
+  --shadow-sm:0 1px 2px rgba(15,23,42,.04);
 }
 *{box-sizing:border-box;margin:0;padding:0}
 /* ===== PALETAS — transformam destaque + fundos + superfícies (dark e light) ===== */
@@ -67,14 +67,14 @@ body.pal-coral{ --gold:#EF9870; --gold-l:#F7C0A2; --gold-d:#D0744A; --ivory:#1D1
 body.light.pal-coral{ --gold:#C95A2E; --gold-l:#E48E63; --gold-d:#A0421C; --ivory:#FDF6F2; --ivory2:#F6E8DF; --cream:#FBF0E9; --paper:#FFFFFF; --line:#F0DCD0; }
 body{font-family:'Inter',system-ui,sans-serif;background:var(--ivory);color:var(--ink);
   -webkit-font-smoothing:antialiased;line-height:1.55;transition:background .25s,color .25s}
-.serif{font-family:'Cormorant Garamond',Georgia,serif}
+.serif{font-family:var(--f-display)}
 
 /* ---------- App shell ---------- */
 .app{display:flex;min-height:100vh}
 .sidebar{width:248px;background:var(--black);color:var(--ivory);flex-shrink:0;
   display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow:hidden}
 .brand{padding:28px 24px 20px;border-bottom:1px solid rgba(201,162,75,.22);flex-shrink:0}
-.brand .mark{font-family:'Cormorant Garamond',serif;font-size:25px;font-weight:700;
+.brand .mark{font-family:var(--f-display);font-size:25px;font-weight:700;
   color:var(--gold);line-height:1.05;letter-spacing:.3px}
 .brand .sub{font-size:10px;letter-spacing:2.4px;color:var(--gold-l);margin-top:6px;text-transform:uppercase}
 .nav{padding:16px 14px;display:flex;flex-direction:column;gap:3px;flex:1;overflow-y:auto;overflow-x:hidden;min-height:0}
@@ -97,7 +97,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--ivory);color:var(
 .topbar{display:flex;align-items:center;justify-content:space-between;
   padding:20px 36px;background:var(--paper);border-bottom:1px solid var(--line);
   position:sticky;top:0;z-index:20}
-.topbar .title{font-family:'Cormorant Garamond',serif;font-size:27px;font-weight:600;color:var(--ink)}
+.topbar .title{font-family:var(--f-display);font-size:27px;font-weight:600;color:var(--ink)}
 .topbar .crumb{font-size:11px;letter-spacing:1.5px;color:var(--grey);text-transform:uppercase;margin-bottom:1px}
 .period{display:flex;align-items:center;gap:10px}
 .period select{font-family:inherit;font-size:13px;padding:9px 16px;border:1px solid var(--line);
@@ -116,7 +116,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--ivory);color:var(
 .kpi::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--gold)}
 .kpi.green::before{background:var(--green)} .kpi.ink::before{background:var(--ink)}
 .kpi .label{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--grey);font-weight:500}
-.kpi .val{font-family:'Cormorant Garamond',serif;font-size:38px;font-weight:600;line-height:1.1;margin:8px 0 4px}
+.kpi .val{font-family:var(--f-display);font-size:38px;font-weight:600;line-height:1.1;margin:8px 0 4px}
 .kpi.green .val{color:var(--green)} .kpi.neg .val{color:var(--red)}
 .kpi .meta{font-size:12px;color:var(--grey);display:flex;align-items:center;gap:6px}
 .kpi .meta .tag{font-weight:600}
@@ -129,7 +129,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--ivory);color:var(
 .row.two-eq{grid-template-columns:1fr 1fr}
 .panel{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);
   padding:22px 24px;box-shadow:var(--shadow)}
-.panel h3{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;margin-bottom:2px}
+.panel h3{font-family:var(--f-display);font-size:20px;font-weight:600;margin-bottom:2px}
 .panel .ph-sub{font-size:12px;color:var(--grey);margin-bottom:18px}
 .panel-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px}
 .panel-head .ph-sub{margin-bottom:0}
@@ -197,7 +197,7 @@ table.data tbody tr:hover{background:var(--cream)}
 
 .health{display:flex;align-items:center;gap:14px;background:var(--cream);border-radius:var(--radius-sm);
   padding:16px 20px;margin-bottom:18px;border:1px solid var(--line)}
-.health .big{font-family:'Cormorant Garamond',serif;font-size:34px;font-weight:600;color:var(--green)}
+.health .big{font-family:var(--f-display);font-size:34px;font-weight:600;color:var(--green)}
 .health .txt{font-size:13px;color:var(--grey)}
 .health .txt b{color:var(--ink);font-weight:600}
 
@@ -238,9 +238,9 @@ table.data tbody tr:hover{background:var(--cream)}
 .recall-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;align-items:start}
 .recall-col{background:var(--cream);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;max-height:640px}
 .recall-col-head{padding:14px 14px 12px;background:var(--paper);border-bottom:1px solid var(--line)}
-.recall-col-title{font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:600;color:var(--ink)}
+.recall-col-title{font-family:var(--f-display);font-size:17px;font-weight:600;color:var(--ink)}
 .recall-col-desc{font-size:11px;color:var(--grey);margin-top:2px}
-.recall-col-count{font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:700;margin-top:6px}
+.recall-col-count{font-family:var(--f-display);font-size:26px;font-weight:700;margin-top:6px}
 .recall-col-body{padding:10px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px}
 .recall-card{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;transition:.15s}
 .recall-card:hover{border-color:var(--gold-l);transform:translateY(-1px)}
@@ -257,7 +257,7 @@ table.data tbody tr:hover{background:var(--cream)}
 .tcard .tc-head{display:flex;align-items:center;gap:10px;color:var(--grey);font-size:13px;font-weight:500;margin-bottom:10px}
 .tcard .tc-ic{width:34px;height:34px;border-radius:9px;background:var(--cream);display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .tcard .tc-ic svg{width:17px;height:17px;stroke:var(--gold-d);stroke-width:1.8;fill:none}
-.tcard .tc-val{font-family:'Cormorant Garamond',serif;font-size:34px;font-weight:600;line-height:1;margin-bottom:4px}
+.tcard .tc-val{font-family:var(--f-display);font-size:34px;font-weight:600;line-height:1;margin-bottom:4px}
 .tcard .tc-sub{font-size:12px;color:var(--grey);margin-bottom:10px}
 .tcard .tc-spark{height:48px;margin:6px -4px 10px;position:relative}
 .tcard .tag-cmp{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;
@@ -304,14 +304,151 @@ table.data tbody tr:hover{background:var(--cream)}
   font-family:inherit;font-weight:600;font-size:13.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;transition:.16s}
 .new-btn:hover{background:var(--gold-l)}
 .new-btn svg{width:16px;height:16px;stroke-width:2.5}
+
+/* =====================================================================
+   LAYOUT 2.0 — baseado no CRM Instituto: menu azul metálico, área clara,
+   cartões brancos, tipografia Outfit. Só aparência: nenhuma função muda.
+   ===================================================================== */
+:root{
+  --metal-navy:linear-gradient(160deg,#16388A 0%,#0C2463 38%,#0A1B4A 62%,#14347F 100%);
+  --metal-blue:linear-gradient(135deg,#2E5FD6 0%,#1A44B0 30%,#0F2E7A 58%,#1B4BB8 82%,#0D2A6E 100%);
+  --metal-btn:linear-gradient(180deg,#3B74F0 0%,#2160E0 48%,#1A50C4 52%,#2A66E6 100%);
+  --silver:linear-gradient(90deg,#C9D4E6,#F4F7FC 45%,#AEBBD2 100%);
+  --f-display:'Outfit',ui-sans-serif,system-ui,sans-serif;
+}
+body{font-family:'Outfit','Inter',system-ui,sans-serif;font-size:14.5px}
+.serif{font-family:var(--f-display)}
+body.light .panel,body.light .tcard,body.light .kpi{background:linear-gradient(180deg,#FFFFFF 0%,#FAFBFE 100%)}
+
+/* ---------- menu lateral azul ---------- */
+.sidebar{background:var(--metal-navy);color:#fff}
+.sidebar::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(115deg,transparent 35%,rgba(255,255,255,.06) 48%,transparent 60%),repeating-linear-gradient(90deg,rgba(255,255,255,.012) 0 1px,transparent 1px 3px)}
+.sidebar>*{position:relative;z-index:1}
+.brand{display:flex;align-items:center;gap:12px;padding:24px 20px 18px;border-bottom:1px solid rgba(255,255,255,.10)}
+.brand::before{content:"IBB";flex:none;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-weight:700;font-size:13px;letter-spacing:.04em;color:#fff;
+  background:linear-gradient(145deg,rgba(255,255,255,.28),rgba(255,255,255,.06));box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 4px 12px rgba(0,0,0,.25)}
+.brand .mark{font-family:var(--f-display);font-size:16px;font-weight:700;line-height:1.15;letter-spacing:0;background:var(--silver);-webkit-background-clip:text;background-clip:text;color:transparent}
+.brand .mark br{display:none}
+.brand .sub{font-size:12px;letter-spacing:.02em;text-transform:none;color:#AFC0E8;margin-top:2px}
+.nav{padding:14px 12px;gap:4px}
+.nav::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18)}
+.nav button,.nav-group>.ng-head{color:#C9D5F2;font-size:14.5px;padding:11px 14px;border-radius:12px;min-height:44px;font-weight:500}
+.nav button:hover,.nav-group>.ng-head:hover{background:rgba(255,255,255,.08);color:#fff}
+.nav button.active,.ng-items button.active{background:var(--metal-btn);color:#fff;font-weight:600;box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 8px 20px -6px rgba(37,99,235,.6)}
+.nav-group.open>.ng-head{color:#fff}
+.ng-items button{color:#AFC0E8;font-size:13.5px;padding:9px 14px 9px 45px;border-radius:10px;min-height:38px}
+.ng-items button:hover{background:rgba(255,255,255,.08);color:#fff}
+.nav-group.open .ng-items{max-height:400px}
+.new-btn{background:rgba(255,255,255,.10);color:#fff;border:1px solid rgba(255,255,255,.22);border-radius:12px;min-height:42px;margin:4px 2px 10px;font-size:14px}
+.new-btn:hover{background:rgba(255,255,255,.18)}
+.side-foot{border-top:1px solid rgba(255,255,255,.10);color:#8FA3D6}
+.side-foot b{color:#C9D5F2}
+.side-foot button,.side-foot .btn{background:rgba(255,255,255,.08)!important;color:#C9D5F2!important;border-color:rgba(255,255,255,.18)!important}
+
+/* ---------- topo: título grande, filtros à direita ---------- */
+.topbar{background:color-mix(in srgb,var(--ivory) 88%,transparent);border-bottom:1px solid transparent;backdrop-filter:blur(12px);padding:20px 40px 14px}
+.topbar .crumb{font-size:12px;letter-spacing:.14em;color:var(--grey);font-weight:600}
+.topbar .title{font-family:var(--f-display);font-size:30px;font-weight:700;letter-spacing:-.02em;line-height:1.15}
+.period select{background:var(--paper);border-radius:12px;font-size:14px;padding:9px 14px;min-height:40px}
+.content{padding:18px 40px 64px;max-width:1360px}
+
+/* ---------- cartões e painéis ---------- */
+.panel,.tcard,.kpi{border-radius:18px;border-color:var(--line);box-shadow:var(--shadow)}
+.panel h3{font-family:var(--f-display);font-size:18px;font-weight:600;letter-spacing:-.01em}
+.panel .ph-sub{font-size:13px}
+.tcard .tc-val,.kpi .val,.health .big{font-family:var(--f-display);font-weight:700;letter-spacing:-.02em}
+.tcard .tc-val{font-size:30px}
+.tcard .tc-head{font-size:13.5px}
+.tcard .tc-ic{background:var(--gold-l);background:color-mix(in srgb,var(--gold) 12%,var(--paper));border-radius:11px}
+.kpi::before{background:linear-gradient(90deg,var(--gold),transparent)}
+
+/* ---------- botões ---------- */
+.btn{border-radius:12px;font-size:14px;min-height:40px;padding:9px 16px;background:var(--metal-btn);border-color:var(--gold-d);color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+.btn:hover{background:var(--gold-d);color:#fff;filter:brightness(1.05)}
+.btn.ghost{background:var(--paper);color:var(--ink);border-color:var(--line);box-shadow:none}
+.btn.ghost:hover{background:var(--cream);color:var(--ink);border-color:var(--gold-l);filter:none}
+body:not(.pal-azul) .btn:not(.ghost){background:var(--gold);border-color:var(--gold-d)}
+#loginBtn{background:var(--metal-btn)!important;color:#fff!important;border-radius:12px!important}
+.itabs button.active{color:var(--gold-d);border-bottom-color:var(--gold)}
+.field input,.field select{border-radius:10px;padding:9px 12px}
+.field input:focus,.field select:focus{border-color:var(--gold);box-shadow:0 0 0 3px color-mix(in srgb,var(--gold) 18%,transparent)}
+
+/* ---------- tabelas ---------- */
+table.data th{font-size:11px;letter-spacing:.08em;color:var(--grey);background:var(--cream);border-bottom:1px solid var(--line)}
+table.data th:first-child{border-radius:10px 0 0 10px} table.data th:last-child{border-radius:0 10px 10px 0}
+table.data td{border-bottom:1px solid var(--line)}
+table.data tbody tr:hover{background:color-mix(in srgb,var(--gold) 5%,var(--paper))}
+.pill{border-radius:99px;font-size:12px;padding:3px 11px}
+
+/* ---------- elementos do CRM ---------- */
+.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:600;white-space:nowrap}
+.c-good{color:var(--green);background:var(--green-bg)} .c-bad{color:var(--red);background:var(--red-bg)}
+.c-warn{color:var(--amber);background:var(--amber-bg)} .c-neutral{color:var(--grey);background:var(--grey-l)}
+.c-accent{color:var(--gold-d);background:color-mix(in srgb,var(--gold) 12%,var(--paper))}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;color:var(--grey)}
+.eyebrow.light{color:#BFD3FF}
+.seg-tabs{display:inline-flex;padding:3px;border:1px solid var(--line);border-radius:12px;background:var(--paper)}
+.seg-tabs button{border:0;background:transparent;padding:7px 13px;border-radius:9px;font:inherit;font-size:13.5px;font-weight:500;color:var(--grey);cursor:pointer;min-height:36px}
+.seg-tabs button[aria-pressed="true"]{background:linear-gradient(180deg,#1B3F96,#0C2463);color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.2)}
+
+/* ---------- Funil de Pacientes · Potencial ---------- */
+.pot-hero{background:var(--metal-blue);color:#fff;border-radius:22px;padding:26px 30px;display:flex;gap:30px;align-items:center;flex-wrap:wrap;position:relative;overflow:hidden;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 18px 40px -22px rgba(13,42,110,.75);margin-bottom:18px}
+.pot-hero::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.10) 44%,rgba(255,255,255,.02) 52%,transparent 64%)}
+.pot-hero>*{position:relative;z-index:1}
+.pot-hero-l{flex:1;min-width:260px}
+.pot-hero h2{margin:6px 0 14px;font-size:24px;font-weight:700;letter-spacing:-.01em}
+.pot-hero-ticks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 26px;font-size:14.5px;color:#DCE6FF}
+.pot-hero-ticks b{color:#fff}
+.pot-hero-r{border-left:1px solid rgba(255,255,255,.2);padding-left:30px;display:flex;flex-direction:column;gap:2px;min-width:220px}
+.pot-hero-r>span{font-size:13px;color:#BFD3FF}.pot-hero-r>b{font-size:38px;font-weight:700;line-height:1.1}
+.pot-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}
+.pot-kpi{display:flex;flex-direction:column;gap:3px;padding:16px 18px}
+.pot-kpi>span{font-size:13px;color:var(--grey)}.pot-kpi>b{font-size:26px;font-weight:700;letter-spacing:-.01em}.pot-kpi>small{font-size:12px;color:var(--grey)}
+.pot-segs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}
+.pot-seg{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:3px;padding:16px 18px;border-radius:18px;background:var(--paper);border:1px solid var(--line);box-shadow:var(--shadow);position:relative;overflow:hidden;transition:transform .15s,border-color .15s}
+.pot-seg::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:var(--c)}
+.pot-seg:hover{transform:translateY(-1px);border-color:var(--c)}
+.pot-seg.on{border-color:var(--c);box-shadow:0 0 0 2px var(--c) inset,var(--shadow)}
+.pot-seg:focus-visible{outline:2px solid var(--c);outline-offset:2px}
+.pot-seg-top{display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;color:var(--ink)}
+.pot-seg-top i{width:9px;height:9px;border-radius:50%;background:var(--c)}
+.pot-seg>b{font-size:30px;font-weight:700;color:var(--ink);line-height:1.1}
+.pot-sub{font-size:12px;color:var(--grey);line-height:1.45}
+.pot-input{font:inherit;font-size:13.5px;padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:var(--paper);color:var(--ink);min-height:40px}
+.pot-input:focus{outline:none;border-color:var(--gold)}
+table.data.pot-table{font-size:13px}table.data.pot-table td{vertical-align:middle;white-space:nowrap;padding:10px 6px}table.data.pot-table th{white-space:normal;line-height:1.25;padding:9px 7px;font-size:10.5px;letter-spacing:.04em;vertical-align:bottom}.pot-table .chip{display:inline-flex}
+.pot-th{all:unset;cursor:pointer;font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit;white-space:normal}
+.pot-th:hover,.pot-th.on{color:var(--gold-d)}
+.pot-score{display:flex;align-items:center;gap:8px}.pot-score b{font-size:15px;min-width:24px}
+.pot-bar{display:block;flex:1;height:7px;border-radius:9px;background:var(--grey-l);overflow:hidden;min-width:48px}
+.pot-bar i{display:block;height:100%;border-radius:9px}
+.pot-rank{display:inline-block;min-width:28px;color:var(--grey);font-weight:600}.pot-tend{font-size:10px;margin-left:3px}.pot-tend.up{color:var(--green)}.pot-tend.down{color:var(--red)}
+.pot-como{margin-top:18px}
+.pot-como summary{cursor:pointer;list-style:none;display:flex;gap:8px;align-items:baseline}
+.pot-como summary::before{content:"›";font-size:18px;color:var(--grey);display:inline-block;transition:transform .15s}
+.pot-como[open] summary::before{transform:rotate(90deg)}
+.pot-como ul{margin:12px 0 10px 18px;display:flex;flex-direction:column;gap:6px;font-size:13.5px}
+.pot-como p{margin-top:8px}
+.pot-ficha{background:var(--cream);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin:0 0 18px}
+.pot-nota{width:72px;height:72px;border-radius:50%;border:3px solid;display:flex;flex-direction:column;align-items:center;justify-content:center;flex:none;background:var(--paper)}
+.pot-nota b{font-size:24px;line-height:1}.pot-nota span{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--grey)}
+.pot-fats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 18px}
+.pot-fat-top{display:flex;justify-content:space-between;font-size:12.5px;color:var(--grey);margin-bottom:4px}.pot-fat-top b{color:var(--ink)}
+@media(max-width:1080px){.pot-kpis,.pot-segs{grid-template-columns:repeat(2,minmax(0,1fr))}.pot-fats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){
+  .topbar{padding:12px 14px}.topbar .title{font-size:22px}.content{padding:14px 14px 40px}
+  .pot-hero{padding:20px}.pot-hero-r{border-left:0;padding-left:0;border-top:1px solid rgba(255,255,255,.2);padding-top:14px;width:100%}
+  .pot-hero-ticks{grid-template-columns:1fr}.pot-fats{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
 <div id="loginScreen" style="display:none;position:fixed;inset:0;z-index:1000;background:var(--ivory);align-items:center;justify-content:center">
   <div style="width:380px;max-width:90vw;background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:38px 34px;box-shadow:var(--shadow)">
     <div style="text-align:center;margin-bottom:26px">
-      <div class="serif" style="font-size:26px;font-weight:700;color:var(--gold);line-height:1.1">Instituto<br>Bruna Braga</div>
-      <div style="font-size:10px;letter-spacing:2.4px;color:var(--gold-l);margin-top:8px;text-transform:uppercase">Sistema de Gestão</div>
+      <div style="width:52px;height:52px;margin:0 auto 14px;border-radius:15px;background:var(--metal-navy);display:grid;place-items:center;color:#fff;font-weight:700;font-size:15px;box-shadow:inset 0 1px 0 rgba(255,255,255,.25)">IBB</div><div class="serif" style="font-size:26px;font-weight:700;color:var(--ink);line-height:1.1">Instituto Bruna Braga</div>
+      <div style="font-size:13px;color:var(--grey);margin-top:6px">Sistema de Gestão</div>
     </div>
     <div style="display:flex;flex-direction:column;gap:14px">
       <div>
@@ -332,8 +469,10 @@ table.data tbody tr:hover{background:var(--cream)}
   <div id="navOverlay" onclick="toggleMenu()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:90"></div>
   <aside class="sidebar">
     <div class="brand">
-      <div class="mark">Instituto<br>Bruna Braga</div>
-      <div class="sub">Harmonização Facial</div>
+      <div>
+        <div class="mark">Instituto Bruna Braga</div>
+        <div class="sub">Sistema de Gestão</div>
+      </div>
     </div>
     <nav class="nav" id="nav">
       <button class="new-btn" onclick="go('atendimentos')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo</button>
@@ -358,10 +497,10 @@ table.data tbody tr:hover{background:var(--cream)}
           <button data-page="estoque">Estoque</button>
         </div>
       </div>
-      <div class="nav-group" data-group="marketing">
-        <button class="ng-head"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 11l18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg><span class="t">Marketing</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="9 6 15 12 9 18"/></svg></button>
+      <div class="nav-group" data-group="funil">
+        <button class="ng-head"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 4h18l-7 8.5V19l-4 2v-8.5z"/></svg><span class="t">Funil de Pacientes</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="9 6 15 12 9 18"/></svg></button>
         <div class="ng-items">
-          <button data-page="leads">Captação de Leads</button>
+          <button data-page="potencial">Potencial &amp; Prioridade</button>
           <button data-page="recall">Recall de Pacientes</button>
         </div>
       </div>
@@ -471,7 +610,7 @@ function verAtendimentosDoBucket(s){
   }).join('');
   abrirModal(`
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
-      <div><div style="font-family:var(--serif,'Cormorant Garamond',serif);font-size:22px">Atendimentos · ${s.chave}</div>
+      <div><div style="font-family:var(--f-display);font-size:22px">Atendimentos · ${s.chave}</div>
       <div style="font-size:12.5px;color:var(--grey)">${ats.length} atendimento(s) · ${nomes.length} paciente(s) · receita ${BRL(total)}</div></div>
       <button class="btn ghost" style="padding:5px 12px;font-size:13px" onclick="fecharModal()">✕</button>
     </div>
@@ -1355,7 +1494,18 @@ function calc(){
   return out;
 }
 
-const GOLD='#C9A24B', GOLDS=['#C9A24B','#9A7B2E','#E4CE92','#B98F38','#7E6526','#D9BC6E','#A88A40','#C2A658'];
+let GOLD='#2563EB', GOLD2='#0F2D73', COR_FUNDO='#FFFFFF', GOLDS=['#2563EB','#0F2D73','#0EA5A4','#F59E0B','#8B5CF6','#EC4899','#64748B','#22C55E'];
+// lê a cor de destaque do tema/paleta atual para os gráficos
+function atualizarCoresGraficos(){
+  try{
+    const cs=getComputedStyle(document.body);
+    const g=cs.getPropertyValue('--gold').trim(), gd=cs.getPropertyValue('--gold-d').trim(), pp=cs.getPropertyValue('--paper').trim();
+    const claro=document.body.classList.contains('light');
+    if(g){ GOLD=g; GOLD2=claro?(document.body.classList.contains('pal-azul')?'#0F2D73':gd):gd; }
+    if(pp) COR_FUNDO=pp;
+    GOLDS=[GOLD,GOLD2,'#0EA5A4','#F59E0B','#8B5CF6','#EC4899','#64748B','#22C55E'];
+  }catch(e){}
+}
 const charts = {};
 function destroyCharts(){Object.values(charts).forEach(c=>c&&c.destroy());}
 
@@ -1381,7 +1531,7 @@ try {
 // Isso preserva o comportamento atual — só muda quando existe um vínculo em "usuarios"
 // apontando pra um perfil com somente_leitura=true.
 const TODAS_PAGINAS=['painel','custos','caixa','contas','horaclinica','materialparc','comissoes',
-  'funcionarios','pacientes','atendimentos','estoque','leads','recall','analise','comparativo',
+  'funcionarios','pacientes','atendimentos','estoque','potencial','recall','analise','comparativo',
   'checkup','relatorio','config','conformidade','documentos'];
 let PERMISSOES = { admin:true, nome:'Administrador', paginas:TODAS_PAGINAS, somenteLeitura:false, dashboard:null };
 // carrega as permissões do usuário logado (se houver um vínculo em "usuarios")
@@ -1403,7 +1553,12 @@ async function carregarPermissoes(){
   }catch(e){ console.warn('Não consegui carregar permissões, seguindo como admin.', e); }
 }
 // a página é permitida para o usuário atual?
-function paginaPermitida(page){ return PERMISSOES.admin || (PERMISSOES.paginas||[]).includes(page); }
+function paginaPermitida(page){
+  if(PERMISSOES.admin) return true;
+  const pags=PERMISSOES.paginas||[];
+  if(page==='potencial') return pags.includes('potencial')||pags.includes('recall')||pags.includes('pacientes');
+  return pags.includes(page);
+}
 
 window.addEventListener('DOMContentLoaded', async ()=>{
   initNav();
@@ -1595,8 +1750,8 @@ function initNav(){
 
 let currentPage='painel';
 const TITLES={painel:['Painel','Visão Geral da Clínica'],atendimentos:['Cadastros','Registro de Atendimentos'],
-  leads:['Marketing','Captação de Leads'],custos:['Financeiro','Custos & Despesas'],
-  recall:['Marketing','Recall de Pacientes'],
+  potencial:['Funil de Pacientes','Potencial & Prioridade'],custos:['Financeiro','Custos & Despesas'],
+  recall:['Funil de Pacientes','Recall de Pacientes'],
   conformidade:['Controle','Conformidade & Regularização'],
   comissoes:['Financeiro','Metas & Bonificações'],pacientes:['Cadastros','Base de Pacientes'],
   documentos:['Controle','Documentos & Arquivo'],analise:['Relatórios','Análise Avançada de Dados'],
@@ -1604,6 +1759,7 @@ const TITLES={painel:['Painel','Visão Geral da Clínica'],atendimentos:['Cadast
   relatorio:['Relatórios','Gerador de Relatório PDF'],config:['Controle','Configurações'],horaclinica:['Financeiro','Custo Operacional & Hora Clínica'],contas:['Financeiro','Contas a Pagar e Receber'],estoque:['Cadastros','Controle de Estoque'],comparativo:['Relatórios','Comparativo Mensal'],checkup:['Relatórios','Check-up da Clínica'],materialparc:['Financeiro','Material de Parceiros']};
 
 function go(page){
+  atualizarCoresGraficos();
   if(!paginaPermitida(page)){ page = paginaPermitida('painel') ? 'painel' : (PERMISSOES.paginas[0]||'painel'); }
   currentPage=page;
   if(typeof fecharMenu==='function') fecharMenu();
@@ -1617,7 +1773,7 @@ function go(page){
   const C=document.getElementById('content');
   C.innerHTML='<div class="page active" id="pg"></div>';
   const pg=document.getElementById('pg');
-  ({painel:renderPainel,atendimentos:renderAtend,leads:renderLeads,custos:renderCustos,
+  ({painel:renderPainel,atendimentos:renderAtend,potencial:renderPotencial,custos:renderCustos,
     conformidade:renderConf,comissoes:renderComissoes,pacientes:renderPacientes,recall:renderRecall,
     documentos:renderDocumentos,analise:renderAnalise,
     funcionarios:renderFuncionarios,caixa:renderCaixa,relatorio:renderRelatorio,config:renderConfig,horaclinica:renderHoraClinica,contas:renderContas,estoque:renderEstoque,comparativo:renderComparativo,checkup:renderCheckup,materialparc:renderMaterialParc}[page])(pg);
@@ -1635,7 +1791,6 @@ function renderPainelRestrito(pg,k){
   if(d.atendimentos) cards+=card('Atendimentos', k.nAtend);
   if(d.ticket) cards+=card('Ticket médio', BRL(k.ticket));
   if(d.comparecimento) cards+=card('Comparecimento', PCT0(k.txComp));
-  if(d.conversao) cards+=card('Conversão de leads', PCT0(k.txConv));
   pg.innerHTML=`
     <div class="trend-grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr))">${cards||'<div style="color:var(--grey);font-size:13px">Nenhum indicador liberado para o seu perfil.</div>'}</div>
     <div style="margin-top:16px;font-size:12px;color:var(--grey);font-style:italic">Você está vendo o painel com o perfil "${PERMISSOES.nome}". Alguns indicadores financeiros não fazem parte deste acesso.</div>
@@ -1735,20 +1890,20 @@ function renderPainelCompleto(pg){
     ${k.nAtendPele>0?`<div class="panel" style="margin-bottom:18px">
       <div class="panel-head"><div><h3>Profissionais parceiros — repasse</h3><div class="ph-sub">${k.nAtendPele} atendimento(s) de parceiros no período · controle do que pagar a cada colaborador</div></div></div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:14px">
-        <div style="background:var(--cream);border:1px solid var(--line);border-radius:12px;padding:14px"><div style="font-size:11.5px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">Receita gerada por parceiros</div><div style="font-size:22px;font-family:var(--serif,'Cormorant Garamond',serif);margin-top:4px">${BRL(k.fatPeleBruto)}</div></div>
-        <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:12px;padding:14px"><div style="font-size:11.5px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">Total a repassar</div><div style="font-size:22px;font-family:var(--serif,'Cormorant Garamond',serif);margin-top:4px;color:var(--amber)">${BRL(k.repasseTotal)}</div><div style="font-size:11px;color:var(--grey)">${k.parceiros.length>1?'soma dos '+k.parceiros.length+' parceiros (detalhe abaixo)':'soma de todos os parceiros'}</div></div>
-        <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:12px;padding:14px"><div style="font-size:11.5px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">Fica para o Instituto</div><div style="font-size:22px;font-family:var(--serif,'Cormorant Garamond',serif);margin-top:4px;color:var(--green,#3b7a57)">${BRL(k.fatPeleInstituto)}</div></div>
+        <div style="background:var(--cream);border:1px solid var(--line);border-radius:12px;padding:14px"><div style="font-size:11.5px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">Receita gerada por parceiros</div><div style="font-size:22px;font-family:var(--f-display);margin-top:4px">${BRL(k.fatPeleBruto)}</div></div>
+        <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:12px;padding:14px"><div style="font-size:11.5px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">Total a repassar</div><div style="font-size:22px;font-family:var(--f-display);margin-top:4px;color:var(--amber)">${BRL(k.repasseTotal)}</div><div style="font-size:11px;color:var(--grey)">${k.parceiros.length>1?'soma dos '+k.parceiros.length+' parceiros (detalhe abaixo)':'soma de todos os parceiros'}</div></div>
+        <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:12px;padding:14px"><div style="font-size:11.5px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">Fica para o Instituto</div><div style="font-size:22px;font-family:var(--f-display);margin-top:4px;color:var(--green,#3b7a57)">${BRL(k.fatPeleInstituto)}</div></div>
       </div>
       <div style="border-top:1px solid var(--line);padding-top:14px">
         <div style="font-size:12px;font-weight:600;color:var(--gold-d);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Quanto repassar a cada profissional</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">
           ${k.parceiros.map(p=>`<div style="background:var(--paper);border:1px solid var(--gold-l);border-radius:12px;padding:14px">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-              <span style="font-family:var(--serif,'Cormorant Garamond',serif);font-size:17px">${p.nome}</span>
+              <span style="font-family:var(--f-display);font-size:17px">${p.nome}</span>
               <span style="font-size:11px;color:var(--grey);border:1px solid var(--line);border-radius:6px;padding:1px 7px">${p.qtd} atend.</span>
             </div>
             <div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">A repassar</div>
-            <div style="font-size:24px;font-family:var(--serif,'Cormorant Garamond',serif);color:var(--amber);line-height:1.1">${BRL(p.repasse)}</div>
+            <div style="font-size:24px;font-family:var(--f-display);color:var(--amber);line-height:1.1">${BRL(p.repasse)}</div>
             <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--grey);margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">
               <span>Gerou ${BRL(p.receita)}</span><span>Instituto ${BRL(p.instituto)}</span>
             </div>
@@ -1807,7 +1962,7 @@ function drawCRMCharts(k){
     document.querySelectorAll('.chart-wrap,.tc-spark').forEach(w=>{w.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--grey);font-size:12px;text-align:center">Gráfico aparece no navegador com internet.</div>';});
     return;
   }
-  const grid='#EEE8DC', tick='#8A8175';
+  const grid=document.body.classList.contains('light')?'#E3E8F1':'#24314D', tick=document.body.classList.contains('light')?'#5B6478':'#93A0B8';
   const days=k.serieReceita.map(s=>s.dia.slice(8)+'/'+s.dia.slice(5,7));
   // sparklines (faturamento, atendimentos, comandas-proxy)
   const spark=(id,data,color)=>{
@@ -1818,14 +1973,14 @@ function drawCRMCharts(k){
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},
         scales:{x:{display:false},y:{display:false}}}});
   };
-  spark('spk1',k.serieReceita.map(s=>s.valor),'#C9A24B');
-  spark('spk2',k.serieReceita.map(s=>s.atend),'#9A7B2E');
+  spark('spk1',k.serieReceita.map(s=>s.valor),GOLD);
+  spark('spk2',k.serieReceita.map(s=>s.atend),GOLD2);
   spark('spk3',k.serieReceita.map(s=>s.valor>0?1:0).map((_,i)=>k.serieReceita[i].atend),'#B98F38');
 
   // tendência de visitas (barras)
   charts.tend=new Chart(document.getElementById('chTend'),{type:'bar',
     data:{labels:days,datasets:[{label:'Atendimentos',data:k.serieReceita.map(s=>s.atend),
-      backgroundColor:'#C9A24B',borderRadius:5,maxBarThickness:30}]},
+      backgroundColor:GOLD,borderRadius:5,maxBarThickness:30}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
       tooltip:{callbacks:{label:c=>` ${c.parsed.y} atendimento(s)`}}},
       scales:{y:{grid:{color:grid},ticks:{color:tick,stepSize:1}},x:{grid:{display:false},ticks:{color:tick,font:{size:10}}}}}});
@@ -1834,7 +1989,7 @@ function drawCRMCharts(k){
   // procedimentos (tab) - barras horizontais por nº de vezes realizado
   charts.proc2=new Chart(document.getElementById('chProc2'),{type:'bar',
     data:{labels:k.ranking.map(r=>r.nome),datasets:[{data:k.ranking.map(r=>r.qtd),
-      backgroundColor:'#C9A24B',borderRadius:5,maxBarThickness:22}]},
+      backgroundColor:GOLD,borderRadius:5,maxBarThickness:22}]},
     options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
       tooltip:{callbacks:{label:c=>` ${c.parsed.x} ${c.parsed.x===1?'vez':'vezes'}`}}},
       scales:{x:{grid:{color:grid},ticks:{color:tick,stepSize:1}},y:{grid:{display:false},ticks:{color:tick,font:{size:11}}}}}});
@@ -1848,16 +2003,16 @@ function drawCharts(k){
     document.querySelectorAll('.chart-wrap').forEach(w=>{w.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--grey);font-size:13px;text-align:center;padding:0 20px">Os gráficos aparecem ao abrir o arquivo no navegador com internet.</div>';});
     return;
   }
-  const grid='#EEE8DC', tick='#8A8175';
+  const grid=document.body.classList.contains('light')?'#E3E8F1':'#24314D', tick=document.body.classList.contains('light')?'#5B6478':'#93A0B8';
   // doughnut: Faturamento por profissional (Bruna + cada parceiro, dinâmico)
   const rosca = [
     {nome:'Dra. Bruna', valor:k.fatBruna||0},
     ...(k.parceiros||[]).map(p=>({nome:p.nome, valor:p.receita}))
   ].filter(x=>x.valor>0);
-  const PAL_PROF=['#C9A24B','#9A7B2E','#6FBF9A','#6FA8DC','#B08FD8','#DE8A93','#D69A6A','#5FC2C9','#E8956B','#A8AEB8'];
+  const PAL_PROF=[GOLD,GOLD2,'#6FBF9A','#6FA8DC','#B08FD8','#DE8A93','#D69A6A','#5FC2C9','#E8956B','#A8AEB8'];
   const totalRosca = rosca.reduce((s,x)=>s+x.valor,0)||1;
   if(document.getElementById('chProc'))charts.proc=new Chart(document.getElementById('chProc'),{type:'doughnut',
-    data:{labels:rosca.map(p=>p.nome),datasets:[{data:rosca.map(p=>p.valor),backgroundColor:rosca.map((_,i)=>PAL_PROF[i%PAL_PROF.length]),borderColor:'#fff',borderWidth:2}]},
+    data:{labels:rosca.map(p=>p.nome),datasets:[{data:rosca.map(p=>p.valor),backgroundColor:rosca.map((_,i)=>PAL_PROF[i%PAL_PROF.length]),borderColor:COR_FUNDO,borderWidth:2}]},
     options:{responsive:true,maintainAspectRatio:false,cutout:'58%',plugins:{legend:{display:false},
       tooltip:{callbacks:{label:c=>` ${c.label}: ${BRL(c.parsed)} (${PCTsmart(c.parsed/totalRosca)})`}}}}});
   if(document.getElementById('leg1'))document.getElementById('leg1').innerHTML=rosca.map((p,i)=>
@@ -1873,8 +2028,8 @@ function drawCharts(k){
   const ev=(k.evolucao||[]).slice(-6);
   if(document.getElementById('chCusto'))charts.custo=new Chart(document.getElementById('chCusto'),{type:'bar',
     data:{labels:ev.map(m=>m.mes),datasets:[
-      {label:'Faturamento',data:ev.map(m=>m.fat),backgroundColor:'#C9A24B',borderRadius:5,maxBarThickness:26},
-      {label:'Despesas',data:ev.map(m=>(m.desp||0)+(m.repasse||0)),backgroundColor:'#9A7B2E',borderRadius:5,maxBarThickness:26},
+      {label:'Faturamento',data:ev.map(m=>m.fat),backgroundColor:GOLD,borderRadius:5,maxBarThickness:26},
+      {label:'Despesas',data:ev.map(m=>(m.desp||0)+(m.repasse||0)),backgroundColor:GOLD2,borderRadius:5,maxBarThickness:26},
       {label:'Lucro',data:ev.map(m=>m.lucro),backgroundColor:'#3b7a57',borderRadius:5,maxBarThickness:26}
     ]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:12,font:{size:11},color:tick}},
@@ -1965,10 +2120,10 @@ function renderAtend(pg){
   else { custoLabel='Custo fixado'; custoValor=k.custoFixadoParc; }
   const resumoParc = (k.nAtendPele>0 || gastoMatMes>0) ? `
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
-      <div style="background:var(--cream);border:1px solid var(--line);border-radius:12px;padding:13px"><div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">Receita de parceiros</div><div style="font-size:19px;font-family:var(--serif,'Cormorant Garamond',serif);margin-top:3px">${BRL(k.fatPeleBruto)}</div></div>
-      <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:12px;padding:13px"><div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">A repassar</div><div style="font-size:19px;font-family:var(--serif,'Cormorant Garamond',serif);margin-top:3px;color:var(--amber)">${BRL(k.repasseTotal)}</div></div>
-      <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:12px;padding:13px"><div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">Fica p/ Instituto</div><div style="font-size:19px;font-family:var(--serif,'Cormorant Garamond',serif);margin-top:3px;color:var(--green,#3b7a57)">${BRL(k.fatPeleInstituto)}</div></div>
-      <div style="background:var(--cream);border:1px solid var(--line);border-radius:12px;padding:13px"><div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">${custoLabel}</div><div style="font-size:19px;font-family:var(--serif,'Cormorant Garamond',serif);margin-top:3px">${BRL(custoValor)}</div></div>
+      <div style="background:var(--cream);border:1px solid var(--line);border-radius:12px;padding:13px"><div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">Receita de parceiros</div><div style="font-size:19px;font-family:var(--f-display);margin-top:3px">${BRL(k.fatPeleBruto)}</div></div>
+      <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:12px;padding:13px"><div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">A repassar</div><div style="font-size:19px;font-family:var(--f-display);margin-top:3px;color:var(--amber)">${BRL(k.repasseTotal)}</div></div>
+      <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:12px;padding:13px"><div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">Fica p/ Instituto</div><div style="font-size:19px;font-family:var(--f-display);margin-top:3px;color:var(--green,#3b7a57)">${BRL(k.fatPeleInstituto)}</div></div>
+      <div style="background:var(--cream);border:1px solid var(--line);border-radius:12px;padding:13px"><div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">${custoLabel}</div><div style="font-size:19px;font-family:var(--f-display);margin-top:3px">${BRL(custoValor)}</div></div>
     </div>` : '';
   const body=rows.map(a=>`<tr>
     <td>${fmtDate(a.data)}</td><td>${a.paciente}</td><td title="${procedimentosDe(a).map(p=>p.proc+(p.modo==='produto'&&p.qtd?' ('+p.qtd+' '+unidadeProduto(p.produtoId)+')':'')).join(' · ')}">${a.proc}</td>
@@ -2371,250 +2526,8 @@ async function excluirAtend(id){
   go('atendimentos');
 }
 
-/* ============================ LEADS ============================ */
-function renderLeads(pg){
-  const grao=window.__captGrao||'dia';
-  // cada mês é independente: mostra só a captação do mês selecionado no topo
-  const _perCapt = (typeof periodoSelecionadoIntervalo==='function') ? periodoSelecionadoIntervalo() : null;
-  const _dentroCapt = (d)=> !_perCapt || (d && d>=_perCapt.ini && d<=_perCapt.fim);
-  const CAPT_MES = CAPTACAO.filter(c=>_dentroCapt(c.data));
-  // agrega captação por plataforma no período selecionado
-  const porPlat={};
-  CAPT_MES.forEach(c=>{
-    if(!porPlat[c.plataforma]) porPlat[c.plataforma]={plataforma:c.plataforma,seguidores:0,leads:0,agendadas:0,investido:0,gasto:0,campanhas:0};
-    const p=porPlat[c.plataforma];
-    p.seguidores+=c.seguidores||0; p.leads+=c.leads||0; p.agendadas+=c.agendadas||0;
-    p.investido=Math.max(p.investido,c.investido||0); p.gasto+=c.gasto||0; p.campanhas=Math.max(p.campanhas,c.campanhas||0);
-  });
-  const plats=Object.values(porPlat);
-  const totLeads=plats.reduce((s,p)=>s+p.leads,0);
-  const totAgend=plats.reduce((s,p)=>s+p.agendadas,0);
-  const totSeg=plats.reduce((s,p)=>s+p.seguidores,0);
-  const totGasto=plats.reduce((s,p)=>s+p.gasto,0);
-  const convGeral=totLeads?totAgend/totLeads:0;
-  const cpl=totLeads&&totGasto?totGasto/totLeads:0;
-
-  // ---- detalhamento por DIA (uma linha por data, uma coluna leads/agend. por plataforma) ----
-  const platsPresentes = [...new Set(CAPT_MES.map(c=>c.plataforma))]
-    .sort((a,b)=>PLATAFORMAS.indexOf(a)-PLATAFORMAS.indexOf(b));
-  const porDiaMap={};
-  CAPT_MES.forEach(c=>{
-    if(!porDiaMap[c.data]) porDiaMap[c.data]={data:c.data,seguidores:0,porPlat:{}};
-    const d=porDiaMap[c.data];
-    d.seguidores+=c.seguidores||0;
-    if(!d.porPlat[c.plataforma]) d.porPlat[c.plataforma]={leads:0,agendadas:0};
-    d.porPlat[c.plataforma].leads+=c.leads||0;
-    d.porPlat[c.plataforma].agendadas+=c.agendadas||0;
-  });
-  const porDia=Object.values(porDiaMap).sort((a,b)=>b.data.localeCompare(a.data)).map(d=>{
-    const totLeadsDia=Object.values(d.porPlat).reduce((s,p)=>s+p.leads,0);
-    const totAgendDia=Object.values(d.porPlat).reduce((s,p)=>s+p.agendadas,0);
-    return {...d, totLeadsDia, totAgendDia, convDia: totLeadsDia?totAgendDia/totLeadsDia:0};
-  });
-
-  // tabela de lançamentos (linha a linha, editável)
-  const linhas=[...CAPT_MES].sort((a,b)=>b.data.localeCompare(a.data)).map(c=>{
-    const conv=c.leads?(c.agendadas/c.leads):0;
-    return `<tr>
-      <td>${fmtDate(c.data)}</td>
-      <td>${c.plataforma}</td>
-      <td class="ctr">${c.seguidores||'—'}</td>
-      <td class="ctr">${c.leads||'—'}</td>
-      <td class="ctr">${c.agendadas||'—'}</td>
-      <td class="ctr" style="font-weight:600;color:${conv>=0.3?'var(--green)':conv>0?'var(--ink)':'var(--grey)'}">${c.leads?PCT0(conv):'—'}</td>
-      <td class="num">${c.investido?BRL(c.investido):'—'}</td>
-      <td class="num">${c.gasto?BRL(c.gasto):'—'}</td>
-      <td class="ctr">${c.campanhas||'—'}</td>
-      <td class="ctr"><button class="btn ghost" style="padding:3px 9px;font-size:11px" onclick="editarCapt('${c.id}')">editar</button> <button class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="delCapt('${c.id}')">×</button></td>
-    </tr>`;
-  }).join('');
-
-  pg.innerHTML=`
-    <div class="trend-grid" style="grid-template-columns:repeat(4,1fr)">
-      <div class="tcard" style="animation-delay:0ms"><div class="tc-head">Leads captados</div><div class="tc-val">${totLeads}</div><div class="tc-sub">${totAgend} agendaram</div></div>
-      <div class="tcard" style="animation-delay:70ms"><div class="tc-head">Conversão</div><div class="tc-val" style="color:var(--green)">${PCT0(convGeral)}</div><div class="tc-sub">leads que agendaram</div></div>
-      <div class="tcard" style="animation-delay:140ms"><div class="tc-head">Seguidores novos</div><div class="tc-val">${totSeg}</div><div class="tc-sub">no período</div></div>
-      <div class="tcard" style="animation-delay:210ms"><div class="tc-head">Custo por lead</div><div class="tc-val">${cpl?BRL(cpl):'—'}</div><div class="tc-sub">gasto ${BRL(totGasto)}</div></div>
-    </div>
-
-    <div class="panel" style="margin-bottom:18px">
-      <div class="toolbar"><div><h3>Detalhamento por dia</h3><div class="ph-sub">Cada dia, com leads e agendadas por plataforma — igual ao checklist que você recebe</div></div></div>
-      <div style="overflow-x:auto">
-        <table class="data">
-          <thead>
-            <tr>
-              <th rowspan="2" style="vertical-align:bottom">Data</th>
-              <th rowspan="2" class="ctr" style="vertical-align:bottom">Seguidores</th>
-              ${platsPresentes.map(p=>`<th colspan="2" class="ctr" style="border-bottom:1px solid var(--line)">${p}</th>`).join('')}
-              <th rowspan="2" class="ctr" style="vertical-align:bottom">Total leads</th>
-              <th rowspan="2" class="ctr" style="vertical-align:bottom">Total agend.</th>
-              <th rowspan="2" class="ctr" style="vertical-align:bottom">Conv. dia</th>
-            </tr>
-            <tr>${platsPresentes.map(()=>`<th class="ctr" style="font-size:10.5px">Leads</th><th class="ctr" style="font-size:10.5px">Agend.</th>`).join('')}</tr>
-          </thead>
-          <tbody>${porDia.length?porDia.map(d=>`<tr>
-            <td>${fmtDate(d.data)}</td>
-            <td class="ctr">${d.seguidores||'—'}</td>
-            ${platsPresentes.map(p=>{const v=d.porPlat[p]; return `<td class="ctr">${v&&v.leads?v.leads:'—'}</td><td class="ctr">${v&&v.agendadas?v.agendadas:'—'}</td>`;}).join('')}
-            <td class="ctr" style="font-weight:600">${d.totLeadsDia||'—'}</td>
-            <td class="ctr" style="font-weight:600">${d.totAgendDia||'—'}</td>
-            <td class="ctr" style="font-weight:600;color:${d.convDia>=0.3?'var(--green)':d.convDia>0?'var(--ink)':'var(--grey)'}">${d.totLeadsDia?PCT0(d.convDia):'—'}</td>
-          </tr>`).join('') : `<tr><td colspan="${3+platsPresentes.length*2}" style="text-align:center;color:var(--grey);padding:20px">Nenhum lançamento neste período.</td></tr>`}</tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="panel" style="margin-bottom:18px">
-      <div class="toolbar"><div><h3>Lançar captação</h3><div class="ph-sub">Registre os números que a comercial te envia — o dia inteiro de uma vez, todas as plataformas juntas</div></div>
-        <div style="display:flex;gap:8px">
-          <button class="btn" onclick="abrirCaptDiaForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Lançar o dia</button>
-          <button class="btn ghost" onclick="abrirCaptForm()" title="Lançar ou corrigir uma única plataforma">+ avulso</button>
-        </div>
-      </div>
-      <div id="captFormBox"></div>
-      <table class="data">
-        <thead><tr><th>Data</th><th>Plataforma</th><th class="ctr">Seguidores</th><th class="ctr">Leads</th><th class="ctr">Agendadas</th><th class="ctr">Conversão</th><th class="num">Investido</th><th class="num">Gasto</th><th class="ctr">Campanhas</th><th class="ctr">Ações</th></tr></thead>
-        <tbody>${linhas||'<tr><td colspan="10" style="text-align:center;color:var(--grey);padding:24px">Nenhum lançamento ainda.</td></tr>'}</tbody>
-      </table>
-    </div>
-
-    <div class="panel">
-      <div class="toolbar"><div><h3>Resumo por plataforma</h3><div class="ph-sub">Consolidado do período</div></div>
-        <button class="btn" onclick="analisarCaptacao()">Analisar captação</button></div>
-      <table class="data">
-        <thead><tr><th>Plataforma</th><th class="ctr">Seguidores</th><th class="ctr">Leads</th><th class="ctr">Agendadas</th><th class="ctr">Conversão</th><th class="num">Gasto</th><th class="num">Custo/lead</th><th class="ctr">Campanhas</th></tr></thead>
-        <tbody>${plats.map(p=>{const conv=p.leads?p.agendadas/p.leads:0;const c=p.leads&&p.gasto?p.gasto/p.leads:0;
-          return `<tr><td style="font-weight:500">${p.plataforma}</td><td class="ctr">${p.seguidores||'—'}</td><td class="ctr">${p.leads}</td><td class="ctr">${p.agendadas}</td>
-          <td class="ctr" style="font-weight:600;color:${conv>=0.3?'var(--green)':conv<0.15&&p.leads?'var(--red)':'var(--ink)'}">${p.leads?PCT0(conv):'—'}</td>
-          <td class="num">${p.gasto?BRL(p.gasto):'—'}</td><td class="num">${c?BRL(c):'—'}</td><td class="ctr">${p.campanhas||'—'}</td></tr>`;}).join('')}</tbody>
-      </table>
-      <div id="analiseBox"></div>
-    </div>`;
-}
-
+// data de hoje no fuso local (AAAA-MM-DD) — usada em vários formulários
 function dataHojeLocal(){ const h=new Date(); return h.getFullYear()+'-'+String(h.getMonth()+1).padStart(2,'0')+'-'+String(h.getDate()).padStart(2,'0'); }
-// ===== Lançar o dia inteiro de uma vez (todas as plataformas no mesmo formulário) =====
-// Espelha o checklist que a comercial manda: uma data, seguidores novos do Instagram,
-// e leads/agendadas de cada plataforma — tudo salvo junto, sem precisar repetir a data.
-function abrirCaptDiaForm(){
-  const hoje=dataHojeLocal();
-  const fs='padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;width:100%;background:var(--paper);color:var(--ink)';
-  const linhasPlat = PLATAFORMAS.map((p,i)=>`
-    <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:10px;align-items:end;padding:10px 0;border-bottom:1px solid var(--line)">
-      <div style="font-weight:600;font-size:13.5px;align-self:center">${p}</div>
-      <div class="field" style="margin:0"><label style="font-size:10.5px">Leads iniciados</label><input type="number" id="cd_leads_${i}" placeholder="opcional" style="${fs}"></div>
-      <div class="field" style="margin:0"><label style="font-size:10.5px">Consultas agendadas</label><input type="number" id="cd_agend_${i}" placeholder="opcional" style="${fs}"></div>
-    </div>`).join('');
-  document.getElementById('captFormBox').innerHTML=`
-    <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
-        <div class="field"><label>Data</label><input type="date" id="cd_data" value="${hoje}" style="${fs}"></div>
-        <div class="field"><label>Seguidores novos do Instagram</label><input type="number" id="cd_seg" placeholder="opcional" style="${fs}"></div>
-      </div>
-      <div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Leads e agendamentos por plataforma — preencha só o que tiver</div>
-      ${linhasPlat}
-      <div style="display:flex;gap:10px;margin-top:14px">
-        <button class="btn" onclick="salvarCaptDia()">Salvar o dia inteiro</button>
-        <button class="btn ghost" onclick="document.getElementById('captFormBox').innerHTML=''">Cancelar</button>
-      </div>
-      <div style="margin-top:10px;font-size:12px;color:var(--grey);font-style:italic">Isso salva um lançamento para cada plataforma preenchida — tudo de uma vez, sem repetir a data.</div>
-    </div>`;
-}
-async function salvarCaptDia(){
-  const data=document.getElementById('cd_data').value;
-  if(!data){ alert('Escolha a data.'); return; }
-  const seg=+document.getElementById('cd_seg').value||0;
-  const registros=[];
-  PLATAFORMAS.forEach((p,i)=>{
-    const leadsEl=document.getElementById('cd_leads_'+i), agendEl=document.getElementById('cd_agend_'+i);
-    const leads=leadsEl&&leadsEl.value!==''?+leadsEl.value:0;
-    const agendadas=agendEl&&agendEl.value!==''?+agendEl.value:0;
-    const segDaPlataforma = /instagram/i.test(p) ? seg : 0;
-    if(leads||agendadas||segDaPlataforma) registros.push({plataforma:p, seguidores:segDaPlataforma, leads, agendadas});
-  });
-  if(!registros.length){ alert('Preencha ao menos uma plataforma antes de salvar.'); return; }
-  try{
-    for(const r of registros){
-      const existente = CAPTACAO.find(c=>c.data===data && c.plataforma===r.plataforma);
-      if(existente){
-        existente.seguidores = r.seguidores||existente.seguidores||0;
-        existente.leads = r.leads; existente.agendadas = r.agendadas;
-        if(MODO_NUVEM){
-          const ok = await sbUpdate('captacao', existente.id, {data, plataforma:r.plataforma, seguidores:existente.seguidores, leads:existente.leads, agendadas:existente.agendadas, investido:existente.investido||0, gasto:existente.gasto||0, campanhas:existente.campanhas||0});
-        }
-      } else if(MODO_NUVEM){
-        const ok = await sbInsert('captacao', {data, plataforma:r.plataforma, seguidores:r.seguidores, leads:r.leads, agendadas:r.agendadas, investido:0, gasto:0, campanhas:0});
-        if(ok===null) throw new Error('Supabase recusou o lançamento de "'+r.plataforma+'" (veja o alerta anterior para o motivo exato).');
-      } else {
-        CAPTACAO.push({id:CAPT_SEQ++, data, plataforma:r.plataforma, seguidores:r.seguidores, leads:r.leads, agendadas:r.agendadas, investido:0, gasto:0, campanhas:0});
-      }
-    }
-    if(MODO_NUVEM) await carregarTudo();
-  }catch(e){
-    alert('Não consegui concluir o salvamento.\n\nMotivo: '+(e.message||JSON.stringify(e)));
-    return;
-  }
-  toast('Captação de '+fmtDate(data)+' salva ('+registros.length+' plataforma'+(registros.length>1?'s':'')+')');
-  go('leads');
-}
-function abrirCaptForm(){ editarCapt(0); }
-function editarCapt(id){
-  const c = (id && id!=='0')? CAPTACAO.find(x=>x.id==id) : {id:0,data:dataHojeLocal(),plataforma:PLATAFORMAS[0],seguidores:'',leads:'',agendadas:'',investido:'',gasto:'',campanhas:''};
-  const fs='padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;width:100%';
-  const platOpts=PLATAFORMAS.map(p=>`<option ${p===c.plataforma?'selected':''}>${p}</option>`).join('');
-  document.getElementById('captFormBox').innerHTML=`
-    <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px">
-        <div class="field"><label>Data</label><input type="date" id="cp_data" value="${c.data}" style="${fs}"></div>
-        <div class="field"><label>Plataforma</label><select id="cp_plat" style="${fs}">${platOpts}</select></div>
-        <div class="field"><label>Seguidores novos</label><input type="number" id="cp_seg" value="${c.seguidores}" placeholder="opcional" style="${fs}"></div>
-        <div class="field"><label>Leads iniciados</label><input type="number" id="cp_leads" value="${c.leads}" placeholder="opcional" style="${fs}"></div>
-        <div class="field"><label>Consultas agendadas</label><input type="number" id="cp_agend" value="${c.agendadas}" placeholder="opcional" style="${fs}"></div>
-        <div class="field"><label>Investimento (R$)</label><input type="number" id="cp_inv" value="${c.investido}" placeholder="opcional" style="${fs}"></div>
-        <div class="field"><label>Valor gasto (R$)</label><input type="number" id="cp_gasto" value="${c.gasto}" placeholder="opcional" style="${fs}"></div>
-        <div class="field"><label>Nº de campanhas</label><input type="number" id="cp_camp" value="${c.campanhas}" placeholder="opcional" style="${fs}"></div>
-      </div>
-      <div style="display:flex;gap:10px">
-        <button class="btn" onclick="salvarCapt('${c.id}')">Salvar lançamento</button>
-        <button class="btn ghost" onclick="document.getElementById('captFormBox').innerHTML=''">Cancelar</button>
-      </div>
-      <div style="margin-top:10px;font-size:12px;color:var(--grey);font-style:italic">A conversão é calculada sozinha (agendadas ÷ leads). Deixe em branco o que não tiver.</div>
-    </div>`;
-}
-async function salvarCapt(id){
-  const num=i=>{const v=document.getElementById(i).value;return v===''?0:+v;};
-  const dados={data:document.getElementById('cp_data').value,plataforma:document.getElementById('cp_plat').value,
-    seguidores:num('cp_seg'),leads:num('cp_leads'),agendadas:num('cp_agend'),
-    investido:num('cp_inv'),gasto:num('cp_gasto'),campanhas:num('cp_camp')};
-  if(MODO_NUVEM){
-    if(id && id!=='0') await sbUpdate('captacao',id,dados); else await sbInsert('captacao',dados);
-    await carregarTudo(); go('leads'); return;
-  }
-  if(id && id!=='0'){const c=CAPTACAO.find(x=>x.id==id);Object.assign(c,dados);}
-  else{CAPTACAO.push({id:CAPT_SEQ++,...dados});}
-  go('leads');
-}
-async function delCapt(id){ if(MODO_NUVEM){await sbDelete('captacao',id);await carregarTudo();} else {CAPTACAO=CAPTACAO.filter(c=>c.id!=id);} go('leads');}
-function analisarCaptacao(){
-  const porPlat={};
-  CAPTACAO.forEach(c=>{if(!porPlat[c.plataforma])porPlat[c.plataforma]={plataforma:c.plataforma,leads:0,agendadas:0,gasto:0};
-    porPlat[c.plataforma].leads+=c.leads||0;porPlat[c.plataforma].agendadas+=c.agendadas||0;porPlat[c.plataforma].gasto+=c.gasto||0;});
-  const plats=Object.values(porPlat).filter(p=>p.leads>0);
-  if(!plats.length){document.getElementById('analiseBox').innerHTML='<div style="padding:16px;color:var(--grey)">Sem dados suficientes.</div>';return;}
-  const melhorConv=[...plats].sort((a,b)=>(b.agendadas/b.leads)-(a.agendadas/a.leads))[0];
-  const maisLeads=[...plats].sort((a,b)=>b.leads-a.leads)[0];
-  const ins=[];
-  ins.push(`<b>${maisLeads.plataforma}</b> trouxe mais leads (${maisLeads.leads}).`);
-  ins.push(`<b>${melhorConv.plataforma}</b> tem a melhor conversão: ${PCT0(melhorConv.agendadas/melhorConv.leads)} dos leads agendaram.`);
-  plats.forEach(p=>{if(p.gasto>0){const cpl=p.gasto/p.leads;ins.push(`${p.plataforma}: custo de ${BRL(cpl)} por lead (gasto ${BRL(p.gasto)}).`);}});
-  const orgClose=plats.find(p=>p.gasto===0&&p.leads>0);
-  if(orgClose)ins.push(`<b style="color:var(--green)">${orgClose.plataforma}</b> gera leads sem custo de mídia — vale potencializar conteúdo orgânico e indicação.`);
-  document.getElementById('analiseBox').innerHTML=`
-    <div style="margin-top:18px;background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px">
-      <div style="font-weight:500;font-family:'Cormorant Garamond',serif;font-size:18px;margin-bottom:10px">Análise da captação</div>
-      ${ins.map(i=>`<div style="display:flex;gap:9px;margin-bottom:8px;font-size:13.5px"><span style="color:var(--gold-d)">•</span><span>${i}</span></div>`).join('')}
-    </div>`;
-}
 function renderCustos(pg){
   // fonte única: as despesas e receitas vêm do Livro-Caixa (dados reais)
   const c = calcCaixa();
@@ -2648,7 +2561,7 @@ function renderCustos(pg){
     const el=document.getElementById('chCat'); if(el) el.parentElement.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--grey);font-size:13px">'+(cats.length?'Gráfico disponível no navegador.':'Sem despesas para exibir.')+'</div>';
   } else {
     charts.cat=new Chart(document.getElementById('chCat'),{type:'doughnut',
-      data:{labels:cats.map(x=>x.cat),datasets:[{data:cats.map(x=>x.valor),backgroundColor:GOLDS,borderColor:'#191614',borderWidth:2}]},
+      data:{labels:cats.map(x=>x.cat),datasets:[{data:cats.map(x=>x.valor),backgroundColor:GOLDS,borderColor:COR_FUNDO,borderWidth:2}]},
       options:{responsive:true,maintainAspectRatio:false,cutout:'56%',plugins:{legend:{display:false},
         tooltip:{callbacks:{label:c=>` ${c.label}: ${BRL(c.parsed)}`}}}}});
     document.getElementById('leg2').innerHTML=cats.map((x,i)=>`<span><i style="background:${GOLDS[i%GOLDS.length]}"></i>${x.cat}</span>`).join('');
@@ -2679,7 +2592,7 @@ function planoConformidade(){
   const item=(c,prio)=>`<div style="display:flex;gap:10px;margin-bottom:9px;font-size:13.5px"><span style="color:${prio==='alta'?'var(--red)':'var(--amber)'};font-weight:700">${prio==='alta'?'1':'2'}</span><span><b>${c.item}</b> — responsável: ${c.resp}. ${prio==='alta'?'Prioridade alta: pendência que pode gerar multa ou interdição.':'Revisar e atualizar para evitar virar pendência.'}</span></div>`;
   document.getElementById('confPlanoBox').innerHTML=`
     <div style="margin-top:18px;background:var(--cream);border:1px solid var(--gold-l);border-radius:12px;padding:18px">
-      <div style="font-weight:600;font-family:'Cormorant Garamond',serif;font-size:18px;margin-bottom:12px">Plano de ação prioritário</div>
+      <div style="font-weight:600;font-family:var(--f-display);font-size:18px;margin-bottom:12px">Plano de ação prioritário</div>
       ${pend.map(c=>item(c,'alta')).join('')}
       ${aten.map(c=>item(c,'media')).join('')}
       <div style="margin-top:10px;font-size:12px;color:var(--grey);font-style:italic">Resolva primeiro os itens vermelhos (pendentes), depois os amarelos (atenção).</div>
@@ -2719,20 +2632,19 @@ function gerarInsights(){
         texto:`Faturamento ${PCT0(pf)} da meta. Excelente desempenho comercial.`});
     }
   }
-  // Melhor e pior canal
-  const canaisComLeads=k.porCanal.filter(c=>c.leads>0);
-  if(canaisComLeads.length){
-    const melhor=[...canaisComLeads].sort((a,b)=>b.conv-a.conv)[0];
-    const maisReceita=[...k.porCanal].sort((a,b)=>b.receita-a.receita)[0];
-    ins.push({tipo:'info',icone:'trophy',titulo:`Melhor canal: ${melhor.canal}`,
-      texto:`${melhor.canal} converteu ${PCT0(melhor.conv)} dos leads. Em receita, o destaque é ${maisReceita.canal} com ${BRL(maisReceita.receita)}.`});
-    // canal ineficiente: muito investimento, pouca conversão
-    const pago=k.porCanal.find(c=>c.canal==='Tráfego Pago');
-    if(pago && pago.conv<0.4 && k.investMkt>0){
-      ins.push({tipo:'alerta',icone:'cash',titulo:'Atenção ao Tráfego Pago',
-        texto:`O Tráfego Pago converteu apenas ${PCT0(pago.conv)} e concentra o investimento de marketing (${BRL(k.investMkt)}, CAC de ${BRL(k.cac)}). Vale revisar segmentação dos anúncios ou redirecionar verba para canais que convertem melhor, como indicação.`});
+  // Potencial de pacientes (Funil de Pacientes)
+  try{
+    const pot=potencialPacientes();
+    const vip=pot.filter(p=>p.segmento.id==='vip'||p.segmento.id==='alto');
+    const esfriando=vip.filter(p=>p.status.id==='atrasada'||p.status.id==='risco');
+    if(esfriando.length){
+      ins.push({tipo:'alerta',icone:'star',titulo:`${esfriando.length} paciente(s) de alto potencial sem voltar`,
+        texto:`${esfriando.slice(0,3).map(p=>p.nome).join(', ')}${esfriando.length>3?' e outras':''} já passaram do intervalo habitual de retorno. Veja a lista em Funil de Pacientes → Potencial & Prioridade.`});
+    } else if(vip.length){
+      ins.push({tipo:'bom',icone:'star',titulo:`${vip.length} paciente(s) de alto potencial em dia`,
+        texto:`As pacientes de maior potencial estão dentro do intervalo habitual de retorno.`});
     }
-  }
+  }catch(e){}
   // No-shows
   if(k.noShows>0){
     const taxaNoShow=k.noShows/(k.nAtend+k.noShows);
@@ -2777,23 +2689,19 @@ function responder(pergunta){
   if(has('faturamento','faturou','receita','vendeu')){
     return `O faturamento do período é <b>${BRL(k.faturamento)}</b>, que equivale a ${PCT0(k.faturamento/META.faturamento)} da meta de ${BRL(META.faturamento)}. Ticket médio de ${BRL(k.ticket)}.`;
   }
-  if(has('melhor canal','canal melhor','canal converte','onde investir','melhor origem')){
-    const m=[...k.porCanal.filter(c=>c.leads>0)].sort((a,b)=>b.conv-a.conv)[0];
+  if(has('melhor canal','canal melhor','melhor origem','origem')){
     const r=[...k.porCanal].sort((a,b)=>b.receita-a.receita)[0];
-    return m?`O canal que <b>mais converte</b> é <b>${m.canal}</b> (${PCT0(m.conv)} dos leads). Em <b>receita</b>, o líder é ${r.canal} com ${BRL(r.receita)}. Vale concentrar esforço nesses canais.`:`Ainda não há leads suficientes para comparar canais.`;
+    return r&&r.receita>0?`A origem de pacientes que mais gerou receita no período é <b>${r.canal}</b> (${BRL(r.receita)}).`:`Ainda não há receita suficiente no período para comparar origens.`;
   }
-  if(has('pior canal','cortar','desperdíci','desperdici','gastando à toa','tráfego','trafego')){
-    const pago=k.porCanal.find(c=>c.canal==='Tráfego Pago');
-    return pago?`O <b>Tráfego Pago</b> converteu ${PCT0(pago.conv)} e tem CAC de ${BRL(k.cac)} (investimento total ${BRL(k.investMkt)}). ${pago.conv<0.4?'Está abaixo do ideal — avalie melhorar os anúncios ou migrar parte da verba para indicação, que costuma ter custo zero e alta conversão.':'Está com desempenho razoável.'}`:`Sem dados de canal pago no período.`;
+  if(has('potencial','prioridade','melhores pacientes','melhor paciente','vip','recorr')){
+    const pot=potencialPacientes().slice(0,5);
+    return pot.length?`Pacientes de maior potencial: ${pot.map((p,i)=>`<b>${i+1}. ${p.nome}</b> (nota ${p.score})`).join(', ')}. Veja tudo em Funil de Pacientes → Potencial & Prioridade.`:`Ainda não há atendimentos suficientes para calcular o potencial.`;
   }
   if(has('ticket','valor médio','médio por')){
     return `O ticket médio é <b>${BRL(k.ticket)}</b> (meta ${BRL(META.ticket)}). Para subir o ticket: pacotes combinados, protocolos de manutenção e oferta de procedimentos complementares na mesma sessão.`;
   }
   if(has('no-show','no show','falta','furo','faltou')){
     return `Houve <b>${k.noShows} falta(s)</b> no período. Confirmação ativa por WhatsApp (24h e 2h antes) e cobrança de sinal em procedimentos caros são as medidas mais eficazes para reduzir.`;
-  }
-  if(has('conversão','converte','funil','fecha')){
-    return `A taxa de conversão de leads é <b>${PCT(k.txConv)}</b> (meta ${PCT0(META.conversao)}). De cada 10 pessoas que agendam, cerca de ${Math.round(k.txConv*10)} fecham.`;
   }
   if(has('custo','despesa','gasto','gastando')){
     const m=k.porCat[0];
@@ -2810,16 +2718,13 @@ function responder(pergunta){
   if(has('ocupação','ocupacao','agenda','horário livre','horario livre','ociosa')){
     return `A ocupação da agenda está em <b>${PCT(k.txOcup)}</b> (meta ${PCT0(META.ocupacao)}). ${k.txOcup<META.ocupacao?'Há espaço ocioso — reativar pacientes antigos ajuda a preencher.':'Boa ocupação.'}`;
   }
-  if(has('cac','custo por lead','aquisição','aquisicao')){
-    return `O custo de aquisição por cliente (CAC) é <b>${BRL(k.cac)}</b>, com ${BRL(k.investMkt)} investidos em marketing no período.`;
-  }
   if(has('resumo','como est','panorama','geral','vai a clínica','vai a clinica','situação','situacao')){
-    return `<b>Resumo do período:</b> faturamento ${BRL(k.faturamento)} (${PCT0(k.faturamento/META.faturamento)} da meta), ${k.nAtend} atendimentos, ticket médio ${BRL(k.ticket)}, conversão ${PCT(k.txConv)}. Resultado: <b>${k.lucro>=0?'lucro':'prejuízo'} de ${BRL(Math.abs(k.lucro))}</b>. ${k.confTotal-k.confOK>0?`Atenção: ${k.confTotal-k.confOK} pendência(s) de conformidade.`:'Conformidade em dia.'}`;
+    return `<b>Resumo do período:</b> faturamento ${BRL(k.faturamento)} (${PCT0(k.faturamento/META.faturamento)} da meta), ${k.nAtend} atendimentos, ticket médio ${BRL(k.ticket)}. Resultado: <b>${k.lucro>=0?'lucro':'prejuízo'} de ${BRL(Math.abs(k.lucro))}</b>. ${k.confTotal-k.confOK>0?`Atenção: ${k.confTotal-k.confOK} pendência(s) de conformidade.`:'Conformidade em dia.'}`;
   }
   if(has('oi','olá','ola','bom dia','boa tarde','boa noite','ajuda','o que você')){
-    return `Olá! Sou o assistente do sistema. Posso responder sobre faturamento, lucro, canais, conversão, custos, agenda e conformidade — tudo com base nos dados lançados. Experimente: "Como está a clínica?" ou "Qual o melhor canal?"`;
+    return `Olá! Sou o assistente do sistema. Posso responder sobre faturamento, lucro, origem dos pacientes, pacientes de maior potencial, custos, agenda e conformidade — tudo com base nos dados lançados. Experimente: "Como está a clínica?" ou "Qual o melhor canal?"`;
   }
-  return `Não tenho um cálculo específico para isso ainda. Posso ajudar com: <b>faturamento, lucro, melhor canal, ticket médio, no-shows, conversão, custos, conformidade, ocupação da agenda e CAC</b>. Reformule a pergunta usando um desses temas.`;
+  return `Não tenho um cálculo específico para isso ainda. Posso ajudar com: <b>faturamento, lucro, origem dos pacientes, potencial de pacientes, ticket médio, no-shows, custos, conformidade e ocupação da agenda</b>. Reformule a pergunta usando um desses temas.`;
 }
 
 /* ============================ COMISSÕES ============================ */
@@ -2857,7 +2762,7 @@ function renderComissoes(pg){
     </div>
 
     <div class="toolbar" style="margin-bottom:18px">
-      <div><h3 style="font-family:'Cormorant Garamond',serif;font-size:21px">Metas & Bonificações</h3>
+      <div><h3 style="font-family:var(--f-display);font-size:21px">Metas & Bonificações</h3>
       <div class="ph-sub">Bônus por faixa atingida — vale a faixa mais alta, sem somar</div></div>
       <button class="btn" onclick="novaMeta()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Nova meta</button>
     </div>
@@ -2907,7 +2812,7 @@ function metaCard(m, av){
       </div>
       <div style="text-align:right">
         <div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.6px">Bônus atual</div>
-        <div style="font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:600;color:${av.bonus>0?'var(--gold-d)':'var(--grey)'}">${BRL(av.bonus)}</div>
+        <div style="font-family:var(--f-display);font-size:26px;font-weight:600;color:${av.bonus>0?'var(--gold-d)':'var(--grey)'}">${BRL(av.bonus)}</div>
         <button class="btn ghost" style="padding:4px 12px;font-size:12px;margin-top:4px" onclick="editarMeta('${m.id}')">Editar</button>
       </div>
     </div>
@@ -2959,7 +2864,7 @@ function metaForm(m){
         <option value="individual" ${m.escopo==='individual'?'selected':''}>Individual (só este funcionário)</option>
         <option value="geral" ${m.escopo==='geral'?'selected':''}>Geral (total da clínica)</option>
       </select></div>
-      <div class="field"><label>Tipo de meta</label><select id="m_tipo" style="${fieldStyle}">${opt('faturamento',m.tipo)}${opt('leads',m.tipo)}${opt('agendamentos',m.tipo)}</select></div>
+      <div class="field"><label>Tipo de meta</label><select id="m_tipo" style="${fieldStyle}">${opt('faturamento',m.tipo)}${m.tipo==='leads'?opt('leads',m.tipo):''}${opt('agendamentos',m.tipo)}</select></div>
       <div class="field"><label>Período</label><select id="m_periodo" style="${fieldStyle}">${opt('mensal',m.periodo)}${opt('semanal',m.periodo)}</select></div>
     </div>
     <table class="data">
@@ -3208,7 +3113,7 @@ function fichaPaciente(nome){
       </div>`;}).join('');
     return `<div style="margin-bottom:14px;background:var(--cream);border:1px solid var(--line);border-radius:12px;padding:14px 16px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <div style="font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:600">${fmtDateFull(dia)}</div>
+        <div style="font-family:var(--f-display);font-size:18px;font-weight:600">${fmtDateFull(dia)}</div>
         <div style="font-size:13px;color:var(--gold-d);font-weight:600">${itens.length} procedimento(s) · ${BRL(totalDia)}</div>
       </div>
       ${procs}
@@ -3226,14 +3131,347 @@ function fichaPaciente(nome){
       </div>
     </div>
     <div style="display:flex;gap:14px;flex-wrap:wrap;margin:14px 0 18px">
-      <div style="flex:1;min-width:120px;text-align:center;padding:12px;border-radius:10px;background:var(--cream);border:1px solid var(--line)"><div style="font-size:22px;font-weight:700;font-family:'Cormorant Garamond',serif">${p.visitas}</div><div style="font-size:11px;color:var(--grey)">visitas</div></div>
-      <div style="flex:1;min-width:120px;text-align:center;padding:12px;border-radius:10px;background:var(--cream);border:1px solid var(--line)"><div style="font-size:22px;font-weight:700;font-family:'Cormorant Garamond',serif;color:var(--gold)">${BRL(p.valorTotal)}</div><div style="font-size:11px;color:var(--grey)">valor acumulado</div></div>
-      <div style="flex:1;min-width:120px;text-align:center;padding:12px;border-radius:10px;background:var(--cream);border:1px solid var(--line)"><div style="font-size:22px;font-weight:700;font-family:'Cormorant Garamond',serif">${BRL(p.visitas?p.valorTotal/p.visitas:0)}</div><div style="font-size:11px;color:var(--grey)">ticket médio</div></div>
+      <div style="flex:1;min-width:120px;text-align:center;padding:12px;border-radius:10px;background:var(--cream);border:1px solid var(--line)"><div style="font-size:22px;font-weight:700;font-family:var(--f-display)">${p.visitas}</div><div style="font-size:11px;color:var(--grey)">visitas</div></div>
+      <div style="flex:1;min-width:120px;text-align:center;padding:12px;border-radius:10px;background:var(--cream);border:1px solid var(--line)"><div style="font-size:22px;font-weight:700;font-family:var(--f-display);color:var(--gold)">${BRL(p.valorTotal)}</div><div style="font-size:11px;color:var(--grey)">valor acumulado</div></div>
+      <div style="flex:1;min-width:120px;text-align:center;padding:12px;border-radius:10px;background:var(--cream);border:1px solid var(--line)"><div style="font-size:22px;font-weight:700;font-family:var(--f-display)">${BRL(p.visitas?p.valorTotal/p.visitas:0)}</div><div style="font-size:11px;color:var(--grey)">ticket médio</div></div>
     </div>
+    ${potencialFichaHTML(p.nome)}
     <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);font-weight:600;margin-bottom:12px">Histórico de visitas (${dias.length} ${dias.length===1?'dia':'dias'})</div>
     ${visitasHTML||'<div style="color:var(--grey);font-size:13px">Sem visitas registradas.</div>'}
   </div>`;
   box.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+/* ============================ POTENCIAL & PRIORIDADE (Funil de Pacientes) ============================ */
+// Classifica cada paciente pelo potencial de continuar gastando na clínica, do maior para o menor.
+// Usa TODO o histórico de atendimentos com "Compareceu" (não depende do mês do topo), então nunca
+// desincroniza: um atendimento novo já muda a nota na mesma hora.
+//
+// NOTA DE POTENCIAL (0 a 100) = soma ponderada de 6 fatores. Os fatores de valor são medidos em
+// PERCENTIL dentro da própria base da clínica (a melhor paciente em gasto ganha o máximo, a mediana
+// ganha metade), assim a nota se ajusta sozinha à realidade do Instituto.
+const POT_PESOS=[
+  {id:'gasto',    label:'Quanto já gastou',          peso:30, desc:'Valor total investido na clínica (todo o histórico).'},
+  {id:'ticket',   label:'Ticket médio por visita',   peso:20, desc:'Média gasta a cada ida à clínica.'},
+  {id:'visitas',  label:'Quantas vezes veio',        peso:20, desc:'Número de dias diferentes em que foi atendida.'},
+  {id:'procs',    label:'Procedimentos por visita',  peso:10, desc:'Se costuma fazer vários procedimentos de uma vez ou só um.'},
+  {id:'recencia', label:'Está ativa (recência)',     peso:15, desc:'Dias desde a última visita comparados com o intervalo habitual de retorno dela.'},
+  {id:'presenca', label:'Comparecimento',            peso:5,  desc:'Penaliza faltas (no-show) registradas.'},
+];
+const POT_SEGMENTOS=[
+  {id:'vip',   label:'Diamante',        min:80, cor:'#2563EB', desc:'Nota 80 a 100 — as pacientes mais valiosas'},
+  {id:'alto',  label:'Alto potencial',  min:60, cor:'#0EA5A4', desc:'Nota 60 a 79'},
+  {id:'medio', label:'Médio potencial', min:40, cor:'#D97706', desc:'Nota 40 a 59'},
+  {id:'baixo', label:'Baixo potencial', min:0,  cor:'#94A3B8', desc:'Nota abaixo de 40'},
+];
+const POT_STATUS={
+  nova:    {id:'nova',     label:'Nova',              curto:'Nova',     cls:'c-accent', ordem:2},
+  emdia:   {id:'emdia',    label:'Em dia',            curto:'Em dia',   cls:'c-good',   ordem:4},
+  retornar:{id:'retornar', label:'Hora de retornar',  curto:'Retornar', cls:'c-warn',   ordem:1},
+  atrasada:{id:'atrasada', label:'Atrasada',          curto:'Atrasada', cls:'c-bad',    ordem:0},
+  risco:   {id:'risco',    label:'Em risco de perda', curto:'Em risco', cls:'c-neutral',ordem:3},
+};
+let POT_FILTRO={seg:'todos', status:'todos', busca:'', ordem:'score', vista:'ranking'};
+let POT_CACHE=[];
+
+function _potEsc(t){ return String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function _potDias(a,b){ // dias entre duas datas ISO (b - a)
+  const [y1,m1,d1]=a.split('-').map(Number), [y2,m2,d2]=b.split('-').map(Number);
+  return Math.round((new Date(y2,m2-1,d2)-new Date(y1,m1-1,d1))/86400000);
+}
+function _potSomaDias(iso,dias){
+  const [y,m,d]=iso.split('-').map(Number); const dt=new Date(y,m-1,d+Math.round(dias));
+  return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+}
+function _potHojeISO(){ const h=new Date(); return h.getFullYear()+'-'+String(h.getMonth()+1).padStart(2,'0')+'-'+String(h.getDate()).padStart(2,'0'); }
+// percentil (0..1) de v dentro de uma lista ORDENADA crescente — empates recebem a média das posições
+function _potPercentil(lista, v){
+  const n=lista.length; if(n<=1) return v>0?1:0;
+  let menor=0, igual=0;
+  for(const x of lista){ if(x<v) menor++; else if(x===v) igual++; }
+  return (menor + (igual-1)/2)/(n-1);
+}
+function _potMediana(arr){ if(!arr.length) return 0; const a=[...arr].sort((x,y)=>x-y); const m=Math.floor(a.length/2); return a.length%2?a[m]:(a[m-1]+a[m])/2; }
+
+// calcula a base completa (uma linha por paciente), ordenada da maior nota para a menor
+function potencialPacientes(){
+  const hoje=_potHojeISO();
+  const comp=DATA.atendimentos.filter(a=>a.agenda==='Compareceu' && a.paciente && a.data);
+  const faltas={};
+  DATA.atendimentos.forEach(a=>{ if(a.agenda==='No-show' && a.paciente) faltas[a.paciente]=(faltas[a.paciente]||0)+1; });
+  const porNome={};
+  comp.forEach(a=>{ (porNome[a.paciente]=porNome[a.paciente]||[]).push(a); });
+  const base=Object.keys(porNome).map(nome=>{
+    const hist=porNome[nome].sort((a,b)=>a.data.localeCompare(b.data));
+    const dias=[...new Set(hist.map(a=>a.data))].sort();
+    const visitas=dias.length;
+    const gasto=hist.reduce((s,a)=>s+(+a.valor||0),0);
+    let nProcs=0; const procSet={};
+    hist.forEach(a=>{ const l=procedimentosDe(a).filter(p=>p.proc); const q=l.length||(a.proc?1:0); nProcs+=q; l.forEach(p=>procSet[p.proc]=(procSet[p.proc]||0)+1); if(!l.length&&a.proc) procSet[a.proc]=(procSet[a.proc]||0)+1; });
+    const primeira=dias[0], ultima=dias[dias.length-1];
+    const intervalos=[]; for(let i=1;i<dias.length;i++) intervalos.push(_potDias(dias[i-1],dias[i]));
+    const intervaloProprio=intervalos.length?intervalos.reduce((s,x)=>s+x,0)/intervalos.length:null;
+    const umAno=_potSomaDias(hoje,-365);
+    const gasto12m=hist.filter(a=>a.data>=umAno).reduce((s,a)=>s+(+a.valor||0),0);
+    // tendência: ticket das 2 últimas visitas x ticket médio das anteriores
+    const valorDia=dias.map(d=>hist.filter(a=>a.data===d).reduce((s,a)=>s+(+a.valor||0),0));
+    let tendencia=0;
+    if(valorDia.length>=3){ const rec=(valorDia[valorDia.length-1]+valorDia[valorDia.length-2])/2; const ant=valorDia.slice(0,-2).reduce((s,x)=>s+x,0)/(valorDia.length-2); tendencia=ant>0?(rec-ant)/ant:0; }
+    const topProcs=Object.entries(procSet).sort((a,b)=>b[1]-a[1]).map(x=>x[0]);
+    return {nome, visitas, gasto, ticket:visitas?gasto/visitas:0, nProcs, procsVisita:visitas?nProcs/visitas:0,
+      primeira, ultima, diasSemVir:_potDias(ultima,hoje), intervaloProprio, gasto12m, tendencia,
+      faltas:faltas[nome]||0, canal:hist[0].canal||'', procedimentos:topProcs, valorDia};
+  });
+  if(!base.length) return [];
+  // intervalo de retorno de referência da clínica (mediana de quem já voltou) — usado para quem veio 1 vez
+  const intervalosClinica=base.filter(p=>p.intervaloProprio).map(p=>p.intervaloProprio);
+  const intervaloClinica=Math.max(30, Math.round(_potMediana(intervalosClinica)||120));
+  // taxa de retorno da clínica: quantas pacientes voltaram pelo menos uma vez (só entre quem já teve tempo de voltar)
+  const elegiveis=base.filter(p=>p.visitas>1 || p.diasSemVir>=intervaloClinica);
+  const taxaRetorno=elegiveis.length? Math.min(0.85,Math.max(0.2, elegiveis.filter(p=>p.visitas>1).length/elegiveis.length)) : 0.4;
+  const ordGasto=base.map(p=>p.gasto).sort((a,b)=>a-b);
+  const ordTicket=base.map(p=>p.ticket).sort((a,b)=>a-b);
+  const ordVisitas=base.map(p=>p.visitas).sort((a,b)=>a-b);
+  const ordProcs=base.map(p=>p.procsVisita).sort((a,b)=>a-b);
+  base.forEach(p=>{
+    // intervalo habitual: o da própria paciente (com 2+ retornos), puxado para o da clínica quando há poucos dados
+    const intervalo = p.intervaloProprio
+      ? Math.max(21, Math.round(p.visitas>=3 ? p.intervaloProprio : (p.intervaloProprio+intervaloClinica)/2))
+      : intervaloClinica;
+    p.intervalo=intervalo;
+    const r=p.diasSemVir/intervalo; // 1 = exatamente no intervalo habitual
+    let recencia;
+    if(r<=1) recencia=1; else if(r<=1.5) recencia=1-(r-1)*0.6; else if(r<=3) recencia=0.7-(r-1.5)*0.4; else recencia=Math.max(0,0.1-(r-3)*0.05);
+    if(p.diasSemVir>540) recencia=0;
+    const presenca = 1 - Math.min(1, p.faltas/Math.max(1,p.visitas+p.faltas)*2);
+    const f={
+      gasto:   p.gasto>0 ? _potPercentil(ordGasto,p.gasto) : 0,
+      ticket:  p.ticket>0 ? _potPercentil(ordTicket,p.ticket) : 0,
+      visitas: _potPercentil(ordVisitas,p.visitas),
+      procs:   _potPercentil(ordProcs,p.procsVisita),
+      recencia,
+      presenca,
+    };
+    // com só 1 paciente, percentis não têm comparação — usa valores neutros
+    if(base.length===1){ f.gasto=p.gasto>0?.5:0; f.ticket=p.ticket>0?.5:0; f.visitas=.5; f.procs=.5; }
+    p.fatores=f;
+    p.score=Math.round(POT_PESOS.reduce((s,w)=>s+w.peso*(f[w.id]||0),0));
+    p.segmento=POT_SEGMENTOS.find(sg=>p.score>=sg.min)||POT_SEGMENTOS[POT_SEGMENTOS.length-1];
+    // status de retorno (para marcar a recorrência)
+    let st;
+    if(p.visitas===1 && p.diasSemVir<=Math.min(60,intervalo)) st=POT_STATUS.nova;
+    else if(r>3 || p.diasSemVir>365) st=POT_STATUS.risco;
+    else if(r>1.5) st=POT_STATUS.atrasada;
+    else if(r>=0.85) st=POT_STATUS.retornar;
+    else st=POT_STATUS.emdia;
+    p.status=st;
+    p.proximoRetorno=_potSomaDias(p.ultima,intervalo);
+    // potencial de gasto nos próximos 12 meses = ticket × retornos esperados no ano × chance de seguir ativa
+    const retornosAno=Math.min(12, 365/intervalo);
+    // quem veio só 1 vez ainda não provou que volta: aplica a taxa de retorno real da clínica
+    const chanceAtiva=Math.max(0.05, (recencia*0.85 + presenca*0.15) * (p.visitas===1 ? taxaRetorno : 1));
+    p.potencial12m=Math.round(p.ticket*retornosAno*chanceAtiva);
+    p.perfil = p.procsVisita>=2 ? 'Combina vários procedimentos' : p.procsVisita>=1.4 ? 'Às vezes combina procedimentos' : 'Um procedimento por visita';
+    p.perfilCurto = p.procsVisita>=2 ? 'Combina vários' : p.procsVisita>=1.4 ? 'Às vezes combina' : '1 proc. por visita';
+  });
+  return base.sort((a,b)=>b.score-a.score || b.gasto-a.gasto);
+}
+
+function setPotFiltro(campo,valor){
+  const mudouVista = campo==='vista' && POT_FILTRO.vista!==valor;
+  POT_FILTRO[campo]=valor;
+  if(mudouVista && currentPage==='potencial'){ go('potencial'); return; }
+  renderPotencialLista();
+}
+function setPotOrdem(id){
+  const mudouVista = POT_FILTRO.vista!=='ranking';
+  POT_FILTRO.vista='ranking'; POT_FILTRO.ordem=id;
+  if(mudouVista && currentPage==='potencial'){ go('potencial'); return; }
+  renderPotencialLista();
+}
+function _potFiltrados(){
+  const f=POT_FILTRO, termo=(f.busca||'').toLowerCase().trim();
+  let l=POT_CACHE.filter(p=>(f.seg==='todos'||p.segmento.id===f.seg) && (f.status==='todos'||p.status.id===f.status) && (!termo||p.nome.toLowerCase().includes(termo)));
+  if(f.vista==='agenda'){
+    // fila de recorrência: quem já devia ter voltado (ou está na hora), maior potencial primeiro
+    l=l.filter(p=>['atrasada','retornar','risco'].includes(p.status.id));
+    l.sort((a,b)=>a.status.ordem-b.status.ordem || b.potencial12m-a.potencial12m || b.score-a.score);
+    return l;
+  }
+  const ord={score:(a,b)=>b.score-a.score, gasto:(a,b)=>b.gasto-a.gasto, ticket:(a,b)=>b.ticket-a.ticket,
+    visitas:(a,b)=>b.visitas-a.visitas, procs:(a,b)=>b.procsVisita-a.procsVisita, potencial:(a,b)=>b.potencial12m-a.potencial12m,
+    dias:(a,b)=>b.diasSemVir-a.diasSemVir}[f.ordem]||((a,b)=>b.score-a.score);
+  return l.sort((a,b)=>ord(a,b)||b.score-a.score);
+}
+function _potBarra(score,cor){
+  return `<div class="pot-score"><b>${score}</b><span class="pot-bar"><i style="width:${Math.max(3,score)}%;background:${cor}"></i></span></div>`;
+}
+function renderPotencialLista(){
+  const box=document.getElementById('potLista'); if(!box) return;
+  const lista=_potFiltrados();
+  const f=POT_FILTRO;
+  const linhas=lista.map(p=>{
+    const i=POT_CACHE.indexOf(p);
+    const rank=f.vista==='ranking'&&f.seg==='todos'&&f.status==='todos'&&!f.busca&&f.ordem==='score' ? (i+1)+'º' : '';
+    const tend=p.tendencia>0.15?'<span class="pot-tend up" title="Últimas visitas acima da média dela">▲</span>':p.tendencia<-0.15?'<span class="pot-tend down" title="Últimas visitas abaixo da média dela">▼</span>':'';
+    return `<tr onclick="abrirFichaPot(${i})" style="cursor:pointer">
+      <td><div style="font-weight:600">${rank?`<span class="pot-rank">${rank}</span>`:''}${_potEsc(p.nome)}</div><div class="pot-sub">${_potEsc(p.perfilCurto)}${p.faltas?` · ${p.faltas} falta${p.faltas>1?'s':''}`:''}</div></td>
+      <td style="min-width:108px">${_potBarra(p.score,p.segmento.cor)}<span class="chip" style="margin-top:5px;color:${p.segmento.cor};background:${p.segmento.cor}1A">${p.segmento.label}</span></td>
+      <td class="ctr">${p.visitas}</td>
+      <td class="num">${BRL(p.gasto)}</td>
+      <td class="num">${BRL(p.ticket)} ${tend}</td>
+      <td class="ctr">${p.procsVisita.toFixed(1).replace('.',',')}</td>
+      <td class="ctr">${fmtDateFull(p.ultima)}<div class="pot-sub">há ${p.diasSemVir} dia${p.diasSemVir===1?'':'s'}</div></td>
+      <td class="ctr">${fmtDateFull(p.proximoRetorno)}<div class="pot-sub">ciclo ~${p.intervalo}d</div></td>
+      <td class="ctr"><span class="chip ${p.status.cls}" title="${p.status.label}">${p.status.curto}</span></td>
+      <td class="num" style="font-weight:600">${BRL(p.potencial12m)}</td>
+    </tr>`;
+  }).join('');
+  const thOrd=(id,label,cls)=>`<th class="${cls||''}"><button class="pot-th ${f.ordem===id&&f.vista==='ranking'?'on':''}" onclick="setPotOrdem('${id}')">${label}${f.ordem===id&&f.vista==='ranking'?' ↓':''}</button></th>`;
+  box.innerHTML=`<div style="overflow-x:auto"><table class="data pot-table">
+    <thead><tr><th>Paciente</th>${thOrd('score','Nota · segmento')}${thOrd('visitas','Visitas','ctr')}${thOrd('gasto','Gasto total','num')}${thOrd('ticket','Ticket por visita','num')}${thOrd('procs','Proced. por visita','ctr')}${thOrd('dias','Última visita','ctr')}<th class="ctr">Próx. retorno</th><th class="ctr">Situação</th>${thOrd('potencial','Potencial 12m','num')}</tr></thead>
+    <tbody>${linhas||`<tr><td colspan="10" style="text-align:center;color:var(--grey);padding:26px">${POT_CACHE.length?'Nenhuma paciente com esses filtros.':'Ainda não há atendimentos com “Compareceu” para calcular o potencial.'}</td></tr>`}</tbody>
+  </table></div>
+  <div class="pot-sub" style="margin-top:10px">${lista.length} paciente${lista.length===1?'':'s'} na lista · soma do potencial 12 meses: <b style="color:var(--ink)">${BRL(lista.reduce((s,p)=>s+p.potencial12m,0))}</b></div>`;
+  // chips de filtro ativos
+  document.querySelectorAll('[data-potseg]').forEach(b=>b.classList.toggle('on',b.dataset.potseg===f.seg));
+  document.querySelectorAll('[data-potvista]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.potvista===f.vista?'true':'false'));
+}
+function abrirFichaPot(i){
+  const p=POT_CACHE[i]; if(!p) return;
+  fichaPaciente(p.nome);
+}
+// bloco "por que essa nota" mostrado na ficha da paciente
+function potencialFichaHTML(nome){
+  let p=null; try{ p=potencialPacientes().find(x=>x.nome===nome); }catch(e){}
+  if(!p) return '';
+  const fat=POT_PESOS.map(w=>{
+    const v=p.fatores[w.id]||0;
+    return `<div class="pot-fat"><div class="pot-fat-top"><span>${w.label}</span><b>${Math.round(v*w.peso)} / ${w.peso}</b></div><span class="pot-bar"><i style="width:${Math.round(v*100)}%;background:${p.segmento.cor}"></i></span></div>`;
+  }).join('');
+  return `<div class="pot-ficha">
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px">
+      <div class="pot-nota" style="border-color:${p.segmento.cor};color:${p.segmento.cor}"><b>${p.score}</b><span>nota</span></div>
+      <div style="flex:1;min-width:200px">
+        <div style="font-weight:600;font-size:15px">${p.segmento.label} · <span class="chip ${p.status.cls}">${p.status.label}</span></div>
+        <div class="pot-sub">${p.perfil} · ${p.procsVisita.toFixed(1).replace('.',',')} procedimento(s) por visita · retorna a cada ~${p.intervalo} dias · próximo retorno sugerido ${fmtDateFull(p.proximoRetorno)}</div>
+        <div class="pot-sub">Potencial estimado nos próximos 12 meses: <b style="color:var(--ink)">${BRL(p.potencial12m)}</b> · gasto nos últimos 12 meses: ${BRL(p.gasto12m)}</div>
+      </div>
+    </div>
+    <div class="pot-fats">${fat}</div>
+  </div>`;
+}
+function renderPotencial(pg){
+  POT_CACHE=potencialPacientes();
+  const L=POT_CACHE;
+  const porSeg=POT_SEGMENTOS.map(sg=>{ const l=L.filter(p=>p.segmento.id===sg.id); return {...sg, n:l.length, gasto:l.reduce((s,p)=>s+p.gasto,0), pot:l.reduce((s,p)=>s+p.potencial12m,0)}; });
+  const totGasto=L.reduce((s,p)=>s+p.gasto,0)||1;
+  const topo=L.filter(p=>p.segmento.id==='vip'||p.segmento.id==='alto');
+  const devendoRetorno=L.filter(p=>['atrasada','retornar'].includes(p.status.id));
+  const devendoTopo=devendoRetorno.filter(p=>p.segmento.id==='vip'||p.segmento.id==='alto');
+  const pot12=L.reduce((s,p)=>s+p.potencial12m,0);
+  const recorrentes=L.filter(p=>p.visitas>1).length;
+  const top20=Math.max(1,Math.ceil(L.length*0.2));
+  const shareTop20=L.length? [...L].sort((a,b)=>b.gasto-a.gasto).slice(0,top20).reduce((s,p)=>s+p.gasto,0)/totGasto : 0;
+  const intervalos=L.filter(p=>p.intervaloProprio).map(p=>p.intervaloProprio);
+  const intMed=intervalos.length?Math.round(_potMediana(intervalos)):null;
+  const segCards=porSeg.map(sg=>`
+    <button class="pot-seg ${POT_FILTRO.seg===sg.id?'on':''}" data-potseg="${sg.id}" onclick="setPotFiltro('seg',POT_FILTRO.seg==='${sg.id}'?'todos':'${sg.id}')" style="--c:${sg.cor}">
+      <span class="pot-seg-top"><i></i>${sg.label}</span>
+      <b>${sg.n}</b>
+      <span class="pot-sub">${PCT0(sg.gasto/totGasto)} do faturamento histórico</span>
+      <span class="pot-sub">potencial 12m: <b style="color:var(--ink)">${BRL(sg.pot)}</b></span>
+    </button>`).join('');
+  const stOpts=[['todos','Todas as situações'],...Object.values(POT_STATUS).map(s=>[s.id,s.label])].map(([v,l])=>`<option value="${v}" ${POT_FILTRO.status===v?'selected':''}>${l}</option>`).join('');
+  const pesos=POT_PESOS.map(w=>`<li><b>${w.label} — ${w.peso} pts.</b> ${w.desc}</li>`).join('');
+  pg.innerHTML=`
+    <div class="pot-hero">
+      <div class="pot-hero-l">
+        <div class="eyebrow light">Funil de pacientes · todo o histórico</div>
+        <h2>${topo.length} paciente${topo.length===1?'':'s'} de alto potencial</h2>
+        <div class="pot-hero-ticks">
+          <span><b>${L.length}</b> pacientes classificadas</span>
+          <span><b>${devendoRetorno.length}</b> na hora de retornar ou atrasadas</span>
+          <span><b>${devendoTopo.length}</b> delas são Diamante/Alto potencial</span>
+          <span>Top 20% concentram <b>${PCT0(shareTop20)}</b> do faturamento</span>
+        </div>
+      </div>
+      <div class="pot-hero-r">
+        <span>Potencial estimado · 12 meses</span>
+        <b>${BRL(pot12)}</b>
+        <span>se a base mantiver o ritmo atual de retorno</span>
+      </div>
+    </div>
+
+    <div class="pot-kpis">
+      <div class="panel pot-kpi"><span>Ticket médio por visita</span><b>${BRL(L.length?L.reduce((s,p)=>s+p.gasto,0)/Math.max(1,L.reduce((s,p)=>s+p.visitas,0)):0)}</b><small>todas as pacientes</small></div>
+      <div class="panel pot-kpi"><span>Pacientes que voltaram</span><b>${L.length?PCT0(recorrentes/L.length):'0%'}</b><small>${recorrentes} de ${L.length} vieram 2+ vezes</small></div>
+      <div class="panel pot-kpi"><span>Intervalo de retorno</span><b>${intMed?intMed+' dias':'—'}</b><small>mediana entre visitas</small></div>
+      <div class="panel pot-kpi"><span>Procedimentos por visita</span><b>${(L.length?L.reduce((s,p)=>s+p.nProcs,0)/Math.max(1,L.reduce((s,p)=>s+p.visitas,0)):0).toFixed(1).replace('.',',')}</b><small>média da clínica</small></div>
+    </div>
+
+    <div class="pot-segs">${segCards}</div>
+
+    <div class="panel">
+      <div class="toolbar" style="align-items:flex-end">
+        <div><h3>${POT_FILTRO.vista==='agenda'?'Fila de recorrência':'Ranking de potencial'}</h3>
+          <div class="ph-sub" style="margin-bottom:0">${POT_FILTRO.vista==='agenda'?'Quem já está na hora de voltar ou passou do tempo — maior potencial primeiro. Use para marcar os retornos.':'Do maior para o menor potencial. Clique numa paciente para ver a ficha e o porquê da nota.'}</div></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <div class="seg-tabs"><button data-potvista="ranking" onclick="setPotFiltro('vista','ranking')">Ranking</button><button data-potvista="agenda" onclick="setPotFiltro('vista','agenda')">Fila de recorrência</button></div>
+          <input placeholder="Buscar paciente…" value="${_potEsc(POT_FILTRO.busca)}" oninput="setPotFiltro('busca',this.value)" class="pot-input">
+          <select onchange="setPotFiltro('status',this.value)" class="pot-input">${stOpts}</select>
+          <button class="btn ghost" onclick="gerarPDFPotencial()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>PDF da lista</button>
+        </div>
+      </div>
+      <div id="potLista"></div>
+    </div>
+    <div id="fichaBox"></div>
+
+    <details class="panel pot-como">
+      <summary><b>Como a nota é calculada</b> <span class="pot-sub">— clique para ver</span></summary>
+      <ul>${pesos}</ul>
+      <p class="pot-sub">Gasto, ticket, visitas e procedimentos por visita são comparados com as outras pacientes da clínica (percentil): a primeira colocada no fator ganha os pontos cheios, a do meio ganha metade. Recência compara os dias sem vir com o intervalo habitual de retorno da própria paciente (ou da clínica, para quem veio só uma vez).</p>
+      <p class="pot-sub"><b>Segmentos:</b> ${POT_SEGMENTOS.map(s=>`${s.label} (${s.desc.split(' — ')[0].toLowerCase()})`).join(' · ')}.</p>
+      <p class="pot-sub"><b>Situação:</b> Em dia (antes de 85% do intervalo) · Hora de retornar (85% a 150%) · Atrasada (150% a 300%) · Em risco de perda (mais de 3× o intervalo ou 1 ano sem vir) · Nova (1ª visita recente).</p>
+      <p class="pot-sub"><b>Potencial 12 meses</b> = ticket médio por visita × retornos esperados no ano (pelo intervalo dela) × chance de continuar ativa (recência e comparecimento; para quem veio só uma vez, também a taxa real de retorno da clínica). É uma estimativa para priorizar, não uma previsão exata.</p>
+    </details>`;
+  renderPotencialLista();
+}
+
+// PDF da lista atual (respeita filtros/vista) — para a equipe marcar os retornos
+function gerarPDFPotencial(){
+  const lista=_potFiltrados();
+  const hojeHora=new Date().toLocaleString('pt-BR');
+  const titulo=POT_FILTRO.vista==='agenda'?'Fila de Recorrência':'Ranking de Potencial';
+  const linhas=lista.map((p,i)=>`<tr>
+    <td class="n">${i+1}</td><td>${_potEsc(p.nome)}</td><td class="n"><b>${p.score}</b></td><td>${p.segmento.label}</td>
+    <td class="n">${p.visitas}</td><td class="n">${BRL(p.gasto)}</td><td class="n">${BRL(p.ticket)}</td>
+    <td class="n">${p.procsVisita.toFixed(1).replace('.',',')}</td><td>${fmtDateFull(p.ultima)}</td><td>${fmtDateFull(p.proximoRetorno)}</td>
+    <td>${p.status.label}</td><td class="n">${BRL(p.potencial12m)}</td></tr>`).join('');
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>${titulo} · Instituto Bruna Braga</title>
+  <style>
+    @page{size:A4 landscape;margin:12mm}
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Helvetica Neue',Arial,sans-serif;color:#0F172A;font-size:10.5px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #1747B8;padding-bottom:12px;margin-bottom:16px}
+    .brand{font-size:20px;font-weight:700;color:#0F2D73}.sub{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#5B6478;margin-top:3px}
+    .right{text-align:right;font-size:10px;color:#5B6478}.right b{font-size:14px;color:#0F172A;display:block}
+    table{width:100%;border-collapse:collapse}
+    th{background:#EDF1F8;color:#334155;text-align:left;padding:6px 7px;font-size:8.5px;text-transform:uppercase;letter-spacing:.4px;border-bottom:2px solid #1747B8}
+    td{padding:5px 7px;border-bottom:1px solid #E3E8F1}
+    td.n,th.n{text-align:right} tr{page-break-inside:avoid} tr:nth-child(even) td{background:#F6F8FC}
+    .ft{margin-top:16px;font-size:9px;color:#94A3B8;text-align:center}
+  </style></head><body>
+    <div class="hd"><div><div class="brand">Instituto Bruna Braga</div><div class="sub">Funil de Pacientes · ${titulo}</div></div>
+      <div class="right"><b>${lista.length} paciente${lista.length===1?'':'s'}</b>Emitido em ${hojeHora}</div></div>
+    <table><thead><tr><th class="n">#</th><th>Paciente</th><th class="n">Nota</th><th>Segmento</th><th class="n">Visitas</th><th class="n">Gasto total</th><th class="n">Ticket/visita</th><th class="n">Proc./visita</th><th>Última visita</th><th>Próx. retorno</th><th>Situação</th><th class="n">Potencial 12m</th></tr></thead>
+    <tbody>${linhas||'<tr><td colspan="12" style="text-align:center;padding:14px;color:#94A3B8">Nenhuma paciente na lista.</td></tr>'}</tbody></table>
+    <div class="ft">Uso interno · Gerado pelo Sistema de Gestão do Instituto Bruna Braga</div>
+  </body></html>`;
+  const w=window.open('','_blank');
+  if(!w){alert('Permita pop-ups para gerar o PDF.');return;}
+  w.document.write(html); w.document.close();
+  setTimeout(()=>{w.focus();w.print();},400);
 }
 
 /* ============================ RECALL DE PACIENTES ============================ */
@@ -3426,7 +3664,7 @@ function periodoAtual(grao){
 }
 function mesAno(s){const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];const[y,m]=s.split('-');return meses[+m-1]+' de '+y;}
 
-// calcula indicadores (LTV, CAC, recompra) sobre os atendimentos de um intervalo
+// calcula indicadores (ticket por paciente, recompra) sobre os atendimentos de um intervalo
 function calcIndicadores(ini,fim){
   const noPeriodo = DATA.atendimentos.filter(a=>a.data>=ini && a.data<=fim);
   const comp = noPeriodo.filter(a=>a.agenda==='Compareceu');
@@ -3443,11 +3681,7 @@ function calcIndicadores(ini,fim){
   const recorrentes=pacientes.filter(p=>p.recorrente).length;
   const txRecompra= totalPac? recorrentes/totalPac : 0;
   const ltv= totalPac? pacientes.reduce((s,p)=>s+p.valorTotal,0)/totalPac : 0;
-  // CAC: investimento em captação no período / clientes fechados (compareceram)
-  const captPeriodo = CAPTACAO.filter(c=>c.data>=ini && c.data<=fim);
-  const investido = captPeriodo.reduce((s,c)=>s+(c.gasto||c.investido||0),0);
-  const cac= totalPac? investido/totalPac : 0;
-  return {txRecompra, ltv, cac, totalPac, recorrentes, faturamento:comp.reduce((s,a)=>s+a.valor,0), nAtend:comp.length};
+  return {txRecompra, ltv, totalPac, recorrentes, faturamento:comp.reduce((s,a)=>s+a.valor,0), nAtend:comp.length};
 }
 // recebimentos por modalidade (+parcelas) dentro de um período
 function recebimentosPeriodo(ini,fim){
@@ -3508,8 +3742,8 @@ function renderAnalise(pg){
     <div class="trend-grid" style="grid-template-columns:repeat(4,1fr)">
       <div class="tcard" style="animation-delay:0ms"><div class="tc-head">Recompra</div><div class="tc-val" style="color:var(--green)">${PCT0(ind.txRecompra)}</div><div class="tc-sub">${ind.recorrentes} de ${ind.totalPac} pacientes</div></div>
       <div class="tcard" style="animation-delay:70ms"><div class="tc-head">Ticket médio</div><div class="tc-val">${BRL(ind.ltv)}</div><div class="tc-sub">por paciente no período</div></div>
-      <div class="tcard" style="animation-delay:140ms"><div class="tc-head">CAC</div><div class="tc-val">${BRL(ind.cac)}</div><div class="tc-sub">custo de aquisição</div></div>
-      <div class="tcard" style="animation-delay:210ms"><div class="tc-head">Ticket / CAC</div><div class="tc-val" style="color:${ind.cac&&ind.ltv/ind.cac>=3?'var(--green)':'var(--ink)'}">${ind.cac?(ind.ltv/ind.cac).toFixed(1).replace('.',',')+'x':'—'}</div><div class="tc-sub">retorno sobre aquisição</div></div>
+      <div class="tcard" style="animation-delay:140ms"><div class="tc-head">Pacientes atendidos</div><div class="tc-val">${ind.totalPac}</div><div class="tc-sub">pessoas diferentes no período</div></div>
+      <div class="tcard" style="animation-delay:210ms"><div class="tc-head">Visitas por paciente</div><div class="tc-val">${ind.totalPac?(ind.nAtend/ind.totalPac).toFixed(1).replace('.',','):'—'}</div><div class="tc-sub">atendimentos ÷ pacientes</div></div>
     </div>
     <div class="panel" style="margin-bottom:18px">
       <div class="panel-head"><div><h3>Receita por período</h3><div class="ph-sub">Faturamento e atendimentos ao longo do tempo</div></div></div>
@@ -3524,7 +3758,7 @@ function renderAnalise(pg){
       </div>
     </div>
     <div class="row two-eq">
-      <div class="panel"><h3>Receita por canal vs investimento</h3><div class="ph-sub">Onde o dinheiro rende mais</div>
+      <div class="panel"><h3>Receita por origem do paciente</h3><div class="ph-sub">De onde vieram as pacientes que mais faturam</div>
         <div class="chart-wrap"><canvas id="chRoi"></canvas></div>
       </div>
       <div class="panel"><h3>Concentração de receita</h3><div class="ph-sub">Procedimentos que sustentam o faturamento</div>
@@ -3575,14 +3809,14 @@ function projecaoBlock(k){
 }
 function drawAnaliseCharts(k, serie){
   if(typeof Chart==='undefined'){document.querySelectorAll('.chart-wrap').forEach(w=>w.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--grey);font-size:12px">Gráfico no navegador.</div>');return;}
-  const grid='#EEE8DC',tick='#8A8175';
+  const grid=document.body.classList.contains('light')?'#E3E8F1':'#24314D', tick=document.body.classList.contains('light')?'#5B6478':'#93A0B8';
   // série por grão (dia/semana/mês)
   if(serie){
     window.__serieAtual=serie;
     charts.serie=new Chart(document.getElementById('chSerie'),{type:'bar',
       data:{labels:serie.map(s=>s.chave),datasets:[
-        {type:'bar',label:'Receita',data:serie.map(s=>s.valor),backgroundColor:'#C9A24B',borderRadius:5,order:2,yAxisID:'y'},
-        {type:'line',label:'Atendimentos',data:serie.map(s=>s.atend),borderColor:'#9A7B2E',backgroundColor:'#9A7B2E',borderWidth:2,tension:.3,order:1,pointRadius:3,yAxisID:'y1'}
+        {type:'bar',label:'Receita',data:serie.map(s=>s.valor),backgroundColor:GOLD,borderRadius:5,order:2,yAxisID:'y'},
+        {type:'line',label:'Atendimentos',data:serie.map(s=>s.atend),borderColor:GOLD2,backgroundColor:GOLD2,borderWidth:2,tension:.3,order:1,pointRadius:3,yAxisID:'y1'}
       ]},
       options:{responsive:true,maintainAspectRatio:false,
         onClick:(ev,els)=>{ if(els&&els.length){ const s=window.__serieAtual[els[0].index]; if(s) verAtendimentosDoBucket(s); } },
@@ -3595,7 +3829,7 @@ function drawAnaliseCharts(k, serie){
   }
   charts.evol=new Chart(document.getElementById('chEvol'),{type:'bar',
     data:{labels:k.evolucao.map(e=>e.mes),datasets:[
-      {type:'bar',label:'Faturamento',data:k.evolucao.map(e=>e.fat),backgroundColor:'#C9A24B',borderRadius:5,order:2},
+      {type:'bar',label:'Faturamento',data:k.evolucao.map(e=>e.fat),backgroundColor:GOLD,borderRadius:5,order:2},
       {type:'line',label:'Lucro',data:k.evolucao.map(e=>e.lucro),borderColor:'#2E7D4F',backgroundColor:'#2E7D4F',borderWidth:2,tension:.3,order:1,pointRadius:4}
     ]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:tick,font:{size:11}}},
@@ -3603,13 +3837,13 @@ function drawAnaliseCharts(k, serie){
       scales:{y:{grid:{color:grid},ticks:{color:tick,callback:v=>'R$'+(v/1000)+'k'}},x:{grid:{display:false},ticks:{color:tick}}}}});
   charts.roi=new Chart(document.getElementById('chRoi'),{type:'bar',
     data:{labels:k.porCanal.map(c=>c.canal),datasets:[
-      {label:'Receita',data:k.porCanal.map(c=>c.receita),backgroundColor:'#C9A24B',borderRadius:5},
+      {label:'Receita',data:k.porCanal.map(c=>c.receita),backgroundColor:GOLD,borderRadius:5},
     ]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+BRL(c.parsed.y)}}},
       scales:{y:{grid:{color:grid},ticks:{color:tick,callback:v=>'R$'+(v/1000)+'k'}},x:{grid:{display:false},ticks:{color:tick,font:{size:10}}}}}});
   const proc=k.porProc;
   charts.conc=new Chart(document.getElementById('chConc'),{type:'doughnut',
-    data:{labels:proc.map(p=>p.proc),datasets:[{data:proc.map(p=>p.receita),backgroundColor:GOLDS,borderColor:'#fff',borderWidth:2}]},
+    data:{labels:proc.map(p=>p.proc),datasets:[{data:proc.map(p=>p.receita),backgroundColor:GOLDS,borderColor:COR_FUNDO,borderWidth:2}]},
     options:{responsive:true,maintainAspectRatio:false,cutout:'58%',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.label}: ${BRL(c.parsed)}`}}}}});
   document.getElementById('legA').innerHTML=proc.map((p,i)=>`<span><i style="background:${GOLDS[i%GOLDS.length]}"></i>${p.proc} ${PCT0(p.share)}</span>`).join('');
 }
@@ -4281,10 +4515,9 @@ function renderRelatorio(pg){
       <div>
         <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);font-weight:600;margin-bottom:12px">2 · Blocos a incluir</div>
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
-          ${chk('resumo','Resumo executivo','Faturamento, resultado, ticket, comparecimento e conversão')}
+          ${chk('resumo','Resumo executivo','Faturamento, resultado, ticket e comparecimento')}
           ${chk('atendimentos','Atendimentos detalhados','Cada consulta: data, paciente, procedimento, profissional, valor')}
           ${chk('faturamento','Faturamento por procedimento e canal','Quanto cada procedimento e canal gerou de receita')}
-          ${chk('leads','Leads e conversão','Funil por canal: leads, agendados, conversão')}
           ${chk('pacientes','Pacientes — novos x recorrentes','Base de pacientes, recompra e ranking por valor')}
           ${chk('caixa','Fluxo de caixa','Receitas, despesas, resultado e saldo por carteira')}
           ${chk('custoop','Custo operacional & hora clínica','Despesas do período e custo por hora/atendimento')}
@@ -4331,7 +4564,7 @@ function relatorioVendasHTML(){
   const totVend = (k.fatBruna||0) + (k.fatPeleBruto||0);
   const cardBruna = `
     <div style="flex:1;min-width:260px;background:var(--paper);border:1px solid var(--gold-l);border-radius:14px;padding:18px">
-      <div style="font-family:var(--serif,'Cormorant Garamond',serif);font-size:20px;margin-bottom:10px">Dra. Bruna</div>
+      <div style="font-family:var(--f-display);font-size:20px;margin-bottom:10px">Dra. Bruna</div>
       <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px"><span style="color:var(--grey)">Valor vendido</span><b>${BRL(bruna.vendido)}</b></div>
       <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px"><span style="color:var(--grey)">Despesas do mês</span><span style="color:var(--red)">− ${BRL(bruna.despesas)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px"><span style="color:var(--grey)">Material dos atendimentos</span><span style="color:var(--red)">− ${BRL(bruna.material)}</span></div>
@@ -4340,7 +4573,7 @@ function relatorioVendasHTML(){
   const cardsParc = parceiros.map(p=>{
     const lucroInst = p.instituto;
     return `<div style="flex:1;min-width:260px;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:18px">
-      <div style="font-family:var(--serif,'Cormorant Garamond',serif);font-size:20px;margin-bottom:2px">${p.nome}</div>
+      <div style="font-family:var(--f-display);font-size:20px;margin-bottom:2px">${p.nome}</div>
       <div style="font-size:11.5px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Profissional parceira · ${p.qtd} atend.</div>
       <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px"><span style="color:var(--grey)">Vendido</span><b>${BRL(p.receita)}</b></div>
       <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px"><span style="color:var(--grey)">Abatimento de material</span><span style="color:var(--red)">− ${BRL(p.custo)}</span></div>
@@ -4374,13 +4607,13 @@ function drawVendasCharts(){
   if(typeof Chart==='undefined') return;
   const {bruna, parceiros, k} = dadosVendas();
   const dark = document.body.classList.contains('dark');
-  const tick = dark?'#b9b2a3':'#7a7264', grid = dark?'rgba(255,255,255,.06)':'rgba(0,0,0,.06)';
+  const tick = dark?'#93A0B8':'#5B6478', grid = dark?'rgba(255,255,255,.06)':'rgba(0,0,0,.06)';
   // vendas por profissional (Bruna + cada parceiro)
   const labels=['Dra. Bruna', ...parceiros.map(p=>p.nome)];
   const vendas=[bruna.vendido, ...parceiros.map(p=>p.receita)];
   const c1=document.getElementById('vChVend');
   if(c1){ if(charts.vVend)charts.vVend.destroy(); charts.vVend=new Chart(c1,{type:'bar',
-    data:{labels,datasets:[{data:vendas,backgroundColor:'#C9A24B',borderRadius:6,maxBarThickness:46}]},
+    data:{labels,datasets:[{data:vendas,backgroundColor:GOLD,borderRadius:6,maxBarThickness:46}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
       tooltip:{callbacks:{label:c=>' '+BRL(c.parsed.y)}}},
       scales:{y:{grid:{color:grid},ticks:{color:tick,callback:v=>'R$ '+(v/1000)+'k'}},x:{grid:{display:false},ticks:{color:tick,font:{size:11}}}}}}); }
@@ -4389,7 +4622,7 @@ function drawVendasCharts(){
   if(c2){ if(charts.vRep)charts.vRep.destroy();
     if(parceiros.length){ charts.vRep=new Chart(c2,{type:'bar',
       data:{labels:parceiros.map(p=>p.nome),datasets:[
-        {label:'Repasse',data:parceiros.map(p=>p.repasse),backgroundColor:'#9A7B2E',borderRadius:5,maxBarThickness:40},
+        {label:'Repasse',data:parceiros.map(p=>p.repasse),backgroundColor:GOLD2,borderRadius:5,maxBarThickness:40},
         {label:'Lucro Instituto',data:parceiros.map(p=>p.instituto),backgroundColor:'#3b7a57',borderRadius:5,maxBarThickness:40}
       ]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:12,font:{size:11},color:tick}},
@@ -4656,7 +4889,6 @@ function gerarPDF(){
         <div class="card"><div class="cl">Atendimentos</div><div class="cv">${k.nAtend}</div></div>
         <div class="card"><div class="cl">Ticket médio</div><div class="cv">${BRL(k.ticket)}</div></div>
         <div class="card"><div class="cl">Comparecimento</div><div class="cv">${PCT0(k.txComp)}</div></div>
-        <div class="card"><div class="cl">Conversão de leads</div><div class="cv">${PCT0(k.txConv)}</div></div>
       </div>`;
       body+=sec(secN++,'Resumo executivo','Principais indicadores do período', tbl(['Indicador','Valor'],[
         ['Faturamento (receita de procedimentos)',BRL(k.faturamento)],
@@ -4667,7 +4899,6 @@ function gerarPDF(){
         ['· dos quais, novos (1ª consulta)',k.atendNovos],
         ['· dos quais, recorrentes',k.atendRecorrentes],
         ['Taxa de comparecimento',PCT(k.txComp)],
-        ['Conversão de leads',PCT(k.txConv)],
         ['Saldo em caixa até o fim do período',BRL(cc.saldoTotal)],
       ].map(r=>`<tr><td>${r[0]}</td><td class="n">${r[1]}</td></tr>`).join(''),[1]));
     }
@@ -4702,10 +4933,6 @@ function gerarPDF(){
       body+=sec(secN++,'Faturamento por canal','De onde vieram os pacientes que geraram receita', tbl(['Canal','Atendimentos','Receita'],rowsCanal,[1,2]));
     }
 
-    if(on('leads')){
-      const rows=k.porCanal.map(c=>`<tr><td>${c.canal}</td><td class="n">${c.leads}</td><td class="n">${c.fechados}</td><td class="n">${PCT0(c.conv)}</td><td class="n">${BRL(c.receita)}</td></tr>`).join('');
-      body+=sec(secN++,'Leads e conversão','Funil de captação por canal no período', tbl(['Canal','Leads','Agendados','Conversão','Receita gerada'],rows,[1,2,3,4]));
-    }
 
     if(on('pacientes')){
       body+=sec(secN++,'Pacientes — visão geral','Base de pacientes atendidos no período', tbl(['Indicador','Valor'],[
@@ -4827,7 +5054,6 @@ function gerarPDF(){
 /* ============================ CONFIGURAÇÕES ============================ */
 const CONFIG_LISTAS = {
   procedimentos:{label:'Procedimentos',desc:'Serviços oferecidos pela clínica',get:()=>PROCS,set:v=>{PROCS=v;}},
-  plataformas:{label:'Plataformas de captação',desc:'Origens usadas no relatório de marketing',get:()=>PLATAFORMAS,set:v=>{PLATAFORMAS=v;}},
   func_tipos:{label:'Tipos de funcionário',desc:'Categorias da equipe',get:()=>FUNC_TIPOS,set:v=>{FUNC_TIPOS=v;}},
   canais:{label:'Canais de origem',desc:'De onde o paciente veio',get:()=>CANAIS,set:v=>{CANAIS=v;}},
 };
@@ -4836,7 +5062,7 @@ const CONFIG_LISTAS = {
 const PAGINA_LABEL={painel:'Principal (Painel)',custos:'Custos & Despesas',caixa:'Livro-Caixa',
   contas:'Contas a Pagar/Receber',horaclinica:'Custo Operacional',materialparc:'Material de Parceiros',
   comissoes:'Metas & Bonificações',funcionarios:'Funcionários',pacientes:'Pacientes',atendimentos:'Atendimentos',
-  estoque:'Estoque',leads:'Captação de Leads',recall:'Recall de Pacientes',analise:'Análise Avançada',
+  estoque:'Estoque',potencial:'Potencial & Prioridade',recall:'Recall de Pacientes',analise:'Análise Avançada',
   comparativo:'Comparativo Mensal',checkup:'Check-up da Clínica',relatorio:'Relatório PDF',config:'Configurações',
   conformidade:'Conformidade',documentos:'Documentos'};
 function addPerfil(){
@@ -4901,7 +5127,7 @@ function perfisAcessoHTML(){
     'Principal':['painel'],
     'Financeiro':['custos','caixa','contas','horaclinica','materialparc','comissoes'],
     'Cadastros':['funcionarios','pacientes','atendimentos','estoque'],
-    'Marketing':['leads','recall'],
+    'Funil de Pacientes':['potencial','recall'],
     'Relatórios':['analise','comparativo','checkup','relatorio'],
     'Controle':['config','conformidade','documentos'],
   };
@@ -4916,7 +5142,7 @@ function perfisAcessoHTML(){
         </div>
       </div>`).join('');
     const dash=p.dashboard||{};
-    const dashChk=[['faturamento','Faturamento'],['atendimentos','Atendimentos'],['ticket','Ticket médio'],['comparecimento','Comparecimento'],['conversao','Conversão de leads']]
+    const dashChk=[['faturamento','Faturamento'],['atendimentos','Atendimentos'],['ticket','Ticket médio'],['comparecimento','Comparecimento']]
       .map(([campo,label])=>`<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;margin-right:12px"><input type="checkbox" ${dash[campo]?'checked':''} onchange="togglePerfilDash(${i},'${campo}')" style="accent-color:var(--gold-d)">${label}</label>`).join('');
     return `<div style="border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px;background:var(--paper)">
       <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
@@ -4987,7 +5213,7 @@ function renderConfig(pg){
     </div>` : '';
   const linhasML=metasMes.map((m,i)=>{
     const T=META_TIPOS[m.tipo]||META_TIPOS.faturamento;
-    const tipoOpts=Object.entries(META_TIPOS).map(([k,v])=>`<option value="${k}" ${k===m.tipo?'selected':''}>${v.label}</option>`).join('');
+    const tipoOpts=Object.entries(META_TIPOS).filter(([k])=>!['leads','conversao'].includes(k)||k===m.tipo).map(([k,v])=>`<option value="${k}" ${k===m.tipo?'selected':''}>${v.label}</option>`).join('');
     let filtroUI='';
     if(T.filtravel && T.filtravel.length){
       const ftOpts=`<option value="todos" ${(!m.filtroTipo||m.filtroTipo==='todos')?'selected':''}>Toda a clínica</option>`+
@@ -5074,7 +5300,7 @@ function renderConfig(pg){
   const palAtual=paletaAtual();
   const paletaBlock=`
     <div class="panel" style="margin-bottom:18px">
-      <div class="panel-head"><div><h3>Aparência</h3><div class="ph-sub">Tema e paleta de cor de destaque do sistema</div></div></div>
+      <div class="panel-head"><div><h3>Aparência</h3><div class="ph-sub">Tema e cor de destaque — o padrão é o Azul do CRM</div></div></div>
       <div style="font-size:13px;color:var(--grey);margin-bottom:14px">Escolha a cor de destaque do app. Funciona junto com o tema claro/escuro (botão no topo).</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px">
         ${PALETAS.map(p=>`
@@ -5090,7 +5316,7 @@ function renderConfig(pg){
     ${paletaBlock}
     <div class="panel" style="margin-bottom:18px">
       <div class="panel-head"><div><h3>Configurações gerais</h3><div class="ph-sub">Crie e edite as listas do sistema — sem precisar mexer no código</div></div></div>
-      <div style="font-size:13px;color:var(--grey);line-height:1.6">Tudo que você adicionar aqui aparece automaticamente nos formulários do sistema (atendimentos, captação, funcionários, etc.). ${MODO_NUVEM?'As alterações são salvas na nuvem.':'<b style="color:var(--amber)">Modo local:</b> as alterações valem só nesta sessão até conectar o Supabase.'}</div>
+      <div style="font-size:13px;color:var(--grey);line-height:1.6">Tudo que você adicionar aqui aparece automaticamente nos formulários do sistema (atendimentos, funcionários, etc.). ${MODO_NUVEM?'As alterações são salvas na nuvem.':'<b style="color:var(--amber)">Modo local:</b> as alterações valem só nesta sessão até conectar o Supabase.'}</div>
     </div>
     ${metasLivres}
     ${peleBlock}
@@ -5268,18 +5494,19 @@ function aplicarTema(t){
 function alternarTema(){
   const atual = document.body.classList.contains('light') ? 'light' : 'dark';
   const novo = atual==='light' ? 'dark' : 'light';
-  try{ localStorage.setItem('ibb_tema', novo); }catch(e){}
+  try{ localStorage.setItem('ibb_tema2', novo); }catch(e){}
   aplicarTema(novo);
 }
 // aplica o tema salvo ao carregar
 (function(){
-  let t='dark';
-  try{ t = localStorage.getItem('ibb_tema') || 'dark'; }catch(e){}
+  let t='light';
+  try{ t = localStorage.getItem('ibb_tema2') || 'light'; }catch(e){}
   window.addEventListener('DOMContentLoaded',()=>aplicarTema(t));
 })();
 
 /* ============================ PALETAS DE COR ============================ */
 const PALETAS=[
+  {id:'azul',     nome:'Azul (CRM)', cor:'#2563EB'},
   {id:'ouro',     nome:'Ouro',      cor:'#D8B468'},
   {id:'rose',     nome:'Rosé',      cor:'#E59CB0'},
   {id:'esmeralda',nome:'Esmeralda', cor:'#6FCFA0'},
@@ -5294,12 +5521,12 @@ const PALETAS=[
 function aplicarPaleta(id){
   PALETAS.forEach(p=>document.body.classList.remove('pal-'+p.id));
   document.body.classList.add('pal-'+id);
-  try{ localStorage.setItem('ibb_paleta', id); }catch(e){}
+  try{ localStorage.setItem('ibb_paleta2', id); }catch(e){}
   // re-render se estiver numa página com gráficos/seletor
   try{ if(typeof currentPage!=='undefined') go(currentPage); }catch(e){}
 }
 function paletaAtual(){
-  try{ return localStorage.getItem('ibb_paleta') || 'ouro'; }catch(e){ return 'ouro'; }
+  try{ return localStorage.getItem('ibb_paleta2') || 'azul'; }catch(e){ return 'azul'; }
 }
 (function(){
   window.addEventListener('DOMContentLoaded',()=>{ document.body.classList.add('pal-'+paletaAtual()); });
@@ -5374,7 +5601,7 @@ function renderMaterialParc(pg){
       <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">
         ${profs.map(p=>`<div style="flex:1;min-width:180px;background:var(--cream);border:1px solid var(--line);border-radius:12px;padding:14px">
           <div style="font-size:11.5px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">${p.nome}</div>
-          <div style="font-size:22px;font-family:var(--serif,'Cormorant Garamond',serif);margin-top:4px">${BRL(p.v)}</div>
+          <div style="font-size:22px;font-family:var(--f-display);margin-top:4px">${BRL(p.v)}</div>
         </div>`).join('')}
       </div>
     </div>`:''}
@@ -5516,7 +5743,7 @@ function dreBlock(horaClinicaUnit){
   const lucroTot=lucroBruna+lucroPele;
   const col=(titulo,linhas,destaque)=>`
     <div style="flex:1;min-width:230px;background:var(--paper);border:1px solid ${destaque?'var(--gold-l)':'var(--line)'};border-radius:14px;padding:16px">
-      <div style="font-family:var(--serif,'Cormorant Garamond',serif);font-size:19px;margin-bottom:10px">${titulo}</div>
+      <div style="font-family:var(--f-display);font-size:19px;margin-bottom:10px">${titulo}</div>
       ${linhas.map(l=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13.5px">
         <span style="color:${l.forte?'var(--ink)':'var(--grey)'};${l.forte?'font-weight:600':''}">${l.nome}</span>
         <span style="color:${l.cor||'var(--ink)'};${l.forte?'font-weight:700':''}">${l.neg?'− ':''}${BRL(Math.abs(l.val))}</span></div>`).join('')}
@@ -5550,7 +5777,7 @@ function dreBlock(horaClinicaUnit){
       ],true)}
     </div>
     ${(k.parceiros&&k.parceiros.length)?`<div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
-      <div style="font-family:var(--serif,'Cormorant Garamond',serif);font-size:18px;margin-bottom:4px">Repasse a pagar por profissional</div>
+      <div style="font-family:var(--f-display);font-size:18px;margin-bottom:4px">Repasse a pagar por profissional</div>
       <div class="ph-sub" style="margin-bottom:12px">O que cada parceiro gerou e quanto há a repassar no período — base para o pagamento dos colaboradores</div>
       <div style="overflow-x:auto">
         <table class="data"><thead><tr>
@@ -5652,7 +5879,7 @@ function renderContas(pg){
         </div>
         <div style="text-align:right">
           <div style="font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.5px">Valor da parcela</div>
-          <div style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600;color:${cor}">${BRL(c.valorParcela)}</div>
+          <div style="font-family:var(--f-display);font-size:22px;font-weight:600;color:${cor}">${BRL(c.valorParcela)}</div>
           <div style="font-size:11px;color:var(--grey)">total ${BRL(total)}</div>
         </div>
       </div>
@@ -5714,7 +5941,7 @@ function abrirContaForm(){
   delete box.dataset.editId; // garante que é cadastro novo (editarConta seta depois)
   box.innerHTML=`
     <div style="background:var(--cream);border:1px solid var(--gold-l);border-radius:14px;padding:18px;margin-bottom:18px">
-      <div class="ct-form-title" style="font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:600;margin-bottom:14px">Nova conta</div>
+      <div class="ct-form-title" style="font-family:var(--f-display);font-size:18px;font-weight:600;margin-bottom:14px">Nova conta</div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px">
         <div class="field"><label>Tipo</label><select id="ct_tipo" style="${fs}"><option value="pagar">A pagar</option><option value="receber">A receber</option></select></div>
         <div class="field"><label>Natureza</label><select id="ct_nat" onchange="contaNatMudou()" style="${fs}"><option value="parcelada">Parcelada (ex: 10x)</option><option value="recorrente">Recorrente (todo mês)</option><option value="avulsa">Avulsa (única)</option></select></div>
@@ -6124,12 +6351,12 @@ function renderComparativo(pg){
 
     <div class="row two-eq">
       <div class="panel" style="border-left:3px solid var(--green)"><h3>Melhor mês</h3><div class="ph-sub">Maior resultado</div>
-        <div style="font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:600;margin-top:8px">${mesAnoCurto(melhor.ym)}</div>
+        <div style="font-family:var(--f-display);font-size:24px;font-weight:600;margin-top:8px">${mesAnoCurto(melhor.ym)}</div>
         <div style="color:var(--green);font-size:18px;font-weight:600">${BRL(melhor.resultado)}</div>
         <div style="font-size:13px;color:var(--grey);margin-top:6px">Faturamento ${BRL(melhor.faturamento)} · custo ${BRL(melhor.custo)}</div>
       </div>
       <div class="panel" style="border-left:3px solid var(--red)"><h3>Mês mais apertado</h3><div class="ph-sub">Menor resultado</div>
-        <div style="font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:600;margin-top:8px">${mesAnoCurto(pior.ym)}</div>
+        <div style="font-family:var(--f-display);font-size:24px;font-weight:600;margin-top:8px">${mesAnoCurto(pior.ym)}</div>
         <div style="color:${pior.resultado>=0?'var(--green)':'var(--red)'};font-size:18px;font-weight:600">${BRL(pior.resultado)}</div>
         <div style="font-size:13px;color:var(--grey);margin-top:6px">Faturamento ${BRL(pior.faturamento)} · custo ${BRL(pior.custo)}</div>
       </div>
@@ -6139,8 +6366,8 @@ function renderComparativo(pg){
     const ctx=document.getElementById('chComp');
     if(charts.comp)charts.comp.destroy();
     const isLight=document.body.classList.contains('light');
-    const grid=isLight?'#E7E0D4':'#383229';
-    const tick=isLight?'#8A8175':'#B0A899';
+    const grid=isLight?'#E3E8F1':'#24314D';
+    const tick=isLight?'#5B6478':'#93A0B8';
     charts.comp=new Chart(ctx,{type:'bar',
       data:{labels:ult.map(m=>mesAnoCurto(m.ym)),datasets:[
         {label:'Faturamento',data:ult.map(m=>m.faturamento),backgroundColor:'#D8B468',borderRadius:5},
@@ -6189,7 +6416,7 @@ function projecaoMensal(dados){
           const resultadoProj=p.val-mediaCusto;
           return `<div style="padding:14px;border-radius:12px;background:var(--cream);border:1px solid var(--line)">
             <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--grey)">${mesAnoCurto(p.ym)}</div>
-            <div style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600;color:var(--gold);margin:4px 0">${BRL(p.val)}</div>
+            <div style="font-family:var(--f-display);font-size:22px;font-weight:600;color:var(--gold);margin:4px 0">${BRL(p.val)}</div>
             <div style="font-size:12px;color:var(--grey)">faturamento previsto</div>
             <div style="font-size:12px;color:${resultadoProj>=0?'var(--green)':'var(--red)'};margin-top:4px">resultado ~${BRL(resultadoProj)}</div>
           </div>`;
@@ -6322,9 +6549,9 @@ function renderCheckup(pg){
     <div class="panel" style="margin-bottom:18px">
       <div class="panel-head"><div><h3 style="font-size:19px">Check-up da Clínica</h3><div class="ph-sub">Diagnóstico automático de ${mesAnoCurto(mesRef)} — pontos que merecem sua atenção</div></div></div>
       <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:6px">
-        <div style="flex:1;min-width:130px;text-align:center;padding:14px;border-radius:12px;background:var(--red-bg)"><div style="font-size:30px;font-weight:700;color:var(--red);font-family:'Cormorant Garamond',serif">${nCrit}</div><div style="font-size:12px;color:var(--grey)">pontos críticos</div></div>
-        <div style="flex:1;min-width:130px;text-align:center;padding:14px;border-radius:12px;background:var(--amber-bg)"><div style="font-size:30px;font-weight:700;color:var(--amber);font-family:'Cormorant Garamond',serif">${nAten}</div><div style="font-size:12px;color:var(--grey)">pontos de atenção</div></div>
-        <div style="flex:1;min-width:130px;text-align:center;padding:14px;border-radius:12px;background:var(--green-bg)"><div style="font-size:30px;font-weight:700;color:var(--green);font-family:'Cormorant Garamond',serif">${achados.filter(a=>a.nivel==='bom').length}</div><div style="font-size:12px;color:var(--grey)">pontos positivos</div></div>
+        <div style="flex:1;min-width:130px;text-align:center;padding:14px;border-radius:12px;background:var(--red-bg)"><div style="font-size:30px;font-weight:700;color:var(--red);font-family:var(--f-display)">${nCrit}</div><div style="font-size:12px;color:var(--grey)">pontos críticos</div></div>
+        <div style="flex:1;min-width:130px;text-align:center;padding:14px;border-radius:12px;background:var(--amber-bg)"><div style="font-size:30px;font-weight:700;color:var(--amber);font-family:var(--f-display)">${nAten}</div><div style="font-size:12px;color:var(--grey)">pontos de atenção</div></div>
+        <div style="flex:1;min-width:130px;text-align:center;padding:14px;border-radius:12px;background:var(--green-bg)"><div style="font-size:30px;font-weight:700;color:var(--green);font-family:var(--f-display)">${achados.filter(a=>a.nivel==='bom').length}</div><div style="font-size:12px;color:var(--grey)">pontos positivos</div></div>
       </div>
     </div>
 
