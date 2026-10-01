@@ -402,7 +402,7 @@ table.data tbody tr:hover{background:color-mix(in srgb,var(--gold) 5%,var(--pape
 .pot-hero-ticks b{color:#fff}
 .pot-hero-r{border-left:1px solid rgba(255,255,255,.2);padding-left:30px;display:flex;flex-direction:column;gap:2px;min-width:220px}
 .pot-hero-r>span{font-size:13px;color:#BFD3FF}.pot-hero-r>b{font-size:38px;font-weight:700;line-height:1.1}
-.pot-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}
+.pot-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;margin-bottom:18px}
 .pot-kpi{display:flex;flex-direction:column;gap:3px;padding:16px 18px}
 .pot-kpi>span{font-size:13px;color:var(--grey)}.pot-kpi>b{font-size:26px;font-weight:700;letter-spacing:-.01em}.pot-kpi>small{font-size:12px;color:var(--grey)}
 .pot-segs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}
@@ -435,7 +435,7 @@ table.data.pot-table{font-size:13px}table.data.pot-table td{vertical-align:middl
 .pot-nota b{font-size:24px;line-height:1}.pot-nota span{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--grey)}
 .pot-fats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 18px}
 .pot-fat-top{display:flex;justify-content:space-between;font-size:12.5px;color:var(--grey);margin-bottom:4px}.pot-fat-top b{color:var(--ink)}
-@media(max-width:1080px){.pot-kpis,.pot-segs{grid-template-columns:repeat(2,minmax(0,1fr))}.pot-fats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:1280px){.pot-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:1080px){.pot-kpis,.pot-segs{grid-template-columns:repeat(2,minmax(0,1fr))}.pot-fats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:760px){
   .topbar{padding:12px 14px}.topbar .title{font-size:22px}.content{padding:14px 14px 40px}
   .pot-hero{padding:20px}.pot-hero-r{border-left:0;padding-left:0;border-top:1px solid rgba(255,255,255,.2);padding-top:14px;width:100%}
@@ -3150,12 +3150,17 @@ function fichaPaciente(nome){
 // NOTA DE POTENCIAL (0 a 100) = soma ponderada de 6 fatores. Os fatores de valor são medidos em
 // PERCENTIL dentro da própria base da clínica (a melhor paciente em gasto ganha o máximo, a mediana
 // ganha metade), assim a nota se ajusta sozinha à realidade do Instituto.
+// Ritmo de recorrência da clínica: retorno a cada ~3 meses, 3 a 4 visitas por ano.
+// Ajuste aqui se o padrão mudar.
+const POT_CICLO_DIAS=90;          // intervalo de referência entre visitas
+const POT_VISITAS_ANO=[3,4];      // faixa esperada de visitas por ano
 const POT_PESOS=[
-  {id:'gasto',    label:'Quanto já gastou',          peso:30, desc:'Valor total investido na clínica (todo o histórico).'},
+  {id:'gasto',    label:'Quanto já gastou',          peso:25, desc:'Valor total investido na clínica (todo o histórico).'},
   {id:'ticket',   label:'Ticket médio por visita',   peso:20, desc:'Média gasta a cada ida à clínica.'},
-  {id:'visitas',  label:'Quantas vezes veio',        peso:20, desc:'Número de dias diferentes em que foi atendida.'},
+  {id:'frequencia',label:'Frequência no ano',        peso:15, desc:'Visitas nos últimos 12 meses comparadas com o esperado (3 a 4 por ano; proporcional para quem começou há menos de 1 ano).'},
+  {id:'visitas',  label:'Quantas vezes veio',        peso:10, desc:'Total de dias diferentes em que foi atendida (fidelidade de longo prazo).'},
   {id:'procs',    label:'Procedimentos por visita',  peso:10, desc:'Se costuma fazer vários procedimentos de uma vez ou só um.'},
-  {id:'recencia', label:'Está ativa (recência)',     peso:15, desc:'Dias desde a última visita comparados com o intervalo habitual de retorno dela.'},
+  {id:'recencia', label:'Está ativa (recência)',     peso:15, desc:'Dias desde a última visita comparados com o ciclo de retorno dela (referência de 3 meses).'},
   {id:'presenca', label:'Comparecimento',            peso:5,  desc:'Penaliza faltas (no-show) registradas.'},
 ];
 const POT_SEGMENTOS=[
@@ -3213,40 +3218,49 @@ function potencialPacientes(){
     const intervaloProprio=intervalos.length?intervalos.reduce((s,x)=>s+x,0)/intervalos.length:null;
     const umAno=_potSomaDias(hoje,-365);
     const gasto12m=hist.filter(a=>a.data>=umAno).reduce((s,a)=>s+(+a.valor||0),0);
+    const visitas12m=dias.filter(d=>d>=umAno).length;
     // tendência: ticket das 2 últimas visitas x ticket médio das anteriores
     const valorDia=dias.map(d=>hist.filter(a=>a.data===d).reduce((s,a)=>s+(+a.valor||0),0));
     let tendencia=0;
     if(valorDia.length>=3){ const rec=(valorDia[valorDia.length-1]+valorDia[valorDia.length-2])/2; const ant=valorDia.slice(0,-2).reduce((s,x)=>s+x,0)/(valorDia.length-2); tendencia=ant>0?(rec-ant)/ant:0; }
     const topProcs=Object.entries(procSet).sort((a,b)=>b[1]-a[1]).map(x=>x[0]);
     return {nome, visitas, gasto, ticket:visitas?gasto/visitas:0, nProcs, procsVisita:visitas?nProcs/visitas:0,
-      primeira, ultima, diasSemVir:_potDias(ultima,hoje), intervaloProprio, gasto12m, tendencia,
+      primeira, ultima, diasSemVir:_potDias(ultima,hoje), diasDeCasa:_potDias(primeira,hoje), intervaloProprio, nIntervalos:intervalos.length, somaIntervalos:intervalos.reduce((s,x)=>s+x,0), gasto12m, visitas12m, tendencia,
       faltas:faltas[nome]||0, canal:hist[0].canal||'', procedimentos:topProcs, valorDia};
   });
   if(!base.length) return [];
-  // intervalo de retorno de referência da clínica (mediana de quem já voltou) — usado para quem veio 1 vez
-  const intervalosClinica=base.filter(p=>p.intervaloProprio).map(p=>p.intervaloProprio);
-  const intervaloClinica=Math.max(30, Math.round(_potMediana(intervalosClinica)||120));
+  // ciclo de referência da clínica: retorno a cada ~3 meses (POT_CICLO_DIAS)
+  const intervaloClinica=POT_CICLO_DIAS;
+  const visitasAnoAlvo=(POT_VISITAS_ANO[0]+POT_VISITAS_ANO[1])/2; // 3,5
   // taxa de retorno da clínica: quantas pacientes voltaram pelo menos uma vez (só entre quem já teve tempo de voltar)
   const elegiveis=base.filter(p=>p.visitas>1 || p.diasSemVir>=intervaloClinica);
   const taxaRetorno=elegiveis.length? Math.min(0.85,Math.max(0.2, elegiveis.filter(p=>p.visitas>1).length/elegiveis.length)) : 0.4;
+  // ticket médio por visita da clínica (referência para quem tem pouco histórico)
+  const ticketClinica=base.reduce((s,p)=>s+p.gasto,0)/Math.max(1,base.reduce((s,p)=>s+p.visitas,0));
   const ordGasto=base.map(p=>p.gasto).sort((a,b)=>a-b);
   const ordTicket=base.map(p=>p.ticket).sort((a,b)=>a-b);
   const ordVisitas=base.map(p=>p.visitas).sort((a,b)=>a-b);
   const ordProcs=base.map(p=>p.procsVisita).sort((a,b)=>a-b);
   base.forEach(p=>{
-    // intervalo habitual: o da própria paciente (com 2+ retornos), puxado para o da clínica quando há poucos dados
-    const intervalo = p.intervaloProprio
-      ? Math.max(21, Math.round(p.visitas>=3 ? p.intervaloProprio : (p.intervaloProprio+intervaloClinica)/2))
-      : intervaloClinica;
+    // ciclo de retorno da paciente: parte dos 3 meses da clínica e vai se ajustando ao ritmo real dela
+    // conforme acumula retornos (quem volta antes, com histórico, passa a ter ciclo menor).
+    // Fórmula: (soma dos intervalos dela + 2 × 90) ÷ (nº de intervalos + 2), entre 30 e 180 dias.
+    const intervalo = Math.min(180, Math.max(30, Math.round((p.somaIntervalos + 2*intervaloClinica)/(p.nIntervalos + 2))));
     p.intervalo=intervalo;
-    const r=p.diasSemVir/intervalo; // 1 = exatamente no intervalo habitual
+    const r=p.diasSemVir/intervalo; // 1 = exatamente no ciclo
     let recencia;
-    if(r<=1) recencia=1; else if(r<=1.5) recencia=1-(r-1)*0.6; else if(r<=3) recencia=0.7-(r-1.5)*0.4; else recencia=Math.max(0,0.1-(r-3)*0.05);
+    if(r<=1) recencia=1; else if(r<=1.33) recencia=1-(r-1)*0.9; else if(r<=2.5) recencia=0.7-(r-1.33)*0.43; else recencia=Math.max(0,0.2-(r-2.5)*0.13);
     if(p.diasSemVir>540) recencia=0;
+    // frequência: visitas nos últimos 12 meses x esperado (3,5/ano; proporcional ao tempo de casa se < 1 ano)
+    const casa=Math.min(365,p.diasDeCasa);
+    const esperado=Math.max(1, Math.min(visitasAnoAlvo, 1+casa/(365/visitasAnoAlvo)));
+    const frequencia = casa<intervaloClinica ? 0.5 : Math.min(1, p.visitas12m/esperado);
+    p.visitasEsperadas=esperado;
     const presenca = 1 - Math.min(1, p.faltas/Math.max(1,p.visitas+p.faltas)*2);
     const f={
       gasto:   p.gasto>0 ? _potPercentil(ordGasto,p.gasto) : 0,
       ticket:  p.ticket>0 ? _potPercentil(ordTicket,p.ticket) : 0,
+      frequencia,
       visitas: _potPercentil(ordVisitas,p.visitas),
       procs:   _potPercentil(ordProcs,p.procsVisita),
       recencia,
@@ -3259,18 +3273,21 @@ function potencialPacientes(){
     p.segmento=POT_SEGMENTOS.find(sg=>p.score>=sg.min)||POT_SEGMENTOS[POT_SEGMENTOS.length-1];
     // status de retorno (para marcar a recorrência)
     let st;
-    if(p.visitas===1 && p.diasSemVir<=Math.min(60,intervalo)) st=POT_STATUS.nova;
-    else if(r>3 || p.diasSemVir>365) st=POT_STATUS.risco;
-    else if(r>1.5) st=POT_STATUS.atrasada;
+    if(p.visitas===1 && r<0.85) st=POT_STATUS.nova;
+    else if(r>2.5 || p.diasSemVir>365) st=POT_STATUS.risco;
+    else if(r>1.33) st=POT_STATUS.atrasada;
     else if(r>=0.85) st=POT_STATUS.retornar;
     else st=POT_STATUS.emdia;
     p.status=st;
     p.proximoRetorno=_potSomaDias(p.ultima,intervalo);
     // potencial de gasto nos próximos 12 meses = ticket × retornos esperados no ano × chance de seguir ativa
-    const retornosAno=Math.min(12, 365/intervalo);
+    const retornosAno=Math.min(6, Math.max(1, 365/intervalo)); // 90 dias ≈ 4 visitas/ano
     // quem veio só 1 vez ainda não provou que volta: aplica a taxa de retorno real da clínica
     const chanceAtiva=Math.max(0.05, (recencia*0.85 + presenca*0.15) * (p.visitas===1 ? taxaRetorno : 1));
-    p.potencial12m=Math.round(p.ticket*retornosAno*chanceAtiva);
+    // ticket projetado: o dela, puxado levemente para a média da clínica quando há poucas visitas
+    // (uma visita muito alta ou muito baixa sozinha não define o padrão)
+    const ticketProj=(p.ticket*p.visitas + ticketClinica)/(p.visitas+1);
+    p.potencial12m=Math.round(ticketProj*retornosAno*chanceAtiva);
     p.perfil = p.procsVisita>=2 ? 'Combina vários procedimentos' : p.procsVisita>=1.4 ? 'Às vezes combina procedimentos' : 'Um procedimento por visita';
     p.perfilCurto = p.procsVisita>=2 ? 'Combina vários' : p.procsVisita>=1.4 ? 'Às vezes combina' : '1 proc. por visita';
   });
@@ -3317,7 +3334,7 @@ function renderPotencialLista(){
     return `<tr onclick="abrirFichaPot(${i})" style="cursor:pointer">
       <td><div style="font-weight:600">${rank?`<span class="pot-rank">${rank}</span>`:''}${_potEsc(p.nome)}</div><div class="pot-sub">${_potEsc(p.perfilCurto)}${p.faltas?` · ${p.faltas} falta${p.faltas>1?'s':''}`:''}</div></td>
       <td style="min-width:108px">${_potBarra(p.score,p.segmento.cor)}<span class="chip" style="margin-top:5px;color:${p.segmento.cor};background:${p.segmento.cor}1A">${p.segmento.label}</span></td>
-      <td class="ctr">${p.visitas}</td>
+      <td class="ctr">${p.visitas}<div class="pot-sub" title="Visitas nos últimos 12 meses (referência ${POT_VISITAS_ANO[0]} a ${POT_VISITAS_ANO[1]})">${p.visitas12m} no ano</div></td>
       <td class="num">${BRL(p.gasto)}</td>
       <td class="num">${BRL(p.ticket)} ${tend}</td>
       <td class="ctr">${p.procsVisita.toFixed(1).replace('.',',')}</td>
@@ -3354,7 +3371,8 @@ function potencialFichaHTML(nome){
       <div class="pot-nota" style="border-color:${p.segmento.cor};color:${p.segmento.cor}"><b>${p.score}</b><span>nota</span></div>
       <div style="flex:1;min-width:200px">
         <div style="font-weight:600;font-size:15px">${p.segmento.label} · <span class="chip ${p.status.cls}">${p.status.label}</span></div>
-        <div class="pot-sub">${p.perfil} · ${p.procsVisita.toFixed(1).replace('.',',')} procedimento(s) por visita · retorna a cada ~${p.intervalo} dias · próximo retorno sugerido ${fmtDateFull(p.proximoRetorno)}</div>
+        <div class="pot-sub">${p.perfil} · ${p.procsVisita.toFixed(1).replace('.',',')} procedimento(s) por visita · ciclo de retorno ~${p.intervalo} dias · próximo retorno sugerido ${fmtDateFull(p.proximoRetorno)}</div>
+        <div class="pot-sub">${p.visitas12m} visita${p.visitas12m===1?'':'s'} nos últimos 12 meses (esperado: ${p.diasDeCasa>=365?POT_VISITAS_ANO[0]+' a '+POT_VISITAS_ANO[1]:'~'+Math.round(p.visitasEsperadas)+' pelo tempo de casa'})</div>
         <div class="pot-sub">Potencial estimado nos próximos 12 meses: <b style="color:var(--ink)">${BRL(p.potencial12m)}</b> · gasto nos últimos 12 meses: ${BRL(p.gasto12m)}</div>
       </div>
     </div>
@@ -3375,6 +3393,10 @@ function renderPotencial(pg){
   const shareTop20=L.length? [...L].sort((a,b)=>b.gasto-a.gasto).slice(0,top20).reduce((s,p)=>s+p.gasto,0)/totGasto : 0;
   const intervalos=L.filter(p=>p.intervaloProprio).map(p=>p.intervaloProprio);
   const intMed=intervalos.length?Math.round(_potMediana(intervalos)):null;
+  // visitas/ano: só quem já tem 1 ano de casa (para não distorcer com pacientes novas)
+  const veteranas=L.filter(p=>p.diasDeCasa>=365);
+  const visAno=veteranas.length? veteranas.reduce((s,p)=>s+p.visitas12m,0)/veteranas.length : null;
+  const noRitmo=veteranas.filter(p=>p.visitas12m>=POT_VISITAS_ANO[0]).length;
   const segCards=porSeg.map(sg=>`
     <button class="pot-seg ${POT_FILTRO.seg===sg.id?'on':''}" data-potseg="${sg.id}" onclick="setPotFiltro('seg',POT_FILTRO.seg==='${sg.id}'?'todos':'${sg.id}')" style="--c:${sg.cor}">
       <span class="pot-seg-top"><i></i>${sg.label}</span>
@@ -3406,7 +3428,8 @@ function renderPotencial(pg){
     <div class="pot-kpis">
       <div class="panel pot-kpi"><span>Ticket médio por visita</span><b>${BRL(L.length?L.reduce((s,p)=>s+p.gasto,0)/Math.max(1,L.reduce((s,p)=>s+p.visitas,0)):0)}</b><small>todas as pacientes</small></div>
       <div class="panel pot-kpi"><span>Pacientes que voltaram</span><b>${L.length?PCT0(recorrentes/L.length):'0%'}</b><small>${recorrentes} de ${L.length} vieram 2+ vezes</small></div>
-      <div class="panel pot-kpi"><span>Intervalo de retorno</span><b>${intMed?intMed+' dias':'—'}</b><small>mediana entre visitas</small></div>
+      <div class="panel pot-kpi"><span>Visitas por ano</span><b>${visAno!=null?visAno.toFixed(1).replace('.',','):'—'}</b><small>referência ${POT_VISITAS_ANO[0]} a ${POT_VISITAS_ANO[1]} · ${veteranas.length?`${noRitmo} de ${veteranas.length} no ritmo`:'sem pacientes com 1 ano de casa'}</small></div>
+      <div class="panel pot-kpi"><span>Intervalo real de retorno</span><b>${intMed?intMed+' dias':'—'}</b><small>mediana · referência ${POT_CICLO_DIAS} dias (3 meses)</small></div>
       <div class="panel pot-kpi"><span>Procedimentos por visita</span><b>${(L.length?L.reduce((s,p)=>s+p.nProcs,0)/Math.max(1,L.reduce((s,p)=>s+p.visitas,0)):0).toFixed(1).replace('.',',')}</b><small>média da clínica</small></div>
     </div>
 
@@ -3430,10 +3453,10 @@ function renderPotencial(pg){
     <details class="panel pot-como">
       <summary><b>Como a nota é calculada</b> <span class="pot-sub">— clique para ver</span></summary>
       <ul>${pesos}</ul>
-      <p class="pot-sub">Gasto, ticket, visitas e procedimentos por visita são comparados com as outras pacientes da clínica (percentil): a primeira colocada no fator ganha os pontos cheios, a do meio ganha metade. Recência compara os dias sem vir com o intervalo habitual de retorno da própria paciente (ou da clínica, para quem veio só uma vez).</p>
+      <p class="pot-sub">Gasto, ticket, visitas e procedimentos por visita são comparados com as outras pacientes da clínica (percentil): a primeira colocada no fator ganha os pontos cheios, a do meio ganha metade. Frequência e recência usam o ritmo da clínica: <b>retorno a cada ~3 meses, 3 a 4 visitas por ano</b>. O ciclo de cada paciente começa em 90 dias e vai se ajustando ao ritmo real dela conforme volta (quem costuma vir antes passa a ter ciclo menor).</p>
       <p class="pot-sub"><b>Segmentos:</b> ${POT_SEGMENTOS.map(s=>`${s.label} (${s.desc.split(' — ')[0].toLowerCase()})`).join(' · ')}.</p>
-      <p class="pot-sub"><b>Situação:</b> Em dia (antes de 85% do intervalo) · Hora de retornar (85% a 150%) · Atrasada (150% a 300%) · Em risco de perda (mais de 3× o intervalo ou 1 ano sem vir) · Nova (1ª visita recente).</p>
-      <p class="pot-sub"><b>Potencial 12 meses</b> = ticket médio por visita × retornos esperados no ano (pelo intervalo dela) × chance de continuar ativa (recência e comparecimento; para quem veio só uma vez, também a taxa real de retorno da clínica). É uma estimativa para priorizar, não uma previsão exata.</p>
+      <p class="pot-sub"><b>Situação</b> (para o ciclo padrão de 90 dias): Em dia (até ~76 dias) · Hora de retornar (~77 a 120 dias) · Atrasada (~120 a 225 dias) · Em risco de perda (mais de ~225 dias ou 1 ano sem vir) · Nova (1ª visita, ainda dentro do ciclo). Para quem tem ciclo próprio, as faixas acompanham o ciclo dela.</p>
+      <p class="pot-sub"><b>Potencial 12 meses</b> = ticket médio por visita (com poucas visitas, ajustado em direção à média da clínica) × retornos esperados no ano (pelo ciclo dela — 90 dias ≈ 4 visitas) × chance de continuar ativa (recência e comparecimento; para quem veio só uma vez, também a taxa real de retorno da clínica). É uma estimativa para priorizar, não uma previsão exata.</p>
     </details>`;
   renderPotencialLista();
 }
