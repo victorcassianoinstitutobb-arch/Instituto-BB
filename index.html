@@ -392,6 +392,7 @@ table.data tbody tr:hover{background:color-mix(in srgb,var(--gold) 5%,var(--pape
 .seg-tabs button[aria-pressed="true"]{background:linear-gradient(180deg,#1B3F96,#0C2463);color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.2)}
 
 /* ---------- Funil de Pacientes · Potencial ---------- */
+.tc-cmp2{font-size:12px;color:var(--grey);margin-top:8px}.tc-cmp2 b{color:var(--ink)}
 .pot-hero{background:var(--metal-blue);color:#fff;border-radius:22px;padding:26px 30px;display:flex;gap:30px;align-items:center;flex-wrap:wrap;position:relative;overflow:hidden;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 18px 40px -22px rgba(13,42,110,.75);margin-bottom:18px}
 .pot-hero::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.10) 44%,rgba(255,255,255,.02) 52%,transparent 64%)}
@@ -1322,11 +1323,39 @@ function calc(){
     prev = DATA.periodoAnterior || {faturamento:faturamento*0.8,nAtend:Math.round(nAtend*0.85),leads:totLeadsCapt*0.9,comandas:Math.round(nAtend*0.8)};
   }
   const vs = (atual,ant)=> ant? (atual-ant)/ant : 0;
+  // ---- comparativo justo: mesmo intervalo de dias do mês anterior + total do mês anterior ----
+  // ex.: hoje 02/10 → compara 01–02/10 com 01–02/09, e também mostra o total de setembro.
+  let compInfo=null;
+  if(_per && !_per.acumulado && _ymSel){
+    const ant=mesAnterior(_ymSel);
+    const [ya,ma]=ant.split('-').map(Number);
+    const ultimoAnt=new Date(ya,ma,0).getDate();
+    const hojeISO=(typeof dataHojeLocal==='function')?dataHojeLocal():new Date().toISOString().slice(0,10);
+    const [ys,ms]=_ymSel.split('-').map(Number);
+    const ultimoSel=new Date(ys,ms,0).getDate();
+    const corte = hojeISO.slice(0,7)===_ymSel ? +hojeISO.slice(8,10) : ultimoSel;   // mês em andamento: até hoje
+    const corteAnt= corte>=ultimoSel ? ultimoAnt : Math.min(corte,ultimoAnt);   // mês fechado: mês anterior inteiro
+    const fimMesmo=ant+'-'+String(corteAnt).padStart(2,'0');
+    const doAnt=DATA.atendimentos.filter(a=>a.agenda==='Compareceu' && a.data.slice(0,7)===ant);
+    const mesmo=doAnt.filter(a=>a.data<=fimMesmo);
+    const resumo=l=>{ const fat=l.reduce((s,a)=>s+(+a.valor||0),0), pag=l.filter(a=>a.valor>0).length; return {fat, n:l.length, pag, ticket:pag?fat/pag:0}; };
+    const MESES_C=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+    const nomeAnt=MESES_C[ma-1];
+    compInfo={ant, nomeAnt, emAndamento: corte<ultimoSel,
+      rotuloMesmo: corte>=ultimoSel ? `${nomeAnt} inteiro` : (corteAnt===1?`01/${String(ma).padStart(2,'0')}`:`01–${String(corteAnt).padStart(2,'0')}/${nomeAnt}`),
+      mesmo:resumo(mesmo), total:resumo(doAnt)};
+    compInfo.vsMesmoFat=vs(faturamento,compInfo.mesmo.fat);
+    compInfo.vsTotalFat=compInfo.total.fat? faturamento/compInfo.total.fat : 0;
+    compInfo.vsMesmoTicket=vs(ticket,compInfo.mesmo.ticket);
+    compInfo.vsTotalTicket=vs(ticket,compInfo.total.ticket);
+    compInfo.vsMesmoAtend=vs(nAtend,compInfo.mesmo.n);
+  }
   const comp = {
     faturamento: vs(faturamento,prev.faturamento),
     atend: vs(nAtend,prev.nAtend),
     leads: vs(totLeadsCapt,prev.leads),
     comandas: vs(compareceu.filter(a=>a.valor>0).length,prev.comandas),
+    info: compInfo,
   };
   const comandas = compareceu.filter(a=>a.valor>0).length;
   // ---- ranking de procedimentos por nº de vezes realizado ----
@@ -1803,10 +1832,20 @@ function renderPainel(pg){
 }
 function renderPainelCompleto(pg){
   const k=calc();
-  const cmpTag=(v)=>{
+  const cmpTag=(v,txt)=>{
     const up=v>=0; const arrow=up?'<polyline points="18 15 12 9 6 15"/>':'<polyline points="6 9 12 15 18 9"/>';
-    return `<span class="tag-cmp ${up?'up':'down'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor">${arrow}</svg>${PCT0(Math.abs(v))} vs período anterior</span>`;
+    return `<span class="tag-cmp ${up?'up':'down'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor">${arrow}</svg>${PCT0(Math.abs(v))} ${txt||'vs período anterior'}</span>`;
   };
+  const CI=k.comp.info;
+  // linha "total do mês anterior": quanto do total já foi alcançado (mês em andamento) ou a variação (mês fechado)
+  const linhaTotal=(atual,totalAnt,ehTicket)=>{
+    if(!CI || !CI.emAndamento) return '';   // mês fechado: a etiqueta já compara com o mês anterior inteiro
+    if(ehTicket){ const v=CI.vsTotalTicket; return `<div class="tc-cmp2">Ticket de ${CI.nomeAnt} inteiro: <b>${BRL(totalAnt)}</b> · <span style="color:${v>=0?'var(--green)':'var(--red)'}">${v>=0?'+':'−'}${PCT0(Math.abs(v))}</span></div>`; }
+    const p=CI.vsTotalFat;
+    return `<div class="tc-cmp2">Total de ${CI.nomeAnt}: <b>${BRL(totalAnt)}</b> · ${CI.emAndamento?`já atingiu <b>${PCT0(p)}</b>`:`<span style="color:${p>=1?'var(--green)':'var(--red)'}">${p>=1?'+':'−'}${PCT0(Math.abs(p-1))}</span>`}</div>`;
+  };
+  const tagFat = CI ? cmpTag(CI.vsMesmoFat, `vs ${CI.rotuloMesmo} (${BRL(CI.mesmo.fat)})`) : cmpTag(k.comp.faturamento);
+  const tagTicket = CI ? cmpTag(CI.vsMesmoTicket, `vs ${CI.rotuloMesmo} (${BRL(CI.mesmo.ticket)})`) : '';
   pg.innerHTML=`
     ${pendenciasHTML()}
     <div class="trend-grid">
@@ -1815,7 +1854,8 @@ function renderPainelCompleto(pg){
         <div class="tc-val">${BRL(k.faturamento)}</div>
         <div class="tc-sub">${META.faturamento>0?'Meta do mês: '+BRL(META.faturamento):k.nAtend+' atendimento(s)'}</div>
         <div class="tc-spark"><canvas id="spk1"></canvas></div>
-        ${cmpTag(k.comp.faturamento)}
+        ${tagFat}
+        ${CI?linhaTotal(k.faturamento,CI.total.fat,false):''}
       </div>
       <div class="tcard" style="animation-delay:80ms">
         <div class="tc-head"><span class="tc-ic"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></span> Resultado do mês</div>
@@ -1828,7 +1868,8 @@ function renderPainelCompleto(pg){
         <div class="tc-val">${BRL(k.ticket)}</div>
         <div class="tc-sub">${k.comandas} atendimento(s) pago(s) no período</div>
         <div class="tc-spark"><canvas id="spk3"></canvas></div>
-        ${cmpTag(k.comp.atend)}
+        ${tagTicket}
+        ${CI?linhaTotal(k.ticket,CI.total.ticket,true):''}
       </div>
     </div>
 
@@ -3157,6 +3198,7 @@ function fichaPaciente(nome){
 // Ajuste aqui se o padrão mudar.
 const POT_CICLO_DIAS=90;          // intervalo de referência entre visitas
 const POT_VISITAS_ANO=[3,4];      // faixa esperada de visitas por ano
+const POT_RAZAO_RETORNO=0.5;      // ticket do retorno ≈ metade da 1ª visita (usado até haver dados suficientes)
 const POT_PESOS=[
   {id:'gasto',    label:'Quanto já gastou',          peso:25, desc:'Valor total investido na clínica (todo o histórico).'},
   {id:'ticket',   label:'Ticket médio por visita',   peso:20, desc:'Média gasta a cada ida à clínica.'},
@@ -3240,6 +3282,13 @@ function potencialPacientes(){
   const taxaRetorno=elegiveis.length? Math.min(0.85,Math.max(0.2, elegiveis.filter(p=>p.visitas>1).length/elegiveis.length)) : 0.4;
   // ticket médio por visita da clínica (referência para quem tem pouco histórico)
   const ticketClinica=base.reduce((s,p)=>s+p.gasto,0)/Math.max(1,base.reduce((s,p)=>s+p.visitas,0));
+  // ticket de RETORNO: na clínica, a paciente recorrente gasta bem menos que na 1ª visita (≈ metade).
+  // Medido nos próprios dados: média das 1ªs visitas x média das visitas seguintes.
+  const primeiras=base.map(p=>p.valorDia[0]||0), retornosV=base.flatMap(p=>p.valorDia.slice(1));
+  const ticket1aClinica=primeiras.reduce((s,x)=>s+x,0)/Math.max(1,primeiras.length);
+  const ticketRetClinica = retornosV.length>=10 ? retornosV.reduce((s,x)=>s+x,0)/retornosV.length : ticket1aClinica*POT_RAZAO_RETORNO;
+  const razaoRetorno = ticket1aClinica>0 ? Math.min(1,Math.max(0.25,ticketRetClinica/ticket1aClinica)) : POT_RAZAO_RETORNO;
+  window.__potTicketInfo={primeira:ticket1aClinica, retorno:ticketRetClinica, razao:razaoRetorno, nRetornos:retornosV.length};
   const ordGasto=base.map(p=>p.gasto).sort((a,b)=>a-b);
   const ordTicket=base.map(p=>p.ticket).sort((a,b)=>a-b);
   const ordVisitas=base.map(p=>p.visitas).sort((a,b)=>a-b);
@@ -3289,7 +3338,14 @@ function potencialPacientes(){
     const chanceAtiva=Math.max(0.05, (recencia*0.85 + presenca*0.15) * (p.visitas===1 ? taxaRetorno : 1));
     // ticket projetado: o dela, puxado levemente para a média da clínica quando há poucas visitas
     // (uma visita muito alta ou muito baixa sozinha não define o padrão)
-    const ticketProj=(p.ticket*p.visitas + ticketClinica)/(p.visitas+1);
+    // ticket projetado das PRÓXIMAS visitas (retornos):
+    //  - quem já voltou: média dos retornos dela, puxada levemente para a média de retorno da clínica
+    //  - quem veio 1 vez: valor da 1ª visita × razão de retorno da clínica (≈ metade), misturado com a média de retorno
+    const rets=p.valorDia.slice(1);
+    const ticketProj = rets.length
+      ? (rets.reduce((s,x)=>s+x,0) + ticketRetClinica)/(rets.length+1)
+      : ((p.valorDia[0]||0)*razaoRetorno + ticketRetClinica)/2;
+    p.ticketRetorno=ticketProj;
     p.potencial12m=Math.round(ticketProj*retornosAno*chanceAtiva);
     p.perfil = p.procsVisita>=2 ? 'Combina vários procedimentos' : p.procsVisita>=1.4 ? 'Às vezes combina procedimentos' : 'Um procedimento por visita';
     p.perfilCurto = p.procsVisita>=2 ? 'Combina vários' : p.procsVisita>=1.4 ? 'Às vezes combina' : '1 proc. por visita';
@@ -3339,7 +3395,7 @@ function renderPotencialLista(){
       <td style="min-width:108px">${_potBarra(p.score,p.segmento.cor)}<span class="chip" style="margin-top:5px;color:${p.segmento.cor};background:${p.segmento.cor}1A">${p.segmento.label}</span></td>
       <td class="ctr">${p.visitas}<div class="pot-sub" title="Visitas nos últimos 12 meses (referência ${POT_VISITAS_ANO[0]} a ${POT_VISITAS_ANO[1]})">${p.visitas12m} no ano</div></td>
       <td class="num">${BRL(p.gasto)}</td>
-      <td class="num">${BRL(p.ticket)} ${tend}</td>
+      <td class="num">${BRL(p.ticket)} ${tend}<div class="pot-sub" title="Ticket estimado das próximas visitas (retorno)">ret. ${BRL(p.ticketRetorno)}</div></td>
       <td class="ctr">${p.procsVisita.toFixed(1).replace('.',',')}</td>
       <td class="ctr">${fmtDateFull(p.ultima)}<div class="pot-sub">há ${p.diasSemVir} dia${p.diasSemVir===1?'':'s'}</div></td>
       <td class="ctr">${fmtDateFull(p.proximoRetorno)}<div class="pot-sub">ciclo ~${p.intervalo}d</div></td>
@@ -3376,7 +3432,7 @@ function potencialFichaHTML(nome){
         <div style="font-weight:600;font-size:15px">${p.segmento.label} · <span class="chip ${p.status.cls}">${p.status.label}</span></div>
         <div class="pot-sub">${p.perfil} · ${p.procsVisita.toFixed(1).replace('.',',')} procedimento(s) por visita · ciclo de retorno ~${p.intervalo} dias · próximo retorno sugerido ${fmtDateFull(p.proximoRetorno)}</div>
         <div class="pot-sub">${p.visitas12m} visita${p.visitas12m===1?'':'s'} nos últimos 12 meses (esperado: ${p.diasDeCasa>=365?POT_VISITAS_ANO[0]+' a '+POT_VISITAS_ANO[1]:'~'+Math.round(p.visitasEsperadas)+' pelo tempo de casa'})</div>
-        <div class="pot-sub">Potencial estimado nos próximos 12 meses: <b style="color:var(--ink)">${BRL(p.potencial12m)}</b> · gasto nos últimos 12 meses: ${BRL(p.gasto12m)}</div>
+        <div class="pot-sub">Potencial estimado nos próximos 12 meses: <b style="color:var(--ink)">${BRL(p.potencial12m)}</b> (retornos de ~${BRL(p.ticketRetorno)}) · gasto nos últimos 12 meses: ${BRL(p.gasto12m)}</div>
       </div>
     </div>
     <div class="pot-fats">${fat}</div>
@@ -3429,7 +3485,7 @@ function renderPotencial(pg){
     </div>
 
     <div class="pot-kpis">
-      <div class="panel pot-kpi"><span>Ticket médio por visita</span><b>${BRL(L.length?L.reduce((s,p)=>s+p.gasto,0)/Math.max(1,L.reduce((s,p)=>s+p.visitas,0)):0)}</b><small>todas as pacientes</small></div>
+      <div class="panel pot-kpi"><span>Ticket 1ª visita × retorno</span><b>${BRL((window.__potTicketInfo||{}).primeira||0)}</b><small>retorno: <b style="color:var(--ink)">${BRL((window.__potTicketInfo||{}).retorno||0)}</b> (${PCT0((window.__potTicketInfo||{}).razao||0)} da 1ª)</small></div>
       <div class="panel pot-kpi"><span>Pacientes que voltaram</span><b>${L.length?PCT0(recorrentes/L.length):'0%'}</b><small>${recorrentes} de ${L.length} vieram 2+ vezes</small></div>
       <div class="panel pot-kpi"><span>Visitas por ano</span><b>${visAno!=null?visAno.toFixed(1).replace('.',','):'—'}</b><small>referência ${POT_VISITAS_ANO[0]} a ${POT_VISITAS_ANO[1]} · ${veteranas.length?`${noRitmo} de ${veteranas.length} no ritmo`:'sem pacientes com 1 ano de casa'}</small></div>
       <div class="panel pot-kpi"><span>Intervalo real de retorno</span><b>${intMed?intMed+' dias':'—'}</b><small>mediana · referência ${POT_CICLO_DIAS} dias (3 meses)</small></div>
@@ -3460,7 +3516,7 @@ function renderPotencial(pg){
       <p class="pot-sub">Gasto, ticket, visitas e procedimentos por visita são comparados com as outras pacientes da clínica (percentil): a primeira colocada no fator ganha os pontos cheios, a do meio ganha metade. Frequência e recência usam o ritmo da clínica: <b>retorno a cada ~3 meses, 3 a 4 visitas por ano</b>. O ciclo de cada paciente começa em 90 dias e vai se ajustando ao ritmo real dela conforme volta (quem costuma vir antes passa a ter ciclo menor).</p>
       <p class="pot-sub"><b>Segmentos:</b> ${POT_SEGMENTOS.map(s=>`${s.label} (${s.desc.split(' — ')[0].toLowerCase()})`).join(' · ')}.</p>
       <p class="pot-sub"><b>Situação</b> (para o ciclo padrão de 90 dias): Em dia (até ~76 dias) · Hora de retornar (~77 a 120 dias) · Atrasada (~120 a 225 dias) · Em risco de perda (mais de ~225 dias ou 1 ano sem vir) · Nova (1ª visita, ainda dentro do ciclo). Para quem tem ciclo próprio, as faixas acompanham o ciclo dela.</p>
-      <p class="pot-sub"><b>Potencial 12 meses</b> = ticket médio por visita (com poucas visitas, ajustado em direção à média da clínica) × retornos esperados no ano (pelo ciclo dela — 90 dias ≈ 4 visitas) × chance de continuar ativa (recência e comparecimento; para quem veio só uma vez, também a taxa real de retorno da clínica). É uma estimativa para priorizar, não uma previsão exata.</p>
+      <p class="pot-sub"><b>Potencial 12 meses</b> = ticket estimado do <b>retorno</b> (não da 1ª visita: na clínica o retorno custa em média ${PCT0((window.__potTicketInfo||{}).razao||POT_RAZAO_RETORNO)} da 1ª visita — medido nos atendimentos; quem já voltou usa a média dos próprios retornos) × retornos esperados no ano (pelo ciclo dela — 90 dias ≈ 4 visitas) × chance de continuar ativa (recência e comparecimento; para quem veio só uma vez, também a taxa real de retorno da clínica). É uma estimativa para priorizar, não uma previsão exata.</p>
     </details>`;
   renderPotencialLista();
 }
@@ -3492,7 +3548,7 @@ function abrirPDFFunil(titulo, subtitulo, secoes){
       <td class="c"><b>${p.score}</b><div class="s">${p.segmento.label}</div></td>
       <td class="c">${p.visitas}<div class="s">${p.visitas12m} no ano</div></td>
       <td class="n"><b>${BRL(p.gasto)}</b></td>
-      <td class="n">${BRL(p.ticket)}</td>
+      <td class="n">${BRL(p.ticket)}<div class="s">retorno ~${BRL(p.ticketRetorno)}</div></td>
       <td class="c">${fmtDateFull(p.ultima)}<div class="s">há ${p.diasSemVir} dias</div></td>
       <td class="c">${fmtDateFull(p.proximoRetorno)}<div class="s">ciclo ~${p.intervalo}d</div></td>
       <td class="c">${p.status.label}</td>
