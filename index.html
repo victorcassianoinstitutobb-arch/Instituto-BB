@@ -1403,7 +1403,7 @@ function calc(){
     if(!ps.length){ if(a.valor>0) semReceb+=a.valor; return; }
     ps.forEach(p=>{
       if(!p.forma) return;
-      const chave = ehCredito(p.forma) && (+p.parcelas>1) ? `${p.forma} ${p.parcelas}x` : p.forma;
+      const chave = ehCredito(p.forma) && p.parcelas===0 ? `${p.forma} · parcelas não informadas` : (ehCredito(p.forma) && (+p.parcelas>1) ? `${p.forma} ${p.parcelas}x` : p.forma);
       if(!recMap[chave]) recMap[chave]={label:chave, modalidade:p.forma, parcelas:(+p.parcelas||1), valor:0, qtd:0, credito:ehCredito(p.forma)};
       recMap[chave].valor += (+p.valor||0);
       recMap[chave].qtd += 1;
@@ -2041,9 +2041,12 @@ function drawCharts(k){
 // Formas de recebimento (modalidade de como o dinheiro entrou)
 const RECEBIMENTOS = ['Pix CPF','Pix CNPJ','Crédito CPF','Crédito CNPJ','Dinheiro'];
 const ehCredito = r => (r||'').indexOf('Crédito')===0;
+// parcelas: 1..18 = nº de vezes; 0 = "Não informado" (venda passada na maquininha sem registrar em quantas vezes)
+const parcNum = (forma, v) => !ehCredito(forma) ? 1 : ((v===0||v==='0') ? 0 : (+v||1));
 // rótulo de uma forma isolada (ex: "Crédito CPF 10x")
 function formaLabel(forma, parcelas){
   if(!forma) return '—';
+  if(ehCredito(forma) && parcelas===0) return `${forma} (parcelas não informadas)`;
   return ehCredito(forma) && parcelas>1 ? `${forma} ${parcelas}x` : forma;
 }
 // normaliza os pagamentos de um atendimento numa lista [{forma,valor,parcelas,data}]
@@ -2057,9 +2060,9 @@ function pagamentosDe(a){
   // atendimento "Pendente" aparecia como já recebido (some da cobrança, infla o "Recebido").
   if(a.pag==='Pendente') return [];
   if(Array.isArray(a.pagamentos) && a.pagamentos.length){
-    return a.pagamentos.map(p=>({forma:p.forma||'',valor:+p.valor||0,parcelas:ehCredito(p.forma)?(+p.parcelas||1):1,data:p.data||a.data}));
+    return a.pagamentos.map(p=>({forma:p.forma||'',valor:+p.valor||0,parcelas:parcNum(p.forma,p.parcelas),data:p.data||a.data}));
   }
-  if(a.recebimento && a.pag==='Pago') return [{forma:a.recebimento,valor:+a.valor||0,parcelas:ehCredito(a.recebimento)?(+a.parcelas||1):1,data:a.data}];
+  if(a.recebimento && a.pag==='Pago') return [{forma:a.recebimento,valor:+a.valor||0,parcelas:parcNum(a.recebimento,a.parcelas),data:a.data}];
   return [];
 }
 // rótulo curto para a tabela: uma forma → "Crédito CPF 10x"; várias → "Dividido (2)"
@@ -2191,7 +2194,7 @@ function editarAtend(id, tipo){
   const pagOpts=['Pago','Parcial','Pendente'].map(s=>`<option ${s===a.pag?'selected':''}>${s}</option>`).join('');
   // estado de trabalho dos pagamentos
   const ps=pagamentosDe(a);
-  __atendPagamentos = ps.length ? ps.map(p=>({forma:p.forma,valor:p.valor,parcelas:p.parcelas})) : [];
+  __atendPagamentos = ps.length ? ps.map((p,i)=>({forma:p.forma,valor:p.valor,parcelas:p.parcelas,data:(Array.isArray(a.pagamentos)&&a.pagamentos[i]&&a.pagamentos[i].data)||undefined})) : [];
   __atendPagDividido = __atendPagamentos.length>1;
   // estado de trabalho dos procedimentos (lista)
   __atendProcs = procedimentosDe(a);
@@ -2352,7 +2355,7 @@ function toggleDividirPag(){
 function addPagamento(){ __atendPagamentos.push({forma:'',valor:0,parcelas:1}); renderPagamentos(); }
 function removePagamento(i){ __atendPagamentos.splice(i,1); if(__atendPagamentos.length<2)__atendPagDividido=false; document.getElementById('naDividirBtn').textContent=__atendPagDividido?'↺ pagamento único':'+ dividir pagamento'; renderPagamentos(); }
 function updPagamento(i,campo,val){
-  __atendPagamentos[i][campo] = campo==='valor' ? (+val||0) : (campo==='parcelas'?(+val||1):val);
+  __atendPagamentos[i][campo] = campo==='valor' ? (+val||0) : (campo==='parcelas'?((val===0||val==='0')?0:(+val||1)):val);
   if(campo==='forma'){ if(!ehCredito(val)) __atendPagamentos[i].parcelas=1; renderPagamentos(); }
   else { atualizaAvisoPag(); atualizaSaldoAberto(); }
 }
@@ -2421,7 +2424,7 @@ function renderPagamentos(){
   const status=(document.getElementById('naPag')||{}).value||'Pago';
   const fs='padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper);color:var(--ink);font-size:13px';
   const formaSel=(sel)=>`<option value="">—</option>`+RECEBIMENTOS.map(r=>`<option ${r===sel?'selected':''}>${r}</option>`).join('');
-  const parcSel=(sel)=>Array.from({length:18},(_,i)=>i+1).map(n=>`<option value="${n}" ${(+sel||1)===n?'selected':''}>${n}x</option>`).join('');
+  const parcSel=(sel)=>`<option value="0" ${(sel===0||sel==='0')?'selected':''}>Não informado</option>`+Array.from({length:18},(_,i)=>i+1).map(n=>`<option value="${n}" ${(sel!==0&&sel!=='0'&&(+sel||1)===n)?'selected':''}>${n}x</option>`).join('');
   if(status==='Pendente'){
     box.innerHTML=`<div style="font-size:12.5px;color:var(--grey);font-style:italic">Nada foi recebido ainda — este atendimento fica como pendência no Painel até você registrar o pagamento.</div>`;
     const av=document.getElementById('naPagAviso'); if(av) av.innerHTML='';
@@ -2476,13 +2479,13 @@ async function salvarAtend(id){
     pagamentos=[];
   } else if(__atendPagDividido){
     pagamentos=(__atendPagamentos||[]).filter(p=>p.forma && p.valor>0)
-      .map(p=>({forma:p.forma,valor:+p.valor||0,parcelas:ehCredito(p.forma)?(+p.parcelas||1):1}));
+      .map(p=>Object.assign({forma:p.forma,valor:+p.valor||0,parcelas:parcNum(p.forma,p.parcelas)}, p.data?{data:p.data}:{}));  // mantém a data de parcelas recebidas depois
   } else {
     const p=__atendPagamentos[0];
     // "Pago" = sempre o valor total (a forma cobre tudo). "Parcial" = o valor que foi
     // realmente digitado como recebido hoje (pode — e deve — ser menor que o total).
     const valorPago = pagStatus==='Parcial' ? (+p?.valor||0) : valor;
-    pagamentos = (p && p.forma && valorPago>0) ? [{forma:p.forma,valor:valorPago,parcelas:ehCredito(p.forma)?(+p.parcelas||1):1}] : [];
+    pagamentos = (p && p.forma && valorPago>0) ? [{forma:p.forma,valor:valorPago,parcelas:parcNum(p.forma,p.parcelas)}] : [];
   }
   // campos de compatibilidade: forma "principal" = a de maior valor
   const principal = pagamentos.slice().sort((a,b)=>b.valor-a.valor)[0] || {forma:'',parcelas:1};
@@ -3443,6 +3446,7 @@ function renderPotencial(pg){
           <div class="seg-tabs"><button data-potvista="ranking" onclick="setPotFiltro('vista','ranking')">Ranking</button><button data-potvista="agenda" onclick="setPotFiltro('vista','agenda')">Fila de recorrência</button></div>
           <input placeholder="Buscar paciente…" value="${_potEsc(POT_FILTRO.busca)}" oninput="setPotFiltro('busca',this.value)" class="pot-input">
           <select onchange="setPotFiltro('status',this.value)" class="pot-input">${stOpts}</select>
+          ${funilOrdemSelect()}
           <button class="btn ghost" onclick="gerarPDFPotencial()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>PDF da lista</button>
         </div>
       </div>
@@ -3462,39 +3466,83 @@ function renderPotencial(pg){
 }
 
 // PDF da lista atual (respeita filtros/vista) — para a equipe marcar os retornos
-function gerarPDFPotencial(){
-  const lista=_potFiltrados();
+// ===== PDFs dos funis (Potencial e Recall) — ordenação por faturamento / previsto e colunas completas =====
+const FUNIL_ORDENS={
+  faturamento:{label:'Faturamento (maior → menor)', fn:(a,b)=>b.gasto-a.gasto},
+  previsto:   {label:'Faturamento previsto 12 meses', fn:(a,b)=>b.potencial12m-a.potencial12m},
+  nota:       {label:'Nota de potencial', fn:(a,b)=>b.score-a.score},
+  ticket:     {label:'Ticket médio por visita', fn:(a,b)=>b.ticket-a.ticket},
+  dias:       {label:'Mais tempo sem vir', fn:(a,b)=>b.diasSemVir-a.diasSemVir},
+};
+let FUNIL_PDF_ORD='faturamento';   // ordem usada nos PDFs e nas colunas do Recall
+function setFunilOrdem(v){ FUNIL_PDF_ORD=v; if(currentPage==='recall') go('recall'); else if(currentPage==='potencial'){ POT_FILTRO.ordem={faturamento:'gasto',previsto:'potencial',nota:'score',ticket:'ticket',dias:'dias'}[v]||'score'; renderPotencialLista(); } }
+function funilOrdemSelect(){
+  return `<select class="pot-input" title="Ordem das listas e dos PDFs" onchange="setFunilOrdem(this.value)">${Object.entries(FUNIL_ORDENS).map(([k,o])=>`<option value="${k}" ${k===FUNIL_PDF_ORD?'selected':''}>Ordenar: ${o.label}</option>`).join('')}</select>`;
+}
+// monta e abre o PDF (uma seção por grupo)
+function abrirPDFFunil(titulo, subtitulo, secoes){
   const hojeHora=new Date().toLocaleString('pt-BR');
-  const titulo=POT_FILTRO.vista==='agenda'?'Fila de Recorrência':'Ranking de Potencial';
-  const linhas=lista.map((p,i)=>`<tr>
-    <td class="n">${i+1}</td><td>${_potEsc(p.nome)}</td><td class="n"><b>${p.score}</b></td><td>${p.segmento.label}</td>
-    <td class="n">${p.visitas}</td><td class="n">${BRL(p.gasto)}</td><td class="n">${BRL(p.ticket)}</td>
-    <td class="n">${p.procsVisita.toFixed(1).replace('.',',')}</td><td>${fmtDateFull(p.ultima)}</td><td>${fmtDateFull(p.proximoRetorno)}</td>
-    <td>${p.status.label}</td><td class="n">${BRL(p.potencial12m)}</td></tr>`).join('');
+  const todos=secoes.flatMap(s=>s.lista);
+  const soma=(l,k)=>l.reduce((s,p)=>s+(p[k]||0),0);
+  const tabela=(lista)=>{
+    if(!lista.length) return '<div class="vazio">Ninguém neste grupo.</div>';
+    const linhas=lista.map((p,i)=>`<tr>
+      <td class="n">${i+1}</td>
+      <td><b>${_potEsc(p.nome)}</b><div class="s">${_potEsc((p.procedimentos||[]).slice(0,3).join(', '))}</div></td>
+      <td class="c"><b>${p.score}</b><div class="s">${p.segmento.label}</div></td>
+      <td class="c">${p.visitas}<div class="s">${p.visitas12m} no ano</div></td>
+      <td class="n"><b>${BRL(p.gasto)}</b></td>
+      <td class="n">${BRL(p.ticket)}</td>
+      <td class="c">${fmtDateFull(p.ultima)}<div class="s">há ${p.diasSemVir} dias</div></td>
+      <td class="c">${fmtDateFull(p.proximoRetorno)}<div class="s">ciclo ~${p.intervalo}d</div></td>
+      <td class="c">${p.status.label}</td>
+      <td class="n prev"><b>${BRL(p.potencial12m)}</b></td>
+    </tr>`).join('');
+    return `<table><thead><tr><th class="n">#</th><th>Paciente / principais procedimentos</th><th class="c">Nota</th><th class="c">Visitas</th><th class="n">Faturamento</th><th class="n">Ticket/visita</th><th class="c">Última visita</th><th class="c">Próx. retorno</th><th class="c">Situação</th><th class="n">Previsto 12m</th></tr></thead>
+      <tbody>${linhas}</tbody>
+      <tfoot><tr><td></td><td><b>${lista.length} paciente${lista.length===1?'':'s'}</b></td><td></td><td class="c">${soma(lista,'visitas')}</td><td class="n"><b>${BRL(soma(lista,'gasto'))}</b></td><td class="n">${BRL(soma(lista,'gasto')/Math.max(1,soma(lista,'visitas')))}</td><td></td><td></td><td></td><td class="n prev"><b>${BRL(soma(lista,'potencial12m'))}</b></td></tr></tfoot></table>`;
+  };
+  const corpo=secoes.map(s=>`<div class="sec">
+    ${s.titulo?`<div class="sec-h" style="border-left:5px solid ${s.cor||'#1747B8'}"><h2>${s.titulo} <span class="cnt">${s.lista.length}</span></h2><div class="sub">${s.sub||''} · faturamento ${BRL(soma(s.lista,'gasto'))} · previsto 12m ${BRL(soma(s.lista,'potencial12m'))}</div></div>`:''}
+    ${tabela(s.lista)}</div>`).join('');
   const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>${titulo} · Instituto Bruna Braga</title>
   <style>
-    @page{size:A4 landscape;margin:12mm}
+    @page{size:A4 landscape;margin:11mm}
     *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:'Helvetica Neue',Arial,sans-serif;color:#0F172A;font-size:10.5px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #1747B8;padding-bottom:12px;margin-bottom:16px}
-    .brand{font-size:20px;font-weight:700;color:#0F2D73}.sub{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#5B6478;margin-top:3px}
-    .right{text-align:right;font-size:10px;color:#5B6478}.right b{font-size:14px;color:#0F172A;display:block}
+    body{font-family:'Helvetica Neue',Arial,sans-serif;color:#0F172A;font-size:9.6px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #1747B8;padding-bottom:10px;margin-bottom:12px}
+    .brand{font-size:19px;font-weight:700;color:#0F2D73}.subt{font-size:9.5px;letter-spacing:1.6px;text-transform:uppercase;color:#5B6478;margin-top:3px}
+    .kp{display:flex;gap:18px;text-align:right}.kp div{font-size:9px;color:#5B6478}.kp b{display:block;font-size:14px;color:#0F172A}
+    .sec{margin-bottom:16px}.sec + .sec{page-break-before:always}
+    .sec-h{padding-left:9px;margin-bottom:7px}.sec-h h2{font-size:13px}.sec-h .sub{font-size:9px;color:#5B6478;margin-top:1px}
+    .cnt{font-size:10px;background:#0F2D73;color:#fff;border-radius:9px;padding:1px 8px;margin-left:4px}
     table{width:100%;border-collapse:collapse}
-    th{background:#EDF1F8;color:#334155;text-align:left;padding:6px 7px;font-size:8.5px;text-transform:uppercase;letter-spacing:.4px;border-bottom:2px solid #1747B8}
-    td{padding:5px 7px;border-bottom:1px solid #E3E8F1}
-    td.n,th.n{text-align:right} tr{page-break-inside:avoid} tr:nth-child(even) td{background:#F6F8FC}
-    .ft{margin-top:16px;font-size:9px;color:#94A3B8;text-align:center}
+    thead{display:table-header-group} tr{page-break-inside:avoid}
+    th{background:#EDF1F8;color:#334155;text-align:left;padding:5px 6px;font-size:8px;text-transform:uppercase;letter-spacing:.3px;border-bottom:2px solid #1747B8}
+    td{padding:4px 6px;border-bottom:1px solid #E3E8F1;vertical-align:top}
+    .n{text-align:right}.c{text-align:center}.s{font-size:8px;color:#5B6478;margin-top:1px}
+    .prev{color:#1747B8}
+    tbody tr:nth-child(even) td{background:#F6F8FC}
+    tfoot td{border-top:2px solid #1747B8;background:#EDF1F8;font-size:9.5px}
+    .vazio{color:#94A3B8;font-style:italic;padding:10px}
+    .ft{margin-top:12px;font-size:8.5px;color:#94A3B8;text-align:center}
   </style></head><body>
-    <div class="hd"><div><div class="brand">Instituto Bruna Braga</div><div class="sub">Funil de Pacientes · ${titulo}</div></div>
-      <div class="right"><b>${lista.length} paciente${lista.length===1?'':'s'}</b>Emitido em ${hojeHora}</div></div>
-    <table><thead><tr><th class="n">#</th><th>Paciente</th><th class="n">Nota</th><th>Segmento</th><th class="n">Visitas</th><th class="n">Gasto total</th><th class="n">Ticket/visita</th><th class="n">Proc./visita</th><th>Última visita</th><th>Próx. retorno</th><th>Situação</th><th class="n">Potencial 12m</th></tr></thead>
-    <tbody>${linhas||'<tr><td colspan="12" style="text-align:center;padding:14px;color:#94A3B8">Nenhuma paciente na lista.</td></tr>'}</tbody></table>
-    <div class="ft">Uso interno · Gerado pelo Sistema de Gestão do Instituto Bruna Braga</div>
+    <div class="hd"><div><div class="brand">Instituto Bruna Braga</div><div class="subt">${subtitulo}</div></div>
+      <div class="kp"><div>Pacientes<b>${todos.length}</b></div><div>Faturamento histórico<b>${BRL(soma(todos,'gasto'))}</b></div><div>Previsto 12 meses<b>${BRL(soma(todos,'potencial12m'))}</b></div><div>Emitido em<b style="font-size:10px">${hojeHora}</b></div></div></div>
+    ${corpo}
+    <div class="ft">Ordenado por: ${FUNIL_ORDENS[FUNIL_PDF_ORD].label} · "Previsto 12m" = ticket × retornos esperados no ano × chance de continuar ativa · Uso interno</div>
   </body></html>`;
   const w=window.open('','_blank');
   if(!w){alert('Permita pop-ups para gerar o PDF.');return;}
   w.document.write(html); w.document.close();
   setTimeout(()=>{w.focus();w.print();},400);
+}
+// PDF do Potencial: respeita filtros/vista da tela; ordem escolhida no seletor
+function gerarPDFPotencial(){
+  let lista=_potFiltrados().slice();
+  if(POT_FILTRO.vista!=='agenda') lista.sort(FUNIL_ORDENS[FUNIL_PDF_ORD].fn);
+  const titulo=POT_FILTRO.vista==='agenda'?'Fila de Recorrência':'Ranking de Potencial';
+  abrirPDFFunil(titulo,'Funil de Pacientes · '+titulo,[{lista}]);
 }
 
 /* ============================ RECALL DE PACIENTES ============================ */
@@ -3520,17 +3568,20 @@ const RECALL_FAIXAS=[
 function faixaRecall(dias){ return RECALL_FAIXAS.find(f=>dias>=f.min&&dias<=f.max) || RECALL_FAIXAS[0]; }
 function renderRecall(pg){
   const todos=pacientesTodos(); // histórico completo, independente do mês selecionado no topo
+  const potMap={}; potencialPacientes().forEach(p=>{ potMap[p.nome]=p; });
   const comFaixa=todos.map(p=>{
-    const dias=diasDesde(p.ultima);
-    return {...p, dias, faixa:faixaRecall(dias)};
+    const dias=diasDesde(p.ultima); const pt=potMap[p.nome]||{};
+    return {...p, dias, faixa:faixaRecall(dias), gasto:p.valorTotal, potencial12m:pt.potencial12m||0, score:pt.score||0, ticket:pt.ticket||0, diasSemVir:dias, segmento:pt.segmento};
   });
   const colunas=RECALL_FAIXAS.map(f=>{
-    const lista=comFaixa.filter(p=>p.faixa.id===f.id).sort((a,b)=>b.dias-a.dias);
+    const lista=comFaixa.filter(p=>p.faixa.id===f.id).sort(FUNIL_ORDENS[FUNIL_PDF_ORD].fn);
+    const somaFat=lista.reduce((s,p)=>s+p.gasto,0), somaPrev=lista.reduce((s,p)=>s+p.potencial12m,0);
     const linhas=lista.map(p=>`
       <div class="recall-card" onclick="fichaPaciente('${p.nome.replace(/'/g,"")}')">
         <div class="recall-nome">${p.nome}</div>
         <div class="recall-meta">${p.dias===Infinity?'sem visitas':p.dias+' dia'+(p.dias===1?'':'s')+' sem vir'} · última em ${p.ultima?fmtDate(p.ultima):'—'}</div>
-        <div class="recall-meta2">${p.visitas} visita${p.visitas===1?'':'s'} · ${BRL(p.valorTotal)} investido</div>
+        <div class="recall-meta2">${p.visitas} visita${p.visitas===1?'':'s'} · ${BRL(p.valorTotal)} faturado</div>
+        <div class="recall-meta">previsto 12m: <b style="color:var(--gold-d)">${BRL(p.potencial12m)}</b>${p.segmento?` · nota ${p.score}`:''}</div>
       </div>`).join('');
     return `<div class="recall-col">
       <div class="recall-col-head" style="border-top:3px solid ${f.cor}">
@@ -3539,6 +3590,7 @@ function renderRecall(pg){
           <button class="btn ghost" style="padding:3px 7px;font-size:10px;flex-shrink:0" onclick="event.stopPropagation();gerarPDFRecall('${f.id}')" title="Gerar PDF só desta coluna">PDF</button>
         </div>
         <div class="recall-col-count" style="color:${f.cor}">${lista.length}</div>
+        <div class="recall-col-desc">${BRL(somaFat)} faturado · <b>${BRL(somaPrev)}</b> previsto 12m</div>
       </div>
       <div class="recall-col-body">${linhas||'<div class="recall-vazio">Ninguém nesta faixa.</div>'}</div>
     </div>`;
@@ -3546,7 +3598,8 @@ function renderRecall(pg){
   pg.innerHTML=`
     <div class="panel" style="margin-bottom:18px">
       <div class="panel-head"><div><h3>Recall de Pacientes</h3><div class="ph-sub">Funil de recontato por tempo sem visita — reposiciona sozinho conforme os atendimentos acontecem. Clique numa paciente para ver o histórico completo.</div></div>
-        <button class="btn ghost" onclick="gerarPDFRecall()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:15px;height:15px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Gerar PDF (todas as colunas)</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${funilOrdemSelect()}
+        <button class="btn ghost" onclick="gerarPDFRecall()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:15px;height:15px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Gerar PDF (todas as colunas)</button></div>
       </div>
       <div class="recall-grid">${colunas}</div>
     </div>
@@ -3554,67 +3607,16 @@ function renderRecall(pg){
 }
 // PDF do funil de Recall: lista por faixa, para trabalho da equipe comercial (contato/retorno).
 // Sem argumento: gera TODAS as colunas (uma por página). Com faixaId: gera só aquela coluna.
+// PDF do Recall: uma seção por faixa de tempo sem vir, com faturamento e previsto
 function gerarPDFRecall(faixaId){
-  const todos=pacientesTodos();
-  const comFaixa=todos.map(p=>{ const dias=diasDesde(p.ultima); return {...p, dias, faixa:faixaRecall(dias)}; });
-  const hojeHora=new Date().toLocaleString('pt-BR');
-  const sec=(f,lista)=>{
-    const linhas=lista.map(p=>`<tr>
-      <td>${p.nome}</td>
-      <td class="n">${p.dias===Infinity?'—':p.dias}</td>
-      <td>${p.ultima?fmtDate(p.ultima):'—'}</td>
-      <td class="n">${p.visitas}</td>
-      <td class="n">${BRL(p.valorTotal)}</td>
-    </tr>`).join('');
-    return `<div class="sec">
-      <div class="sec-h" style="border-left:5px solid ${f.cor};padding-left:10px">
-        <div><h2>${f.label} <span class="cnt">${lista.length}</span></h2><div class="sec-sub">${f.desc}</div></div>
-      </div>
-      <table><thead><tr><th>Paciente</th><th class="n">Dias sem vir</th><th>Última visita</th><th class="n">Visitas</th><th class="n">Valor investido</th></tr></thead>
-      <tbody>${linhas||'<tr><td colspan="5" class="empty">Ninguém nesta faixa.</td></tr>'}</tbody></table>
-    </div>`;
-  };
-  const faixasAlvo = faixaId ? RECALL_FAIXAS.filter(f=>f.id===faixaId) : RECALL_FAIXAS;
-  const body=faixasAlvo.map(f=>sec(f, comFaixa.filter(p=>p.faixa.id===f.id).sort((a,b)=>b.dias-a.dias))).join('');
-  const totalPacientes = faixaId ? comFaixa.filter(p=>p.faixa.id===faixaId).length : todos.length;
-  const subtitulo = faixaId ? 'Recall de Pacientes · '+(faixasAlvo[0]?faixasAlvo[0].label:'') : 'Recall de Pacientes · Lista de Trabalho';
-  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Recall de Pacientes · Instituto Bruna Braga</title>
-  <style>
-    @page{margin:16mm 15mm}
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:'Georgia','Times New Roman',serif;color:#211C16;font-size:11.5px;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #C9A24B;padding-bottom:16px;margin-bottom:24px}
-    .hd .brand{font-size:23px;font-weight:700;color:#8A6F27}
-    .hd .sub{font-size:9.5px;letter-spacing:2.4px;text-transform:uppercase;color:#8A8175;margin-top:4px}
-    .hd .right{text-align:right;font-size:10px;color:#9C9384}
-    .hd .right .tot{font-size:14px;font-weight:700;color:#211C16;font-family:Georgia,serif}
-    .sec{margin-bottom:22px}
-    .sec + .sec{page-break-before:always}
-    .sec-h{margin-bottom:9px;page-break-after:avoid}
-    h2{font-size:14px;color:#211C16;font-weight:700;display:inline-flex;align-items:center;gap:8px}
-    .cnt{font-family:Arial,sans-serif;font-size:11px;background:#211C16;color:#E9C877;border-radius:10px;padding:1px 9px}
-    .sec-sub{font-size:10px;color:#8A8175;margin-top:1px}
-    table{width:100%;border-collapse:collapse;font-family:'Helvetica Neue',Arial,sans-serif;font-size:10.5px}
-    thead{display:table-header-group}
-    tr{page-break-inside:avoid}
-    th{background:#F5EFE0;color:#4A3F2E;text-align:left;padding:7px 9px;font-size:9px;text-transform:uppercase;letter-spacing:.5px;font-weight:700;border-bottom:2px solid #C9A24B}
-    td{padding:6px 9px;border-bottom:1px solid #EFE9DA}
-    td.n,th.n{text-align:right}
-    tr:nth-child(even) td{background:#FBF9F3}
-    td.empty{text-align:center;color:#9C9384;font-style:italic;padding:12px}
-    .ft{margin-top:24px;padding-top:12px;border-top:1px solid #E8DEC8;font-size:9.5px;color:#9C9384;text-align:center}
-  </style></head><body>
-    <div class="hd">
-      <div><div class="brand">Instituto Bruna Braga</div><div class="sub">${subtitulo}</div></div>
-      <div class="right"><div class="tot">${totalPacientes} paciente${totalPacientes===1?'':'s'}</div>Emitido em ${hojeHora}</div>
-    </div>
-    ${body}
-    <div class="ft">Uso interno da equipe comercial · Gerado pelo Sistema de Gestão do Instituto Bruna Braga</div>
-  </body></html>`;
-  const w=window.open('','_blank');
-  if(!w){alert('Permita pop-ups para gerar o PDF.');return;}
-  w.document.write(html); w.document.close();
-  setTimeout(()=>{w.focus();w.print();},400);
+  const mapa={}; potencialPacientes().forEach(p=>{ mapa[p.nome]=p; });
+  const faixas=faixaId? RECALL_FAIXAS.filter(f=>f.id===faixaId) : RECALL_FAIXAS;
+  const secoes=faixas.map(f=>{
+    const lista=pacientesTodos().map(p=>mapa[p.nome]).filter(Boolean)
+      .filter(p=>faixaRecall(p.diasSemVir).id===f.id).sort(FUNIL_ORDENS[FUNIL_PDF_ORD].fn);
+    return {titulo:f.label, sub:f.desc, cor:f.cor, lista};
+  });
+  abrirPDFFunil(faixaId?'Recall · '+faixas[0].label:'Recall de Pacientes','Recall de Pacientes'+(faixaId?' · '+faixas[0].label:' · lista de trabalho'),secoes);
 }
 
 /* ============================ DOCUMENTOS ============================ */
@@ -3716,7 +3718,7 @@ function recebimentosPeriodo(ini,fim){
     if(!ps.length){ if(a.valor>0) semReceb+=a.valor; return; }
     ps.forEach(p=>{
       if(!p.forma) return;
-      const chave = ehCredito(p.forma) && (+p.parcelas>1) ? `${p.forma} ${p.parcelas}x` : p.forma;
+      const chave = ehCredito(p.forma) && p.parcelas===0 ? `${p.forma} · parcelas não informadas` : (ehCredito(p.forma) && (+p.parcelas>1) ? `${p.forma} ${p.parcelas}x` : p.forma);
       if(!map[chave]) map[chave]={label:chave, modalidade:p.forma, parcelas:(+p.parcelas||1), valor:0, qtd:0, credito:ehCredito(p.forma)};
       map[chave].valor += (+p.valor||0); map[chave].qtd += 1;
     });
