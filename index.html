@@ -3734,8 +3734,18 @@ function setGrao(g){GRAO_ANALISE=g; go('analise');}
 
 // retorna o intervalo de datas do período selecionado, baseado no dado mais recente
 function periodoAtual(grao){
+  // referência = período escolhido no seletor do topo (mês ou acumulado do ano);
+  // dentro dele, o último dia com atendimento (ou o fim do período / hoje, se ainda não houver)
   const datas=DATA.atendimentos.map(a=>a.data).filter(Boolean).sort();
-  const ref = datas.length? datas[datas.length-1] : dataHojeLocal();
+  const hoje=dataHojeLocal();
+  let ref = datas.length? datas[datas.length-1] : hoje;
+  let sel=null; try{ sel=periodoSelecionadoIntervalo(); }catch(e){ sel=null; }
+  if(sel && sel.ini){
+    const fimSel = sel.acumulado ? sel.fim : (function(){ const y=+sel.ini.slice(0,4), m=+sel.ini.slice(5,7); return sel.ini.slice(0,7)+'-'+String(new Date(y,m,0).getDate()).padStart(2,'0'); })();
+    const dentro=datas.filter(x=>x>=sel.ini && x<=fimSel);
+    ref = dentro.length ? dentro[dentro.length-1] : (hoje>=sel.ini && hoje<=fimSel ? hoje : (hoje<sel.ini ? sel.ini : fimSel));
+    if(sel.acumulado && grao!=='dia' && grao!=='semana' && grao!=='mes') return {ini:sel.ini, fim:sel.fim, label:'Ano '+sel.ini.slice(0,4)};
+  }
   const d=new Date(ref+'T00:00:00');
   if(grao==='dia'){
     return {ini:ref, fim:ref, label:fmtDateFull(ref)};
