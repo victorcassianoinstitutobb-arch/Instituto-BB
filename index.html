@@ -1681,7 +1681,7 @@ async function carregarTudo(){
     CAT_DESPESA = (cat.data||[]).filter(c=>c.tipo==='despesa').map(c=>c.nome);
     CAIXA = (lanc.data||[]).map(l=>({id:l.id,data:l.data,tipo:l.tipo,categoria:l.categoria,desc:l.descricao,valor:+l.valor,carteira:l.carteira_id,carteiraDest:l.carteira_dest,itens:Array.isArray(l.itens)?l.itens:[],fechAcao:l.fech_acao||null}));
     CAIXA.forEach(l=>{ if(l.itens&&l.itens.length) registrarItens(l.itens); });
-    DATA.atendimentos = (atend.data||[]).map(a=>({id:a.id,data:a.data,paciente:a.paciente,proc:a.procedimento,func:a.funcionario,canal:a.canal,valor:+a.valor,custo:+a.custo,pag:a.pagamento,agenda:a.agenda,dataExecucao:a.data_execucao||'',recebimento:a.recebimento||'',parcelas:+a.parcelas||1,pagamentos:Array.isArray(a.pagamentos)?a.pagamentos:null,procedimentos:Array.isArray(a.procedimentos)?a.procedimentos:null,baixaAplicada:(a.baixa_aplicada&&typeof a.baixa_aplicada==='object')?a.baixa_aplicada:{}}));
+    DATA.atendimentos = (atend.data||[]).map(a=>({id:a.id,data:a.data,paciente:a.paciente,telefone:a.telefone||'',proc:a.procedimento,func:a.funcionario,canal:a.canal,valor:+a.valor,custo:+a.custo,pag:a.pagamento,agenda:a.agenda,dataExecucao:a.data_execucao||'',recebimento:a.recebimento||'',parcelas:+a.parcelas||1,pagamentos:Array.isArray(a.pagamentos)?a.pagamentos:null,procedimentos:Array.isArray(a.procedimentos)?a.procedimentos:null,baixaAplicada:(a.baixa_aplicada&&typeof a.baixa_aplicada==='object')?a.baixa_aplicada:{}}));
     CAPTACAO = (capt.data||[]).map(c=>({id:c.id,data:c.data,plataforma:c.plataforma,seguidores:c.seguidores,leads:c.leads,agendadas:c.agendadas,investido:+c.investido,gasto:+c.gasto,campanhas:c.campanhas}));
     METAS_MES = {};
     (met.data||[]).forEach(m=>{
@@ -1743,16 +1743,27 @@ async function carregarTudo(){
 }
 
 /* ---- helpers de persistência (chamados pelas funções de salvar) ---- */
+// WhatsApp do paciente: ao escolher um paciente que já tem número em outro atendimento, preenche sozinho
+function atendPacMudou(){
+  const nome=(document.getElementById('naPac').value||'').trim().toLowerCase(), tel=document.getElementById('naTel');
+  if(!nome||!tel||tel.value.trim()) return;
+  const ant=DATA.atendimentos.filter(x=>(x.paciente||'').trim().toLowerCase()===nome && x.telefone).sort((a,b)=>String(b.data).localeCompare(String(a.data)))[0];
+  if(ant) tel.value=ant.telefone;
+}
+// coluna "telefone" ainda não criada no banco: grava sem ela em vez de perder o atendimento
+const semColTel = e => e && /telefone/i.test(e.message||'') && /column|schema/i.test(e.message||'');
 async function sbInsert(tabela, registro){
   if(!MODO_NUVEM) return null;
   const { data:{ user } } = await sb.auth.getUser();
-  const { data, error } = await sb.from(tabela).insert({...registro, user_id:user.id}).select().single();
+  let { data, error } = await sb.from(tabela).insert({...registro, user_id:user.id}).select().single();
+  if(semColTel(error)){ const r={...registro}; delete r.telefone; ({ data, error } = await sb.from(tabela).insert({...r, user_id:user.id}).select().single()); }
   if(error){ console.error('insert '+tabela, error); alert('Erro ao salvar: '+error.message); return null; }
   return data;
 }
 async function sbUpdate(tabela, id, registro){
   if(!MODO_NUVEM) return null;
-  const { error } = await sb.from(tabela).update(registro).eq('id', id);
+  let { error } = await sb.from(tabela).update(registro).eq('id', id);
+  if(semColTel(error)){ const r={...registro}; delete r.telefone; ({ error } = await sb.from(tabela).update(r).eq('id', id)); }
   if(error){ console.error('update '+tabela, error); alert('Erro ao atualizar: '+error.message); }
 }
 async function sbDelete(tabela, id){
@@ -2254,7 +2265,8 @@ function editarAtend(id, tipo){
       </div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px">
         <div class="field"><label>Data do atendimento</label><input id="naData" type="date" value="${a.data}" style="${fs};width:100%"></div>
-        <div class="field"><label>Paciente</label><input id="naPac" value="${a.paciente}" placeholder="Nome" style="${fs};width:100%"></div>
+        <div class="field"><label>Paciente</label><input id="naPac" value="${a.paciente}" placeholder="Nome" onchange="atendPacMudou()" list="naPacLista" style="${fs};width:100%"><datalist id="naPacLista">${[...new Set(DATA.atendimentos.map(x=>x.paciente).filter(Boolean))].sort().map(n=>`<option value="${String(n).replace(/"/g,"&quot;")}">`).join("")}</datalist></div>
+        <div class="field"><label>WhatsApp do paciente</label><input id="naTel" value="${a.telefone||''}" placeholder="(87) 9 9999-9999" inputmode="tel" autocomplete="off" style="${fs};width:100%"></div>
         <div class="field"><label>${tp==='parceiro'?'Profissional parceira':'Profissional'}</label><select id="naFunc" onchange="renderAtendProcs()" style="${fs};width:100%"><option value="">—</option>${funcDisp.map(f=>`<option ${f.nome===funcAuto?'selected':''}>${f.nome}</option>`).join('')}</select></div>
         <div class="field"><label>Canal</label><select id="naCanal" style="${fs};width:100%">${canalOpts}</select></div>
         <div class="field"><label>Valor total (R$)</label><input id="naValor" type="number" value="${a.valor}" oninput="atendValorMudou()" style="${fs};width:100%"></div>
@@ -2548,13 +2560,13 @@ async function salvarAtend(id){
   const ehEdicao = id && id!=='0';
   const atendAntigo = ehEdicao ? DATA.atendimentos.find(x=>x.id==id) : null;
   const reg={data:v('naData')||dataHojeLocal(),
-    paciente:v('naPac')||'Sem nome',func:v('naFunc')||'',
+    paciente:v('naPac')||'Sem nome',telefone:(v('naTel')||'').trim(),func:v('naFunc')||'',
     proc:procResumo,canal:v('naCanal'),valor,custo:Math.round(valor*0.3),
     pag:v('naPag')||'Pago',agenda,dataExecucao:v('naDataExec')||'',
     recebimento:principal.forma,parcelas:principal.parcelas,pagamentos,procedimentos:procs,
     baixaAplicada:baixaNova}; // consumo deste atendimento, por produto
   if(MODO_NUVEM){
-    const reg2={data:reg.data,paciente:reg.paciente,procedimento:reg.proc,funcionario:reg.func,canal:reg.canal,valor:reg.valor,custo:reg.custo,pagamento:reg.pag,agenda:reg.agenda,data_execucao:reg.dataExecucao||null,recebimento:reg.recebimento,parcelas:reg.parcelas,pagamentos:reg.pagamentos,procedimentos:reg.procedimentos,baixa_aplicada:reg.baixaAplicada};
+    const reg2={data:reg.data,paciente:reg.paciente,telefone:reg.telefone||null,procedimento:reg.proc,funcionario:reg.func,canal:reg.canal,valor:reg.valor,custo:reg.custo,pagamento:reg.pag,agenda:reg.agenda,data_execucao:reg.dataExecucao||null,recebimento:reg.recebimento,parcelas:reg.parcelas,pagamentos:reg.pagamentos,procedimentos:reg.procedimentos,baixa_aplicada:reg.baixaAplicada};
     if(ehEdicao) await sbUpdate('atendimentos',id,reg2); else await sbInsert('atendimentos',reg2);
     window.__atendDia=reg.data; await carregarTudo(); go('atendimentos'); return;
   }
